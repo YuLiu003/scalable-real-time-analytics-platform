@@ -1,0 +1,107 @@
+# Secrets and environment variables
+.env
+*.env
+*.pem
+*.key
+*.cert
+*.crt
+*secret*
+*Secret*
+*SECRET*
+
+# Python files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing directories
+auth-test/
+secure-api/
+
+# Backup files
+*.bak
+*.old
+*~
+*.swp
+
+# Temporary deployments
+k8s/temp/
+
+# Local testing configs
+*test-local*
+*local-test*
+
+# IDE files
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Docker
+.docker/
+docker-compose.override.yml
+
+# Archive directories
+archive/
+
+# Local development files
+*.dev.yaml
+*.local.yaml
+*.dev.yml
+*.local.yml
+*.dev.env
+*.local.env
+
+# Temporary test files
+test_*.py
+!test/*/test_*.py  # Exclude actual test files in test directory
+
+# Node.js (if any JavaScript is used in visualization)
+node_modules/
+package-lock.json
+npm-debug.log
+
+# Terraform local state
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# Skaffold local files
+.skaffold/
+
+# Minikube generated files
+.minikube/
+
+# Generated documentation
+docs/generated/

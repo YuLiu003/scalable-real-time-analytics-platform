@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: analytics-platform-config
+data:
+  KAFKA_BROKER: "kafka:9092"
+  INFLUXDB_URL: "http://influxdb:8086"
+  RETENTION_POLICY: "30d"
+  ALERT_THRESHOLD: "0.8"
+  LOG_LEVEL: "info"

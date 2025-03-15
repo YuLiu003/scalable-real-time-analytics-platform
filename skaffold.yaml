@@ -1,0 +1,36 @@
+apiVersion: skaffold/v2beta26
+kind: Config
+metadata:
+  name: real-time-analytics-platform
+build:
+  artifacts:
+    - image: data-ingestion
+      context: data-ingestion
+      docker:
+        dockerfile: Dockerfile
+    - image: processing-engine
+      context: processing-engine
+      docker:
+        dockerfile: Dockerfile
+    - image: storage-layer
+      context: storage-layer
+      docker:
+        dockerfile: Dockerfile
+    - image: visualization
+      context: visualization
+      docker:
+        dockerfile: Dockerfile
+deploy:
+  helm:
+    releases:
+      - name: analytics-platform
+        chartPath: charts/analytics-platform
+        values:
+          image:
+            repository: data-ingestion
+          image:
+            repository: processing-engine
+          image:
+            repository: storage-layer
+          image:
+            repository: visualization

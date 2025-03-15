@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simple-test
+  namespace: analytics-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: simple-test
+  template:
+    metadata:
+      labels:
+        app: simple-test
+    spec:
+      containers:
+      - name: simple-test
+        image: simple-test:latest
+        imagePullPolicy: Never

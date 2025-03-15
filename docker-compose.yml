@@ -1,0 +1,95 @@
+version: '3.8'
+
+services:
+  secure-api:
+    build:
+      context: ./flask-api
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - KAFKA_TOPIC=sensor-data
+    depends_on:
+      - kafka
+    networks:
+      - kafka-network
+
+  data-ingestion:
+    build:
+      context: ./data-ingestion
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5000"
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - KAFKA_TOPIC=sensor-data
+    depends_on:
+      - kafka
+    networks:
+      - kafka-network
+
+  processing-engine:
+    build:
+      context: ./processing-engine
+      dockerfile: Dockerfile
+    ports:
+      - "5002:5001"
+    depends_on:
+      - data-ingestion
+      - kafka
+    networks:
+      - kafka-network
+
+  storage-layer:
+    build:
+      context: ./storage-layer
+      dockerfile: Dockerfile
+    ports:
+      - "5003:5002"
+    depends_on:
+      - processing-engine
+    networks:
+      - kafka-network
+
+  visualization:
+    build:
+      context: ./visualization
+      dockerfile: Dockerfile
+    ports:
+      - "5004:5003"
+    depends_on:
+      - storage-layer
+    networks:
+      - kafka-network
+
+  zookeeper:
+    image: wurstmeister/zookeeper:latest
+    ports:
+      - "2181:2181"
+    networks:
+      - kafka-network
+    # Add platform specification for M1/M2 Mac compatibility
+    platform: linux/amd64
+
+  kafka:
+    image: wurstmeister/kafka:latest
+    ports:
+      - "9092:9092"
+      - "9093:9093"  # Additional port for the OUTSIDE listener
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: INSIDE://kafka:9092,OUTSIDE://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+      KAFKA_LISTENERS: INSIDE://0.0.0.0:9092,OUTSIDE://0.0.0.0:9093
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+    depends_on:
+      - zookeeper
+    networks:
+      - kafka-network
+    # Add platform specification for M1/M2 Mac compatibility
+    platform: linux/amd64
+
+networks:
+  kafka-network:
+    driver: bridge

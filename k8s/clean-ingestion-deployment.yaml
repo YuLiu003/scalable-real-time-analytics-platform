@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clean-ingestion
+  namespace: analytics-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clean-ingestion
+  template:
+    metadata:
+      labels:
+        app: clean-ingestion
+    spec:
+      containers:
+      - name: clean-ingestion
+        image: clean-ingestion:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 5000
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
