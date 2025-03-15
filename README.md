@@ -68,8 +68,8 @@ The project is organized as follows:
 
 1. **Clone the Repository**:
    ```bash
-   git clone https://github.com/YuLiu003/real-time-analytics-platform.git
-   cd real-time-analytics-platform
+   git clone https://github.com/YuLiu003/scalable-real-time-analytics-platform.git
+   cd scalable-real-time-analytics-platform
    ```
 
 2. **Initial Setup**:
