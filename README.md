@@ -6,7 +6,7 @@ The Scalable Real-Time Data Analytics Pipeline is a cloud-native application des
 
 ## Architecture
 
-![Architecture Diagram](docs/architecture_diagram.png)
+![Architecture Diagram](https://github.com/user-attachments/assets/0b96f0c6-d791-4253-9e6e-45a7f63c6c4a)
 
 The architecture consists of four main microservices:
 
@@ -68,8 +68,8 @@ The project is organized as follows:
 
 1. **Clone the Repository**:
    ```bash
-   git clone https://github.com/YuLiu003/real-time-analytics-platform.git
-   cd real-time-analytics-platform
+   git clone https://github.com/YuLiu003/scalable-real-time-analytics-platform.git
+   cd scalable-real-time-analytics-platform
    ```
 
 2. **Initial Setup**:
