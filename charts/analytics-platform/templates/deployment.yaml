@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analytics-platform
+  labels:
+    app: analytics-platform
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: analytics-platform
+  template:
+    metadata:
+      labels:
+        app: analytics-platform
+    spec:
+      containers:
+        - name: analytics-platform
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          env:
+            - name: ENVIRONMENT
+              value: {{ .Values.environment }}
+            - name: KAFKA_BROKER
+              value: {{ .Values.kafka.broker }}
+            - name: INFLUXDB_URL
+              value: {{ .Values.influxdb.url }}
+          resources:
+            requests:
+              memory: {{ .Values.resources.requests.memory }}
+              cpu: {{ .Values.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.resources.limits.memory }}
+              cpu: {{ .Values.resources.limits.cpu }}

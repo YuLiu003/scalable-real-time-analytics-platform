@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: visualization-service
+  namespace: analytics-platform
+spec:
+  selector:
+    app: visualization
+  ports:
+  - port: 80
+    targetPort: 5003
+    nodePort: 30081
+  type: NodePort

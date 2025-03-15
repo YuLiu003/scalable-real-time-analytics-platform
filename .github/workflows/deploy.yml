@@ -1,0 +1,96 @@
+name: Deploy Real-Time Analytics Platform
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    branches: [main]
+    types:
+      - completed
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Kubernetes
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: 'latest'
+
+      - name: Configure kubectl
+        run: |
+          echo "${{ secrets.KUBE_CONFIG }}" > kubeconfig
+          chmod 600 kubeconfig
+          export KUBECONFIG=$(pwd)/kubeconfig
+
+      - name: Update Kubernetes secrets
+        run: |
+          kubectl create namespace analytics-platform --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Create API keys secret securely
+          kubectl create secret generic api-keys \
+            --from-literal=test-key-1=${{ secrets.API_KEY_1 }} \
+            --from-literal=test-key-2=${{ secrets.API_KEY_2 }} \
+            -n analytics-platform \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy to Kubernetes
+        run: |
+          helm upgrade --install analytics-platform ./charts/analytics-platform \
+            --values ./charts/analytics-platform/values.yaml \
+            --set secureApi.image.repository=${{ secrets.DOCKER_USERNAME }}/secure-api \
+            --set secureApi.image.tag=latest \
+            -n analytics-platform
+
+      - name: Verify deployment
+        run: |
+          kubectl rollout status deployment/secure-api -n analytics-platform
+          kubectl rollout status deployment/data-ingestion -n analytics-platform
+          kubectl rollout status deployment/processing-engine -n analytics-platform
+          kubectl rollout status deployment/storage-layer -n analytics-platform
+          kubectl rollout status deployment/visualization -n analytics-platform
+
+      - name: Run basic security test
+        run: |
+          # Give services time to start
+          sleep 20
+          
+          # Set up port forwarding for testing
+          kubectl port-forward svc/secure-api-service 8090:80 -n analytics-platform &
+          sleep 5
+          
+          # Run a simple test to confirm authorization is working
+          RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            http://localhost:8090/api/data \
+            -H "Content-Type: application/json" \
+            -d '{"device_id": "test-001", "temperature": 25.5}')
+            
+          if [ "$RESPONSE_CODE" = "401" ]; then
+            echo "✅ Security verification successful: Got 401 without API key"
+          else
+            echo "❌ Security verification failed: Got $RESPONSE_CODE without API key"
+            exit 1
+          fi
+          
+          # Test with API key from secrets
+          RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            http://localhost:8090/api/data \
+            -H "Content-Type: application/json" \
+            -H "X-API-Key: ${{ secrets.API_KEY_1 }}" \
+            -d '{"device_id": "test-001", "temperature": 25.5}')
+            
+          if [ "$RESPONSE_CODE" = "200" ]; then
+            echo "✅ API key authentication successful"
+          else
+            echo "❌ API key authentication failed: Got $RESPONSE_CODE with API key"
+            exit 1
+          fi

@@ -1,0 +1,5 @@
+apiVersion: v2
+name: analytics-platform
+description: A Helm chart for deploying the Scalable Real-Time Data Analytics Pipeline
+version: 0.1.0
+appVersion: "1.0"

@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storage-layer
+  namespace: analytics-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: storage-layer
+  template:
+    metadata:
+      labels:
+        app: storage-layer
+    spec:
+      containers:
+      - name: storage-layer
+        image: real-time-analytics-platform-storage-layer:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5002
+        env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: platform-config
+              key: storage-layer-port
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: platform-config
+              key: db-host
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: platform-config
+              key: db-port
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: platform-config
+              key: db-name
+        - name: DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: platform-config
+              key: db-user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: analytics-platform-secrets
+              key: DB_PASSWORD
+        - name: API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: analytics-platform-secrets
+              key: API_KEY
+        volumeMounts:
+        - name: storage-volume
+          mountPath: /data
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true          
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5002
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5002
+          initialDelaySeconds: 15
+          periodSeconds: 10
+      volumes:
+      - name: storage-volume
+        emptyDir: {}  # For development; use PVC for production

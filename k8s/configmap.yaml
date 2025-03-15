@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: platform-config
+  namespace: analytics-platform
+data:
+  kafka-broker: "kafka-service:9092"  # Changed back to kafka-service
+  kafka-topic: "sensor-data"
+  data-ingestion-port: "5000"
+  processing-engine-port: "5001"
+  storage-layer-port: "5002"
+  visualization-port: "5003"
+  db-host: "localhost"
+  db-port: "5432"
+  db-name: "analytics"
+  db-user: "user"

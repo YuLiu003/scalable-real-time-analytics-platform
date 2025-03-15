@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: storage-layer-service
+  namespace: analytics-platform
+spec:
+  selector:
+    app: storage-layer
+  ports:
+  - port: 80
+    targetPort: 5002
+  type: ClusterIP
