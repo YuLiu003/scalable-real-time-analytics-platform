@@ -1,34 +1,38 @@
-apiVersion: v1
-appVersion: "1.0"
-description: A Helm chart for Kubernetes-powered real-time analytics platform
-name: analytics-platform
-version: 0.1.0
+# Default values for analytics-platform chart
+secureApi:
+  image:
+    repository: secure-api
+    tag: latest
+  replicas: 1
+  
+dataIngestion:
+  image:
+    repository: data-ingestion
+    tag: latest
+  replicas: 1
 
-# Default values for the analytics platform
-replicaCount: 2
+processingEngine:
+  image:
+    repository: processing-engine
+    tag: latest
+  replicas: 1
 
-image:
-  repository: your-docker-repo/analytics-platform
-  pullPolicy: IfNotPresent
-  tag: "latest"
+storageLayer:
+  image:
+    repository: storage-layer
+    tag: latest
+  replicas: 1
 
-service:
-  type: ClusterIP
-  port: 80
+visualization:
+  image:
+    repository: visualization
+    tag: latest
+  replicas: 1
 
-ingress:
-  enabled: false
-  pathType: ImplementationSpecific
-  hosts:
-    - host: chart-example.local
-      paths:
-        - /
+kafka:
+  enabled: true
+  replicaCount: 1
 
-resources: {}
-# Limits and requests for CPU and memory can be defined here
-
-nodeSelector: {}
-
-tolerations: []
-
-affinity: {}
+zookeeper:
+  enabled: true
+  replicaCount: 1

@@ -10,6 +10,9 @@ services:
     environment:
       - KAFKA_BROKER=kafka:9092
       - KAFKA_TOPIC=sensor-data
+      # API key is passed via environment in dev environment
+      - API_KEY_1=${API_KEY_1:-test-key-1}
+      - API_KEY_2=${API_KEY_2:-test-key-2}
     depends_on:
       - kafka
     networks:
