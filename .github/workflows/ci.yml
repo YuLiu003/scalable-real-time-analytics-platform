@@ -211,6 +211,7 @@ jobs:
       - name: Build summary
         run: |
           echo "## Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+          
           if [ "${{ steps.check_docker_creds.outputs.has_docker_creds }}" == "true" ]; then
             echo "✅ Docker image built and pushed to ${{ steps.set_repo.outputs.repo }}" >> $GITHUB_STEP_SUMMARY
           else
