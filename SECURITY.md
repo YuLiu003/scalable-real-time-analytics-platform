@@ -55,7 +55,7 @@ curl -X POST http://<cluster-ip>/api/data \
 
 ## Vulnerability Reporting
 
-If you discover a security vulnerability in this project, please report it by sending an email to [security@example.com](mailto:security@example.com).
+If you discover a security vulnerability in this project, please report it by sending an email to (yuuliu03@gmail.com).
 
 ## 6. Next Steps for Further Security Hardening
 
