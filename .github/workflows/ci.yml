@@ -207,13 +207,16 @@ jobs:
           push: ${{ steps.check_docker_creds.outputs.has_docker_creds == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          
-      - name: Build summary
+
+      - name: Build summary (success with push)
+        if: steps.check_docker_creds.outputs.has_docker_creds == 'true'
         run: |
           echo "## Docker Build Summary" >> $GITHUB_STEP_SUMMARY
-          
-          if [ "${{ steps.check_docker_creds.outputs.has_docker_creds }}" == "true" ]; then
-            echo "✅ Docker image built and pushed to ${{ steps.set_repo.outputs.repo }}" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "⚠️ Docker image built but NOT pushed due to missing Docker Hub credentials" >> $GITHUB_STEP_SUMMARY
-            echo "To push to Docker Hub, add DOCKER_USERNAME and DOCKER_PASSWORD secrets to your repository." >> $GITHUB_STEP_SUMMARY
+          echo "✅ Docker image built and pushed to ${{ steps.set_repo.outputs.repo }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Build summary (success without push)
+        if: steps.check_docker_creds.outputs.has_docker_creds != 'true' 
+        run: |
+          echo "## Docker Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ Docker image built but NOT pushed due to missing Docker Hub credentials" >> $GITHUB_STEP_SUMMARY
+          echo "To push to Docker Hub, add DOCKER_USERNAME and DOCKER_PASSWORD secrets to your repository." >> $GITHUB_STEP_SUMMARY
