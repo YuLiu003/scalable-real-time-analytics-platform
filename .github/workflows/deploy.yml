@@ -23,8 +23,18 @@ jobs:
             echo "all_secrets_present=true" >> $GITHUB_OUTPUT
           else
             echo "all_secrets_present=false" >> $GITHUB_OUTPUT
-            echo "::warning::Some required secrets are missing. Deployment may fail or use default values."
+            echo "::warning::Some required secrets are missing. Running in limited mode."
           fi
+
+      - name: Deployment notification (limited mode)
+        if: steps.check_secrets.outputs.all_secrets_present != 'true'
+        run: |
+          echo "Running deployment in limited mode."
+          echo "To enable full deployment, please configure the following secrets:"
+          echo "- KUBE_CONFIG (base64 encoded kubectl config)"
+          echo "- API_KEY_1 (for API authentication)"
+          echo "- API_KEY_2 (for API authentication)"
+          exit 0
 
       - name: Set up Kubernetes
         if: steps.check_secrets.outputs.all_secrets_present == 'true'
@@ -77,7 +87,7 @@ jobs:
             -n analytics-platform \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Deploy to Kubernetes
+      - name: Deploy with Helm
         if: steps.check_secrets.outputs.all_secrets_present == 'true' && steps.check_charts.outputs.charts_exist == 'true'
         run: |
           helm upgrade --install analytics-platform ./charts/analytics-platform \
@@ -85,6 +95,17 @@ jobs:
             --set secureApi.image.repository=${{ secrets.DOCKER_USERNAME }}/secure-api \
             --set secureApi.image.tag=latest \
             -n analytics-platform
+
+      - name: Deploy with kubectl
+        if: steps.check_secrets.outputs.all_secrets_present == 'true' && steps.check_charts.outputs.charts_exist != 'true'
+        run: |
+          echo "Helm charts not found, falling back to kubectl deployment."
+          if [ -d "k8s" ]; then
+            kubectl apply -f k8s/ -n analytics-platform
+          else
+            echo "::error::No k8s directory found for kubectl deployment."
+            exit 1
+          fi
 
       - name: Verify deployment
         if: steps.check_secrets.outputs.all_secrets_present == 'true'
@@ -139,7 +160,7 @@ jobs:
             http://localhost:8090/api/data \
             -H "Content-Type: application/json" \
             -H "X-API-Key: ${{ secrets.API_KEY_1 }}" \
-            -d '{"device_id": "test-001", "temperature": 25.5}" \
+            -d '{"device_id": "test-001", "temperature": 25.5}' \
             --connect-timeout 5 \
             --max-time 10)
             

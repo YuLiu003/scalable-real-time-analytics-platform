@@ -14,6 +14,19 @@ spec:
         app: processing-engine
     spec:
       containers:
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
       - name: processing-engine
         image: real-time-analytics-platform-processing-engine:latest
         imagePullPolicy: IfNotPresent
