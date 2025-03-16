@@ -180,3 +180,16 @@ jobs:
           echo "Security scanning complete."
           echo "For a full security assessment, configure Docker Hub credentials"
           echo "and add proper security scanning for your images."
+
+      - name: Run security checks
+        run: |
+          chmod +x scripts/security-check.sh
+          ./scripts/security-check.sh
+          
+      - name: Fail if security issues found
+        run: |
+          SCORE=$(./scripts/security-check.sh | grep "Security Score:" | awk '{print $4}' | cut -d'/' -f1)
+          if [ "$SCORE" -lt "6" ]; then
+            echo "Security score too low: $SCORE/6"
+            exit 1
+          fi
