@@ -38,8 +38,7 @@ jobs:
             pytest flask-api/tests/
           else
             echo "No test directory found. Skipping unit tests."
-          fi
-
+          
   security-scan:
     runs-on: ubuntu-latest
     needs: test
