@@ -14,19 +14,38 @@ spec:
         app: data-ingestion
     spec:
       containers:
+      - name: data-ingestion
+        image: data-ingestion:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 5000
+        env:
+        - name: KAFKA_BROKER
+          valueFrom:
+            configMapKeyRef:
+              name: platform-config
+              key: KAFKA_BROKER
+        - name: KAFKA_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: platform-config
+              key: KAFKA_TOPIC
+        - name: BYPASS_AUTH
+          value: "false"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
         securityContext:
           runAsNonRoot: true
           runAsUser: 1000
-          readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 1000
-          readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
           capabilities:
             drop:
             - ALL
+          readOnlyRootFilesystem: true
         livenessProbe:
           httpGet:
             path: /health
@@ -44,33 +63,3 @@ spec:
           timeoutSeconds: 2
           successThreshold: 1
           failureThreshold: 3
-      - name: data-ingestion
-        image: real-time-analytics-platform-data-ingestion:latest
-        imagePullPolicy: Never
-        ports:
-        - containerPort: 5000
-        env:
-        - name: KAFKA_BROKER
-          valueFrom:
-            configMapKeyRef:
-              name: platform-config
-              key: kafka-broker
-        - name: KAFKA_TOPIC
-          valueFrom:
-            configMapKeyRef:
-              name: platform-config
-              key: kafka-topic
-        - name: BYPASS_AUTH
-          value: "false"
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "200m"
-        securityContext:
-          runAsNonRoot: false  # Temporarily disable this for debugging
-          capabilities:
-            drop:
-            - ALL

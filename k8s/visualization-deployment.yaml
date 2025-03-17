@@ -14,22 +14,9 @@ spec:
         app: visualization
     spec:
       containers:
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 1000
-          readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 1000
-          readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
       - name: visualization
-        image: real-time-analytics-platform-visualization:latest
-        imagePullPolicy: IfNotPresent
+        image: visualization:latest
+        imagePullPolicy: Never
         ports:
         - containerPort: 5003
         securityContext:
@@ -47,20 +34,11 @@ spec:
             cpu: 100m
             memory: 128Mi
         env:
-        - name: PORT
+        - name: VISUALIZATION_PORT
           valueFrom:
             configMapKeyRef:
               name: platform-config
-              key: visualization-port
-        - name: API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: analytics-platform-secrets
-              key: API_KEY
-        - name: PROCESSING_ENGINE_URL
-          value: "http://processing-engine-service"
-        - name: STORAGE_LAYER_URL
-          value: "http://storage-layer-service"
+              key: VISUALIZATION_PORT
         readinessProbe:
           httpGet:
             path: /health
