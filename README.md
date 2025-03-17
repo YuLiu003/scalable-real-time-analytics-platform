@@ -1,8 +1,8 @@
-# Scalable Real-Time Data Analytics Pipeline
+# Scalable Real-Time Data Analytics Platform
 
 ## Overview
 
-The Scalable Real-Time Data Analytics Pipeline is a cloud-native application designed to process and analyze data in real-time. This project showcases the integration of various modern technologies to build a high-performance data processing system. It is structured as a microservices architecture with Kafka as the messaging backbone, ensuring scalability, maintainability, and efficiency.
+The Scalable Real-Time Data Analytics Platform is a cloud-native application designed to process and analyze data in real-time. This project showcases the integration of various modern technologies to build a high-performance data processing system. It is structured as a microservices architecture with Kafka as the messaging backbone, ensuring scalability, maintainability, and efficiency.
 
 ## Architecture
 
@@ -33,11 +33,12 @@ The architecture consists of four main microservices:
 ## Technology Stack
 
 - **Backend**: Python, Flask
-- **Messaging**: Apache Kafka
+- **Messaging**: Apache Kafka (KRaft mode, no ZooKeeper)
 - **Data Processing**: NumPy
 - **Frontend**: HTML, CSS, JavaScript
 - **Containerization**: Docker
 - **Orchestration**: Kubernetes (Minikube for local deployment)
+- **Monitoring**: Prometheus
 - **Real-time Communication**: Flask-SocketIO
 
 ## Project Structure
@@ -48,11 +49,8 @@ The project is organized as follows:
 - `processing-engine/`: Service for real-time data processing
 - `storage-layer/`: Service for data persistence
 - `visualization/`: Web dashboard for data visualization
+- `flask-api/`: Secure API for external access
 - `k8s/`: Kubernetes manifests for deployment
-  - Core configuration files for the working platform
-  - `archive/`: Deprecated configurations (not included in git)
-- `scripts/archive/`: Deprecated utility scripts (not included in git)
-- `terraform/`: Infrastructure as Code configurations
 - `test/`: Unit and integration tests
 
 ## Getting Started
@@ -68,8 +66,8 @@ The project is organized as follows:
 
 1. **Clone the Repository**:
    ```bash
-   git clone https://github.com/YuLiu003/scalable-real-time-analytics-platform.git
-   cd scalable-real-time-analytics-platform
+   git clone https://github.com/YuLiu003/real-time-analytics-platform.git
+   cd real-time-analytics-platform
    ```
 
 2. **Initial Setup**:
@@ -79,15 +77,18 @@ The project is organized as follows:
 
 3. **Deploy to Kubernetes**:
    ```bash
+   ./build-images.sh
    ./deploy-platform.sh
    ```
    This script builds the container images and deploys the platform components in the correct order:
    - Creates namespace and applies configurations
-   - Deploys ZooKeeper and Kafka messaging infrastructure
+   - Deploys Kafka messaging infrastructure
    - Deploys the data ingestion, processing, storage, and visualization services
 
 4. **Access the Dashboard**:
    ```bash
+   minikube service visualization-service -n analytics-platform
+   
    # Method 1: Port forwarding
    ./open-dashboard.sh
    
@@ -140,7 +141,7 @@ kubectl exec -it -n analytics-platform kafka-test -- kafkacat -b kafka-service:9
 ### Common Issues and Solutions
 
 1. **Kafka Connection Issues**:
-   - Check that ZooKeeper is running: `kubectl get pods -n analytics-platform -l app=zookeeper`
+   - Check that Kafka is running: `kubectl get pods -n analytics-platform -l app=kafka`
    - Verify Kafka service: `kubectl get svc -n analytics-platform | grep kafka`
    - Check Kafka logs: `kubectl logs -n analytics-platform -l app=kafka`
 
@@ -184,7 +185,7 @@ For more details, see [SECURITY.md](./SECURITY.md).
 
 - **Monitoring**: Add Prometheus and Grafana for platform monitoring
 - **Scaling**: Test horizontal scaling of services under load
-- **Persistence**: Implement persistent volumes for Kafka and ZooKeeper
+- **Persistence**: Implement persistent volumes for Kafka
 - **Security**: Add authentication and encryption for Kafka connections
 
 ## License

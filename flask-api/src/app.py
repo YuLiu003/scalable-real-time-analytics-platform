@@ -4,6 +4,10 @@ import json
 import logging
 import datetime
 from flask import Flask, request, jsonify
+from auth_helper import require_api_key
+from prometheus_client import make_wsgi_app, Counter, Histogram
+from werkzeug.middleware.dispatcher import DispatcherMiddleware
+import time
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -18,6 +22,21 @@ VALID_API_KEYS = ["test-key-1", "test-key-2"]
 
 # Create Flask app
 app = Flask(__name__)
+
+# Add prometheus wsgi middleware to route /metrics requests
+app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {
+    '/metrics': make_wsgi_app()
+})
+
+# Define Prometheus metrics
+REQUEST_COUNT = Counter(
+    'api_request_count', 'App Request Count',
+    ['app_name', 'endpoint', 'method', 'http_status']
+)
+REQUEST_LATENCY = Histogram(
+    'api_request_latency_seconds', 'Request latency',
+    ['app_name', 'endpoint']
+)
 
 # Kafka producer function
 def produce_message(data):
@@ -38,7 +57,7 @@ def produce_message(data):
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    return jsonify({"status": "healthy"})
+    return jsonify({"status": "healthy"}), 200
 
 @app.route('/auth-test', methods=['GET'])
 def auth_test():
@@ -56,34 +75,18 @@ def auth_test():
         }), 401
 
 @app.route('/api/data', methods=['POST'])
-def ingest_data():
-    # First check for API key
-    api_key = request.headers.get('X-API-Key')
-    if not api_key or api_key not in VALID_API_KEYS:
-        logger.warning("Authentication failed: Invalid or missing API key")
-        return jsonify({
-            "status": "error",
-            "message": "Authentication failed: Invalid or missing API key"
-        }), 401
-
-    # Process the request
+@require_api_key
+def receive_data():
+    start_time = time.time()
     data = request.get_json()
-    if not data:
-        return jsonify({"status": "error", "message": "No data provided"}), 400
     
-    # Add timestamp if not present
-    if 'timestamp' not in data:
-        data['timestamp'] = datetime.datetime.now().isoformat()
+    # Record the request
+    REQUEST_COUNT.labels('secure_api', '/api/data', 'POST', 200).inc()
     
-    # Send to Kafka
-    kafka_status = produce_message(data)
+    # Record request latency
+    REQUEST_LATENCY.labels('secure_api', '/api/data').observe(time.time() - start_time)
     
-    return jsonify({
-        "status": "success",
-        "message": "Data received successfully",
-        "data": data,
-        "kafka_status": kafka_status
-    })
+    return jsonify({"status": "success", "received": data}), 200
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
