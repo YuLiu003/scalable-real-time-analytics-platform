@@ -6,8 +6,8 @@ metadata:
 spec:
   selector:
     app: data-ingestion
+  type: NodePort
   ports:
   - port: 80
     targetPort: 5000
-    nodePort: 30080
-  type: NodePort
+    nodePort: 30083

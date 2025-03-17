@@ -43,6 +43,7 @@ secure-api/
 
 # Temporary deployments
 k8s/temp/
+k8s/generated/
 
 # Local testing configs
 *test-local*
@@ -105,3 +106,11 @@ npm-debug.log
 
 # Generated documentation
 docs/generated/
+
+# Secrets directory
+.secrets/
+
+# Specific Kubernetes secret files
+k8s/kafka-secrets.yaml
+k8s/api-keys.yaml
+k8s/grafana-secret.yaml
