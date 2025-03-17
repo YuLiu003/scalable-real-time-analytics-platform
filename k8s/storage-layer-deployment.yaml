@@ -14,60 +14,42 @@ spec:
         app: storage-layer
     spec:
       containers:
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 1000
-          readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 1000
-          readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
       - name: storage-layer
-        image: real-time-analytics-platform-storage-layer:latest
-        imagePullPolicy: IfNotPresent
+        image: storage-layer:latest
+        imagePullPolicy: Never
         ports:
         - containerPort: 5002
         env:
-        - name: PORT
-          valueFrom:
-            configMapKeyRef:
-              name: platform-config
-              key: storage-layer-port
         - name: DB_HOST
           valueFrom:
             configMapKeyRef:
               name: platform-config
-              key: db-host
+              key: DB_HOST
         - name: DB_PORT
           valueFrom:
             configMapKeyRef:
               name: platform-config
-              key: db-port
+              key: DB_PORT
         - name: DB_NAME
           valueFrom:
             configMapKeyRef:
               name: platform-config
-              key: db-name
+              key: DB_NAME
         - name: DB_USER
           valueFrom:
             configMapKeyRef:
               name: platform-config
-              key: db-user
+              key: DB_USER
         - name: DB_PASSWORD
           valueFrom:
             secretKeyRef:
               name: analytics-platform-secrets
               key: DB_PASSWORD
-        - name: API_KEY
+        - name: STORAGE_LAYER_PORT
           valueFrom:
-            secretKeyRef:
-              name: analytics-platform-secrets
-              key: API_KEY
+            configMapKeyRef:
+              name: platform-config
+              key: STORAGE_LAYER_PORT
         volumeMounts:
         - name: storage-volume
           mountPath: /data
