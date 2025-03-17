@@ -1,3 +1,4 @@
+# filepath: /Users/yuliu/real-time-analytics-platform/k8s/simple-test-deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,11 +15,9 @@ spec:
         app: simple-test
     spec:
       containers:
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 1000
-          readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
+      - name: simple-test
+        image: simple-test:latest
+        imagePullPolicy: Never
         securityContext:
           runAsNonRoot: true
           runAsUser: 1000
@@ -51,14 +50,3 @@ spec:
           requests:
             cpu: "100m"
             memory: "128Mi"
-        securityContext:
-          runAsNonRoot: true
-          runAsUser: 1000
-          readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
-      - name: simple-test
-        image: simple-test:latest
-        imagePullPolicy: Never
