@@ -52,6 +52,7 @@ The project is organized as follows:
 - `flask-api/`: Secure API for external access
 - `k8s/`: Kubernetes manifests for deployment
 - `test/`: Unit and integration tests
+- `scripts/`: Utility scripts for deployment and security checks
 
 ## Getting Started
 
@@ -70,44 +71,81 @@ The project is organized as follows:
    cd real-time-analytics-platform
    ```
 
-2. **Initial Setup**:
+2. **Start Minikube**:
    ```bash
-   ./setup.sh
+   minikube start
    ```
 
-3. **Deploy to Kubernetes**:
+3. **Build Container Images**:
    ```bash
    ./build-images.sh
+   ```
+   This script builds all necessary container images with the correct names for Kubernetes.
+
+4. **Deploy the Platform**:
+   ```bash
    ./deploy-platform.sh
    ```
-   This script builds the container images and deploys the platform components in the correct order:
-   - Creates namespace and applies configurations
-   - Deploys Kafka messaging infrastructure
-   - Deploys the data ingestion, processing, storage, and visualization services
+   This script deploys all platform components:
+   - Creates the namespace and applies configurations
+   - Deploys Kafka in KRaft mode (no ZooKeeper needed)
+   - Deploys microservices (data ingestion, processing, storage, visualization)
+   - Sets up Prometheus for monitoring
 
-4. **Access the Dashboard**:
+5. **Access the Dashboard**:
    ```bash
    minikube service visualization-service -n analytics-platform
-   
-   # Method 1: Port forwarding
-   ./open-dashboard.sh
-   
-   # Method 2: Ingress (requires additional setup)
-   minikube addons enable ingress
-   minikube tunnel
-   # Then visit http://192.168.49.2/
    ```
 
-## Deployment with Secrets
-
-Before deploying, you need to set up your secrets:
-
-1. Create a copy of the secrets template:
+6. **Check Platform Status**:
    ```bash
-   cp k8s/secrets.yaml.template k8s/secrets.yaml
+   ./manage.sh status
    ```
 
-2. Edit the secrets file with your actual credentials.
+## Security
+
+### Secret Management
+
+The platform uses several secrets for secure operation:
+
+1. **Kafka Secrets**: 
+   - Generated automatically on first deployment
+   - Stored in `k8s/kafka-secrets.yaml` (excluded from git)
+   - Contains the KRaft Cluster ID for Kafka
+
+2. **API Keys**:
+   - Stored in `k8s/secrets.yaml` (excluded from git)
+   - Contains authentication keys for external API access
+
+3. **Grafana Credentials**:
+   - Admin password stored in `k8s/secrets.yaml`
+   - Generated during deployment
+
+### Security Checks
+
+Run the security check script before deployment to identify potential issues:
+
+```bash
+security-check.sh
+```
+
+This script checks for:
+- Hardcoded secrets
+- Proper security contexts in deployments
+- Network policies
+- Resource limits
+- Health probes
+- API authentication
+- Non-root user configuration
+- Secret handling
+
+### Container Security
+
+All containers follow security best practices:
+- Run as non-root users
+- Use minimal capabilities
+- Have resource limits defined
+- Include health probes for resilience
 
 ## Usage
 
@@ -115,8 +153,9 @@ Before deploying, you need to set up your secrets:
 
 ```bash
 # Using curl
-curl -X POST http://localhost:8080/api/data \
+curl -X POST http://$(minikube ip):30085/api/data \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
   -d '{"device_id": "test-001", "temperature": 25.5, "humidity": 60}'
 ```
 
@@ -130,34 +169,36 @@ kubectl get pods -n analytics-platform
 kubectl logs -n analytics-platform deployment/visualization
 kubectl logs -n analytics-platform deployment/data-ingestion
 
-# Test Kafka connectivity
-kubectl run kafka-test -n analytics-platform --image=ubuntu:20.04 -- sleep infinity
-kubectl exec -it -n analytics-platform kafka-test -- bash -c "apt-get update && apt-get install -y kafkacat"
-kubectl exec -it -n analytics-platform kafka-test -- kafkacat -b kafka-service:9092 -L
+# Access Prometheus
+minikube service prometheus-service -n analytics-platform
 ```
 
 ## Troubleshooting
 
 ### Common Issues and Solutions
 
-1. **Kafka Connection Issues**:
+1. **Image Pull Errors**:
+   - Ensure images are built correctly: build-images.sh
+   - Verify images exist: `docker images | grep -E '(flask-api|data-ingestion|processing-engine|storage-layer|visualization)'`
+
+2. **Kafka Connection Issues**:
    - Check that Kafka is running: `kubectl get pods -n analytics-platform -l app=kafka`
    - Verify Kafka service: `kubectl get svc -n analytics-platform | grep kafka`
-   - Check Kafka logs: `kubectl logs -n analytics-platform -l app=kafka`
+   - Check Kafka logs: `kubectl logs -n analytics-platform deployment/kafka`
 
-2. **Data Flow Problems**:
-   - Examine Kafka topics: `kubectl exec -it -n analytics-platform kafka-test -- kafkacat -b kafka-service:9092 -C -t sensor-data -o beginning -c 5`
-   - Check service logs for connection errors
+3. **CreateContainerConfigError**:
+   - Verify secrets exist: `kubectl get secrets -n analytics-platform`
+   - Check deployment configuration: `kubectl describe deployment/kafka -n analytics-platform`
 
 ## Development
 
 ### Updating the Application
 
-After making changes to the code:
+After making code changes:
 
 1. Rebuild images:
    ```bash
-   docker-compose build
+   ./build-images.sh
    ```
 
 2. Restart specific deployments:
@@ -170,6 +211,20 @@ After making changes to the code:
    ./deploy-platform.sh
    ```
 
+### Local Development with Docker Compose
+
+For rapid development without Kubernetes:
+
+```bash
+# Start services
+docker-compose up -d
+
+# Stop services
+docker-compose down
+```
+
+Note: The docker-compose.yml uses environment variables for secrets. Copy `.env.sample` to .env and update values before running.
+
 ## Security Features
 
 This project implements several security measures:
@@ -177,16 +232,15 @@ This project implements several security measures:
 - **API Authentication**: Protected endpoints with API key authentication
 - **Container Hardening**: All containers run as non-root with minimal capabilities
 - **Network Policies**: Default deny policy with explicit allow rules
-- **Security Scanning**: Run `./scripts/security-check.sh` to verify security settings
-
-For more details, see [SECURITY.md](./SECURITY.md).
+- **Secrets Management**: Sensitive data stored in Kubernetes secrets
+- **Security Scanning**: Automated checking with security-check.sh
 
 ## Next Steps
 
-- **Monitoring**: Add Prometheus and Grafana for platform monitoring
+- **Grafana Integration**: Add Grafana dashboards connected to Prometheus
 - **Scaling**: Test horizontal scaling of services under load
-- **Persistence**: Implement persistent volumes for Kafka
-- **Security**: Add authentication and encryption for Kafka connections
+- **Persistence**: Implement persistent volumes for Kafka and storage layer
+- **CI/CD**: Add GitHub Actions for automated testing and deployment
 
 ## License
 
