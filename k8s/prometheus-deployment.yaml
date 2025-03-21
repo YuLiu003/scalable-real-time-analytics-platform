@@ -21,6 +21,7 @@ spec:
           - "--storage.tsdb.path=/prometheus"
           - "--web.console.libraries=/usr/share/prometheus/console_libraries"
           - "--web.console.templates=/usr/share/prometheus/consoles"
+        imagePullPolicy: Never        
         ports:
         - containerPort: 9090
         volumeMounts:

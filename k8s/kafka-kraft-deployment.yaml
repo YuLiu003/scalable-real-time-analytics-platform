@@ -18,10 +18,7 @@ spec:
         image: bitnami/kafka:3.4.1
         securityContext:
           runAsNonRoot: true
-          runAsUser: 1001  # Bitnami's expected user
-          capabilities:
-            drop:
-            - ALL
+        imagePullPolicy: Never
         ports:
         - containerPort: 9092
           name: kafka
@@ -74,3 +71,10 @@ spec:
           initialDelaySeconds: 60
           periodSeconds: 20
           timeoutSeconds: 5
+        volumeMounts:
+        - name: kafka-data
+          mountPath: /bitnami/kafka
+      volumes:
+      - name: kafka-data
+        persistentVolumeClaim:
+          claimName: kafka-data
