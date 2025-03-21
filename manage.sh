@@ -16,6 +16,7 @@ show_help() {
     echo "  status      - Show the status of all platform components"
     echo "  start       - Start minikube if not running"
     echo "  stop        - Stop minikube cluster"
+    echo "  build       - Build Docker images for all services"
     echo "  deploy      - Deploy the full platform"
     echo "  monitoring  - Deploy monitoring stack (Prometheus/Grafana)"
     echo "  dashboard   - Open Kubernetes dashboard"
@@ -25,6 +26,9 @@ show_help() {
     echo "  pods        - List all pods"
     echo "  logs <pod>  - View logs for a specific pod"
     echo "  describe <pod> - Get detailed information about a pod"
+    echo "  reset-minikube  - Completely reset Minikube (delete and recreate)"
+    echo "  tunnel-start    - Start minikube tunnel in background"
+    echo "  tunnel-stop     - Stop minikube tunnel"    
     echo "  restart <deployment> - Restart a specific deployment"
     echo "  restart-all - Restart all deployments"
     echo "  events      - Show recent events in the cluster"
@@ -49,12 +53,203 @@ ensure_minikube_running() {
     fi
 }
 
+# Ensure minikube is fully operational with retries
+ensure_minikube_operational() {
+    echo -e "${BLUE}Ensuring Minikube is fully operational...${NC}"
+    
+    # First make sure it's running
+    ensure_minikube_running
+    
+    # Now check if API server is actually responding
+    local max_attempts=5
+    local attempt=1
+    local delay=10
+    
+    while [ $attempt -le $max_attempts ]; do
+        echo -e "${BLUE}Checking Kubernetes API server (attempt $attempt/$max_attempts)...${NC}"
+        
+        if kubectl cluster-info &>/dev/null; then
+            echo -e "${GREEN}Kubernetes API server is responding!${NC}"
+            
+            # Verify Docker connectivity
+            echo -e "${BLUE}Verifying Docker connectivity...${NC}"
+            if eval $(minikube docker-env) &>/dev/null; then
+                echo -e "${GREEN}Minikube-Docker integration successful!${NC}"
+                return 0
+            else
+                echo -e "${YELLOW}Docker connectivity issue. Retrying...${NC}"
+            fi
+        else
+            echo -e "${YELLOW}Kubernetes API server not responding yet. Waiting...${NC}"
+        fi
+        
+        echo -e "${BLUE}Waiting $delay seconds before retry...${NC}"
+        sleep $delay
+        attempt=$((attempt+1))
+    done
+    
+    echo -e "${RED}Failed to verify Minikube is fully operational after multiple attempts.${NC}"
+    echo -e "${YELLOW}Would you like to try restarting Minikube? (y/n)${NC}"
+    read -r restart_choice
+    
+    if [[ $restart_choice =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}Restarting Minikube...${NC}"
+        minikube stop
+        sleep 5
+        minikube start
+        
+        # Give it time to stabilize
+        echo -e "${BLUE}Giving Minikube time to stabilize...${NC}"
+        sleep 20
+        
+        if kubectl cluster-info &>/dev/null; then
+            echo -e "${GREEN}Minikube restarted successfully!${NC}"
+            return 0
+        else
+            echo -e "${RED}Minikube still not operational after restart.${NC}"
+            echo -e "${YELLOW}Consider running 'minikube delete' and then 'minikube start' manually.${NC}"
+            return 1
+        fi
+    else
+        echo -e "${BLUE}Restart cancelled.${NC}"
+        return 1
+    fi
+}
+
+# Run minikube tunnel in background
+start_minikube_tunnel() {
+    ensure_minikube_operational || return 1
+    
+    echo -e "${BLUE}Starting minikube tunnel in background...${NC}"
+    
+    # Check if tunnel is already running
+    if pgrep -f "minikube tunnel" > /dev/null; then
+        echo -e "${GREEN}Minikube tunnel is already running.${NC}"
+        return 0
+    fi
+    
+    # Start tunnel in background
+    minikube tunnel > /tmp/minikube-tunnel.log 2>&1 &
+    TUNNEL_PID=$!
+    
+    # Wait a moment to ensure it started
+    sleep 5
+    
+    # Check if still running
+    if kill -0 $TUNNEL_PID 2>/dev/null; then
+        echo -e "${GREEN}Minikube tunnel started successfully with PID $TUNNEL_PID${NC}"
+        echo $TUNNEL_PID > /tmp/minikube-tunnel.pid
+    else
+        echo -e "${RED}Failed to start minikube tunnel${NC}"
+        cat /tmp/minikube-tunnel.log
+        return 1
+    fi
+}
+
+# Stop minikube tunnel
+stop_minikube_tunnel() {
+    echo -e "${BLUE}Stopping minikube tunnel...${NC}"
+    
+    if [ -f /tmp/minikube-tunnel.pid ]; then
+        TUNNEL_PID=$(cat /tmp/minikube-tunnel.pid)
+        if kill -0 $TUNNEL_PID 2>/dev/null; then
+            kill $TUNNEL_PID
+            echo -e "${GREEN}Minikube tunnel stopped.${NC}"
+        else
+            echo -e "${YELLOW}Minikube tunnel process not found.${NC}"
+        fi
+        rm /tmp/minikube-tunnel.pid
+    else
+        # Try to find and kill any tunnel processes
+        TUNNEL_PID=$(pgrep -f "minikube tunnel")
+        if [ -n "$TUNNEL_PID" ]; then
+            kill $TUNNEL_PID
+            echo -e "${GREEN}Found and stopped minikube tunnel.${NC}"
+        else
+            echo -e "${YELLOW}No running minikube tunnel found.${NC}"
+        fi
+    fi
+}
+
+# Comprehensive Minikube reset function
+full_minikube_reset() {
+    echo -e "${RED}Warning: This will completely reset Minikube. All data will be lost. Continue? (y/n)${NC}"
+    read -r confirm
+    if [[ $confirm =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}Stopping any running Minikube tunnel...${NC}"
+        stop_minikube_tunnel
+        
+        echo -e "${BLUE}Stopping Minikube...${NC}"
+        minikube stop || true
+        
+        echo -e "${BLUE}Deleting Minikube...${NC}"
+        minikube delete
+
+        echo -e "${BLUE}Removing any leftover Minikube files...${NC}"
+        rm -rf ~/.minikube || true
+        
+        echo -e "${BLUE}Starting fresh Minikube instance...${NC}"
+        minikube start --memory=4096 --cpus=2 # Adjust resources as needed
+        
+        # Wait for Minikube to stabilize
+        echo -e "${BLUE}Waiting for Minikube to stabilize (30 seconds)...${NC}"
+        sleep 30
+        
+        # Verify if Minikube is operational
+        if kubectl cluster-info &>/dev/null; then
+            echo -e "${GREEN}Minikube reset successful!${NC}"
+            echo -e "${GREEN}Kubernetes API server is responding.${NC}"
+            echo -e "${YELLOW}You can now run './manage.sh deploy' to redeploy your platform.${NC}"
+        else
+            echo -e "${RED}Minikube reset complete, but API server is not responding.${NC}"
+            echo -e "${YELLOW}Try running './manage.sh fix-minikube' for diagnostics.${NC}"
+        fi
+    else
+        echo -e "${BLUE}Reset cancelled.${NC}"
+    fi
+}
+
 # Check if namespace exists
 ensure_namespace_exists() {
     if ! kubectl get namespace analytics-platform &> /dev/null; then
         echo -e "${YELLOW}Creating analytics-platform namespace...${NC}"
         kubectl create namespace analytics-platform
     fi
+}
+
+# Check if resources are ready before continuing deployment
+wait_for_resource() {
+  local resource_type=$1
+  local resource_name=$2
+  local namespace=$3
+  local timeout=${4:-180}
+  local count=0
+  local interval=5
+
+  echo -e "${BLUE}Waiting for $resource_type/$resource_name to be ready...${NC}"
+  
+  while [ $count -lt $timeout ]; do
+    if kubectl get $resource_type $resource_name -n $namespace &>/dev/null; then
+      if [ "$resource_type" == "deployment" ]; then
+        local ready=$(kubectl get $resource_type $resource_name -n $namespace -o jsonpath='{.status.readyReplicas}')
+        local desired=$(kubectl get $resource_type $resource_name -n $namespace -o jsonpath='{.status.replicas}')
+        if [ "$ready" == "$desired" ]; then
+          echo -e "${GREEN}$resource_type/$resource_name is ready!${NC}"
+          return 0
+        fi
+      else
+        echo -e "${GREEN}$resource_type/$resource_name is ready!${NC}"
+        return 0
+      fi
+    fi
+    
+    echo -n "."
+    sleep $interval
+    count=$((count + interval))
+  done
+  
+  echo -e "${RED}Timed out waiting for $resource_type/$resource_name${NC}"
+  return 1
 }
 
 # Show status of all platform components
@@ -97,12 +292,266 @@ show_status() {
     kubectl top pods -n analytics-platform 2>/dev/null || echo "Metrics server not available"
 }
 
+# Ensure minikube is fully operational with retries
+ensure_minikube_operational() {
+    echo -e "${BLUE}Ensuring Minikube is fully operational...${NC}"
+    
+    # First make sure it's running
+    ensure_minikube_running
+    
+    # Now check if API server is actually responding
+    local max_attempts=5
+    local attempt=1
+    local delay=10
+    
+    while [ $attempt -le $max_attempts ]; do
+        echo -e "${BLUE}Checking Kubernetes API server (attempt $attempt/$max_attempts)...${NC}"
+        
+        if kubectl cluster-info &>/dev/null; then
+            echo -e "${GREEN}Kubernetes API server is responding!${NC}"
+            
+            # Verify Docker connectivity
+            echo -e "${BLUE}Verifying Docker connectivity...${NC}"
+            if eval $(minikube docker-env) &>/dev/null; then
+                echo -e "${GREEN}Minikube-Docker integration successful!${NC}"
+                return 0
+            else
+                echo -e "${YELLOW}Docker connectivity issue. Retrying...${NC}"
+            fi
+        else
+            echo -e "${YELLOW}Kubernetes API server not responding yet. Waiting...${NC}"
+        fi
+        
+        echo -e "${BLUE}Waiting $delay seconds before retry...${NC}"
+        sleep $delay
+        attempt=$((attempt+1))
+    done
+    
+    echo -e "${RED}Failed to verify Minikube is fully operational after multiple attempts.${NC}"
+    echo -e "${YELLOW}Would you like to try restarting Minikube? (y/n)${NC}"
+    read -r restart_choice
+    
+    if [[ $restart_choice =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}Restarting Minikube...${NC}"
+        minikube stop
+        sleep 5
+        minikube start
+        
+        # Give it time to stabilize
+        echo -e "${BLUE}Giving Minikube time to stabilize...${NC}"
+        sleep 20
+        
+        if kubectl cluster-info &>/dev/null; then
+            echo -e "${GREEN}Minikube restarted successfully!${NC}"
+            return 0
+        else
+            echo -e "${RED}Minikube still not operational after restart.${NC}"
+            echo -e "${YELLOW}Consider running 'minikube delete' and then 'minikube start' manually.${NC}"
+            return 1
+        fi
+    else
+        echo -e "${BLUE}Restart cancelled.${NC}"
+        return 1
+    fi
+}
+
+# Run minikube tunnel in background
+start_minikube_tunnel() {
+    ensure_minikube_operational || return 1
+    
+    echo -e "${BLUE}Starting minikube tunnel in background...${NC}"
+    
+    # Check if tunnel is already running
+    if pgrep -f "minikube tunnel" > /dev/null; then
+        echo -e "${GREEN}Minikube tunnel is already running.${NC}"
+        return 0
+    fi
+    
+    # Start tunnel in background
+    minikube tunnel > /tmp/minikube-tunnel.log 2>&1 &
+    TUNNEL_PID=$!
+    
+    # Wait a moment to ensure it started
+    sleep 5
+    
+    # Check if still running
+    if kill -0 $TUNNEL_PID 2>/dev/null; then
+        echo -e "${GREEN}Minikube tunnel started successfully with PID $TUNNEL_PID${NC}"
+        echo $TUNNEL_PID > /tmp/minikube-tunnel.pid
+    else
+        echo -e "${RED}Failed to start minikube tunnel${NC}"
+        cat /tmp/minikube-tunnel.log
+        return 1
+    fi
+}
+
+# Stop minikube tunnel
+stop_minikube_tunnel() {
+    echo -e "${BLUE}Stopping minikube tunnel...${NC}"
+    
+    if [ -f /tmp/minikube-tunnel.pid ]; then
+        TUNNEL_PID=$(cat /tmp/minikube-tunnel.pid)
+        if kill -0 $TUNNEL_PID 2>/dev/null; then
+            kill $TUNNEL_PID
+            echo -e "${GREEN}Minikube tunnel stopped.${NC}"
+        else
+            echo -e "${YELLOW}Minikube tunnel process not found.${NC}"
+        fi
+        rm /tmp/minikube-tunnel.pid
+    else
+        # Try to find and kill any tunnel processes
+        TUNNEL_PID=$(pgrep -f "minikube tunnel")
+        if [ -n "$TUNNEL_PID" ]; then
+            kill $TUNNEL_PID
+            echo -e "${GREEN}Found and stopped minikube tunnel.${NC}"
+        else
+            echo -e "${YELLOW}No running minikube tunnel found.${NC}"
+        fi
+    fi
+}
+
+# Comprehensive Minikube reset function
+full_minikube_reset() {
+    echo -e "${RED}Warning: This will completely reset Minikube. All data will be lost. Continue? (y/n)${NC}"
+    read -r confirm
+    if [[ $confirm =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}Stopping any running Minikube tunnel...${NC}"
+        stop_minikube_tunnel
+        
+        echo -e "${BLUE}Stopping Minikube...${NC}"
+        minikube stop || true
+        
+        echo -e "${BLUE}Deleting Minikube...${NC}"
+        minikube delete
+
+        echo -e "${BLUE}Removing any leftover Minikube files...${NC}"
+        rm -rf ~/.minikube || true
+        
+        echo -e "${BLUE}Starting fresh Minikube instance...${NC}"
+        minikube start --memory=4096 --cpus=2 # Adjust resources as needed
+        
+        # Wait for Minikube to stabilize
+        echo -e "${BLUE}Waiting for Minikube to stabilize (30 seconds)...${NC}"
+        sleep 30
+        
+        # Verify if Minikube is operational
+        if kubectl cluster-info &>/dev/null; then
+            echo -e "${GREEN}Minikube reset successful!${NC}"
+            echo -e "${GREEN}Kubernetes API server is responding.${NC}"
+            echo -e "${YELLOW}You can now run './manage.sh deploy' to redeploy your platform.${NC}"
+        else
+            echo -e "${RED}Minikube reset complete, but API server is not responding.${NC}"
+            echo -e "${YELLOW}Try running './manage.sh fix-minikube' for diagnostics.${NC}"
+        fi
+    else
+        echo -e "${BLUE}Reset cancelled.${NC}"
+    fi
+}
+
+# Add this function to your manage.sh script:
+build_images() {
+    # First check if minikube is operational
+    ensure_minikube_operational || {
+        echo -e "${RED}Cannot build images because Minikube is not fully operational.${NC}"
+        echo -e "${YELLOW}Try running './manage.sh fix-minikube' or './manage.sh reset-minikube' to fix issues.${NC}"
+        return 1
+    }
+    
+    echo -e "${BLUE}Building platform images...${NC}"
+    
+    # Connect to minikube's Docker daemon
+    echo -e "${BLUE}Connecting to minikube's Docker daemon...${NC}"
+    eval $(minikube docker-env)
+    
+    # Check if build-images.sh exists and is executable
+    if [ ! -f "./build-images.sh" ]; then
+        echo -e "${RED}Error: build-images.sh script not found${NC}"
+        return 1
+    fi
+    
+    if [ ! -x "./build-images.sh" ]; then
+        echo -e "${YELLOW}Making build-images.sh executable...${NC}"
+        chmod +x ./build-images.sh
+    fi
+    
+    # Run the build-images.sh script
+    echo -e "${BLUE}Running build-images.sh...${NC}"
+    ./build-images.sh
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}All images built successfully!${NC}"
+        echo -e "${YELLOW}You can now run './manage.sh deploy' to deploy the platform.${NC}"
+    else
+        echo -e "${RED}Image building failed. Please check the error messages above.${NC}"
+        return 1
+    fi
+}
+
 # Deploy the platform
 deploy_platform() {
-    ensure_minikube_running
+    # Use the enhanced check that ensures API server is responding
+    ensure_minikube_operational || {
+        echo -e "${RED}Cannot deploy because Minikube is not fully operational.${NC}"
+        echo -e "${YELLOW}Try running './manage.sh fix-minikube' or './manage.sh reset-minikube' to fix issues.${NC}"
+        return 1
+    }
+    
     echo -e "${BLUE}Deploying Real-Time Analytics Platform...${NC}"
-    ./deploy-platform.sh
+    
+    # Check if images exist
+    eval $(minikube docker-env)
+    if ! docker images | grep -q "flask-api"; then
+        echo -e "${YELLOW}Required images not found. Building images first...${NC}"
+        build_images || {
+            echo -e "${RED}Failed to build images. Deployment aborted.${NC}"
+            return 1
+        }
+    else
+        echo -e "${GREEN}Using existing Docker images...${NC}"
+    fi
+
+    # Instead of just executing deploy-platform.sh, we'll add more control here
+    
+    # Make sure namespace exists
+    ensure_namespace_exists
+    
+    # Apply core infrastructure 
+    echo "Creating necessary secrets and configmaps..."
+    kubectl apply -f k8s/configmap.yaml
+    kubectl apply -f k8s/secrets.yaml
+    kubectl apply -f k8s/grafana-secret.yaml
+    
+    # Deploy Kafka first
+    echo "Deploying Kafka..."
+    kubectl apply -f k8s/kafka-secrets.yaml
+    kubectl apply -f k8s/kafka-pvc.yaml
+    kubectl apply -f k8s/kafka-kraft-deployment.yaml
+    kubectl apply -f k8s/kafka-service.yaml
+    
+    # Wait for Kafka to be ready before continuing
+    wait_for_resource deployment kafka analytics-platform 300
+    
+    # Deploy remaining services
+    echo "Deploying platform services..."
+    kubectl apply -f k8s/flask-api-deployment.yaml
+    kubectl apply -f k8s/flask-api-service.yaml
+    kubectl apply -f k8s/data-ingestion-deployment.yaml
+    kubectl apply -f k8s/data-ingestion-service.yaml
+    
+    # Wait for key services before deploying dependent services
+    wait_for_resource deployment flask-api analytics-platform
+    wait_for_resource deployment data-ingestion analytics-platform
+    
+    # Deploy processing engine and dependent services
+    kubectl apply -f k8s/processing-engine-deployment.yaml
+    kubectl apply -f k8s/processing-engine-service.yaml
+    kubectl apply -f k8s/storage-layer-deployment.yaml
+    kubectl apply -f k8s/storage-layer-service.yaml
+    kubectl apply -f k8s/visualization-deployment.yaml
+    kubectl apply -f k8s/visualization-service.yaml
+    
     echo -e "${GREEN}Deployment complete!${NC}"
+    show_status
 }
 
 # Deploy monitoring stack
@@ -202,6 +651,355 @@ list_pods() {
     kubectl get pods -n analytics-platform
 }
 
+# Tenant management functions
+
+# List tenants
+list_tenants() {
+    ensure_minikube_running
+    ensure_namespace_exists
+    
+    echo -e "${BLUE}Tenant management is not yet fully integrated into the platform.${NC}"
+    echo -e "${YELLOW}Current API keys and their tenant mappings:${NC}"
+    
+    # Get API keys from secrets
+    API_KEY_1=$(kubectl get secret api-keys -n analytics-platform -o jsonpath='{.data.API_KEY_1}' 2>/dev/null | base64 --decode)
+    API_KEY_2=$(kubectl get secret api-keys -n analytics-platform -o jsonpath='{.data.API_KEY_2}' 2>/dev/null | base64 --decode)
+    
+    # Get tenant mapping from config
+    TENANT_MAP=$(kubectl get configmap platform-config -n analytics-platform -o jsonpath='{.data.TENANT_API_KEY_MAP}' 2>/dev/null)
+    
+    if [ -z "$TENANT_MAP" ]; then
+        echo -e "${RED}No tenant mapping found in ConfigMap${NC}"
+        echo -e "${YELLOW}Default mapping:${NC}"
+        echo -e "  API_KEY_1 ($API_KEY_1) → tenant1"
+        echo -e "  API_KEY_2 ($API_KEY_2) → tenant2"
+    else
+        echo -e "${GREEN}Tenant mapping from ConfigMap:${NC}"
+        # Pretty print the JSON mapping
+        echo $TENANT_MAP | python3 -m json.tool
+    fi
+    
+    echo -e "\n${YELLOW}To enable full tenant management, deploy the tenant-management service:${NC}"
+    echo -e "  ./manage.sh deploy-tenant-mgmt"
+}
+
+# Enable tenant isolation
+enable_tenant_isolation() {
+    ensure_minikube_running
+    ensure_namespace_exists
+    
+    echo -e "${BLUE}Enabling tenant isolation...${NC}"
+    
+    # Update ConfigMap to enable tenant isolation
+    kubectl patch configmap platform-config -n analytics-platform --type=merge -p '{"data":{"ENABLE_TENANT_ISOLATION":"true"}}'
+    
+    # Set default tenant mapping if not already set
+    TENANT_MAP=$(kubectl get configmap platform-config -n analytics-platform -o jsonpath='{.data.TENANT_API_KEY_MAP}' 2>/dev/null)
+    if [ -z "$TENANT_MAP" ]; then
+        # Get API keys
+        API_KEY_1=$(kubectl get secret api-keys -n analytics-platform -o jsonpath='{.data.API_KEY_1}' 2>/dev/null | base64 --decode)
+        API_KEY_2=$(kubectl get secret api-keys -n analytics-platform -o jsonpath='{.data.API_KEY_2}' 2>/dev/null | base64 --decode)
+        
+        # Create default mapping
+        TENANT_MAPPING="{\"$API_KEY_1\":\"tenant1\",\"$API_KEY_2\":\"tenant2\"}"
+        kubectl patch configmap platform-config -n analytics-platform --type=merge -p "{\"data\":{\"TENANT_API_KEY_MAP\":\"$TENANT_MAPPING\"}}"
+    fi
+    
+    # Restart API deployments to apply changes
+    echo -e "${BLUE}Restarting API deployments to apply changes...${NC}"
+    kubectl rollout restart deployment/flask-api -n analytics-platform
+    kubectl rollout restart deployment/data-ingestion -n analytics-platform
+    
+    echo -e "${GREEN}Tenant isolation enabled!${NC}"
+    echo -e "${YELLOW}Use ./manage.sh list-tenants to see current tenant mappings${NC}"
+}
+
+# Deploy tenant management service
+deploy_tenant_mgmt() {
+    ensure_minikube_running
+    ensure_namespace_exists
+    
+    echo -e "${BLUE}Deploying tenant management service...${NC}"
+    
+    # Check if tenant-management directory exists
+    if [ ! -d "platform/tenant-management" ]; then
+        echo -e "${RED}Error: tenant-management directory not found${NC}"
+        echo -e "${YELLOW}Creating basic directory structure...${NC}"
+        
+        mkdir -p platform/tenant-management/src
+        
+        # Create tenant model
+        cat > platform/tenant-management/src/tenant_model.py << 'EOF'
+from datetime import datetime
+
+class Tenant:
+    """Represents a platform tenant with isolation settings."""
+    
+    def __init__(self, tenant_id, name, plan="basic"):
+        self.tenant_id = tenant_id
+        self.name = name
+        self.plan = plan  # basic, standard, premium
+        self.resource_limits = self._get_plan_limits(plan)
+        self.created_at = datetime.now()
+        
+    def _get_plan_limits(self, plan):
+        """Get resource limits based on plan tier."""
+        limits = {
+            "basic": {
+                "max_data_points": 100000,
+                "max_queries_per_min": 60,
+                "retention_days": 30,
+                "max_dashboards": 5,
+                "cpu_limit": "2",
+                "memory_limit": "2Gi"
+            },
+            "standard": {
+                "max_data_points": 1000000,
+                "max_queries_per_min": 300,
+                "retention_days": 90,
+                "max_dashboards": 20,
+                "cpu_limit": "4",
+                "memory_limit": "8Gi"
+            },
+            "premium": {
+                "max_data_points": 10000000,
+                "max_queries_per_min": 1000,
+                "retention_days": 365,
+                "max_dashboards": 50,
+                "cpu_limit": "8",
+                "memory_limit": "16Gi"
+            }
+        }
+        return limits.get(plan, limits["basic"])
+EOF
+
+        # Create tenant service
+        cat > platform/tenant-management/src/tenant_service.py << 'EOF'
+from flask import Flask, request, jsonify
+import os
+import json
+import sys
+from datetime import datetime
+
+# Add the current directory to the path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.tenant_model import Tenant
+
+app = Flask(__name__)
+
+# In-memory tenant store for testing
+tenants = {}
+
+@app.route('/api/tenants', methods=['GET'])
+def list_tenants():
+    """List all tenants."""
+    return jsonify({"tenants": [
+        {
+            "tenant_id": t.tenant_id,
+            "name": t.name,
+            "plan": t.plan,
+            "created_at": t.created_at.isoformat()
+        } for t in tenants.values()
+    ]})
+
+@app.route('/api/tenants/<tenant_id>', methods=['GET'])
+def get_tenant(tenant_id):
+    """Get tenant by ID."""
+    tenant = tenants.get(tenant_id)
+    if not tenant:
+        return jsonify({"error": "Tenant not found"}), 404
+    
+    return jsonify({
+        "tenant_id": tenant.tenant_id,
+        "name": tenant.name,
+        "plan": tenant.plan,
+        "resource_limits": tenant.resource_limits,
+        "created_at": tenant.created_at.isoformat()
+    })
+
+@app.route('/api/tenants', methods=['POST'])
+def create_tenant():
+    """Create a new tenant."""
+    data = request.json
+    tenant_id = data.get('tenant_id')
+    name = data.get('name')
+    plan = data.get('plan', 'basic')
+    
+    # Validate input
+    if not tenant_id or not name:
+        return jsonify({"error": "Missing required fields"}), 400
+        
+    # Check if tenant already exists
+    if tenant_id in tenants:
+        return jsonify({"error": "Tenant ID already exists"}), 409
+    
+    # Create tenant
+    tenant = Tenant(tenant_id, name, plan)
+    tenants[tenant_id] = tenant
+    
+    return jsonify({
+        "tenant_id": tenant.tenant_id,
+        "name": tenant.name,
+        "plan": tenant.plan,
+        "created_at": tenant.created_at.isoformat(),
+        "status": "created"
+    }), 201
+
+@app.route('/health', methods=['GET'])
+def health():
+    """Health check endpoint."""
+    return jsonify({"status": "healthy"}), 200
+
+if __name__ == '__main__':
+    # Create default tenants
+    tenants['tenant1'] = Tenant('tenant1', 'Demo Corp', 'premium')
+    tenants['tenant2'] = Tenant('tenant2', 'Test Inc', 'basic')
+    
+    # Print tenant info for debugging
+    print("Created default tenants:")
+    for tenant_id, tenant in tenants.items():
+        print(f"- {tenant_id}: {tenant.name} ({tenant.plan})")
+    
+    app.run(host='0.0.0.0', port=5010, debug=True)
+EOF
+
+        # Create requirements.txt
+        cat > platform/tenant-management/requirements.txt << 'EOF'
+flask==2.0.1
+pyyaml==6.0
+kubernetes==23.6.0
+pytest==7.0.1
+requests==2.27.1
+EOF
+
+        # Create Dockerfile
+        cat > platform/tenant-management/Dockerfile << 'EOF'
+FROM python:3.9-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Create non-root user
+RUN addgroup --system --gid 1001 appuser \
+    && adduser --system --uid 1001 --gid 1001 --no-create-home appuser
+
+# Set permissions
+RUN chown -R appuser:appuser /app
+
+USER appuser
+
+EXPOSE 5010
+
+CMD ["python", "src/tenant_service.py"]
+EOF
+    fi
+    
+    # Build and deploy the tenant management service
+    echo -e "${BLUE}Building tenant management service image...${NC}"
+    eval $(minikube docker-env)
+    docker build -t tenant-management:latest -f platform/tenant-management/Dockerfile ./platform/tenant-management
+    
+    # Create Kubernetes deployment and service
+    cat > k8s/tenant-management-deployment.yaml << EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tenant-management
+  namespace: analytics-platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: tenant-management
+  template:
+    metadata:
+      labels:
+        app: tenant-management
+    spec:
+      containers:
+      - name: tenant-management
+        image: tenant-management:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5010
+        securityContext:
+          runAsUser: 1001
+          runAsNonRoot: true
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5010
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5010
+          initialDelaySeconds: 15
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tenant-management-service
+  namespace: analytics-platform
+spec:
+  selector:
+    app: tenant-management
+  ports:
+  - port: 80
+    targetPort: 5010
+    nodePort: 30090
+  type: NodePort
+EOF
+
+    # Apply Kubernetes resources
+    kubectl apply -f k8s/tenant-management-deployment.yaml
+    
+    echo -e "${GREEN}Tenant management service deployed!${NC}"
+    echo -e "${YELLOW}Access the service at: http://$(minikube ip):30090/api/tenants${NC}"
+}
+
+# Create a new tenant
+create_tenant() {
+    ensure_minikube_running
+    ensure_namespace_exists
+    
+    if [ -z "$1" ] || [ -z "$2" ]; then
+        echo -e "${RED}Error: Tenant ID and name are required${NC}"
+        echo -e "Usage: ./manage.sh create-tenant <tenant-id> <tenant-name> [plan]"
+        echo -e "Plans: basic, standard, premium (default: basic)"
+        return 1
+    fi
+    
+    TENANT_ID=$1
+    TENANT_NAME=$2
+    PLAN=${3:-basic}
+    
+    echo -e "${BLUE}Creating tenant: $TENANT_NAME (ID: $TENANT_ID, Plan: $PLAN)...${NC}"
+    
+    # Get tenant management service URL
+    TENANT_SVC_URL="http://$(minikube ip):30090"
+    
+    # Create tenant via API
+    curl -X POST "$TENANT_SVC_URL/api/tenants" \
+      -H "Content-Type: application/json" \
+      -d "{\"tenant_id\":\"$TENANT_ID\",\"name\":\"$TENANT_NAME\",\"plan\":\"$PLAN\"}"
+    
+    echo -e "\n${GREEN}Tenant creation request sent.${NC}"
+}
+
 # View logs for a pod
 view_logs() {
     if [ -z "$1" ]; then
@@ -230,6 +1028,99 @@ view_events() {
     ensure_minikube_running
     echo -e "${BLUE}Recent events in the analytics-platform namespace:${NC}"
     kubectl get events -n analytics-platform --sort-by=.metadata.creationTimestamp | tail -20
+}
+
+# Fix Minikube issues
+fix_minikube() {
+    echo -e "${BLUE}Diagnosing Minikube issues...${NC}"
+    
+    # Check if Minikube is installed
+    if ! command -v minikube &> /dev/null; then
+        echo -e "${RED}Minikube not found. Please install Minikube first.${NC}"
+        return 1
+    fi
+    
+    # Check Minikube status
+    if ! minikube status &> /dev/null; then
+        echo -e "${YELLOW}Minikube is not running. Attempting to start...${NC}"
+        minikube start
+        
+        if ! minikube status &> /dev/null; then
+            echo -e "${RED}Failed to start Minikube. Attempting to reset Minikube...${NC}"
+            
+            echo -e "${YELLOW}WARNING: This will delete your Minikube cluster. All data will be lost. Continue? (y/n)${NC}"
+            read -r reset_confirm
+            if [[ $reset_confirm =~ ^[Yy]$ ]]; then
+                echo -e "${BLUE}Deleting Minikube cluster...${NC}"
+                minikube delete
+                sleep 2
+                
+                echo -e "${BLUE}Creating new Minikube cluster...${NC}"
+                minikube start
+                
+                if minikube status &> /dev/null; then
+                    echo -e "${GREEN}Minikube reset successful!${NC}"
+                else
+                    echo -e "${RED}Minikube reset failed. Please check your Minikube installation.${NC}"
+                    echo -e "${YELLOW}Try running: brew reinstall minikube (for Mac)${NC}"
+                    return 1
+                fi
+            else
+                echo -e "${BLUE}Reset cancelled.${NC}"
+                return 1
+            fi
+        else
+            echo -e "${GREEN}Minikube started successfully.${NC}"
+        fi
+    else
+        echo -e "${GREEN}Minikube is running.${NC}"
+        
+        # Check if there are any issues with the cluster
+        if ! kubectl cluster-info &> /dev/null; then
+            echo -e "${YELLOW}Kubernetes API server not responding. Attempting to restart Minikube...${NC}"
+            minikube stop
+            sleep 2
+            minikube start
+            
+            if kubectl cluster-info &> /dev/null; then
+                echo -e "${GREEN}Minikube restarted successfully.${NC}"
+            else
+                echo -e "${RED}Failed to restore Minikube. Attempting full reset...${NC}"
+                minikube delete
+                sleep 2
+                minikube start
+                
+                if kubectl cluster-info &> /dev/null; then
+                    echo -e "${GREEN}Minikube reset successful!${NC}"
+                else
+                    echo -e "${RED}Minikube reset failed. Please check your Minikube installation.${NC}"
+                    return 1
+                fi
+            fi
+        else
+            echo -e "${GREEN}Kubernetes API server is responding normally.${NC}"
+        fi
+    fi
+    
+    # Check docker-env integration
+    echo -e "${BLUE}Testing Docker integration...${NC}"
+    if ! eval $(minikube docker-env) &> /dev/null; then
+        echo -e "${RED}Failed to connect to Minikube's Docker daemon.${NC}"
+        echo -e "${YELLOW}This might indicate Docker configuration issues.${NC}"
+        
+        # Check Docker status
+        if ! docker info &> /dev/null; then
+            echo -e "${RED}Docker is not running. Please start Docker Desktop or docker service.${NC}"
+        else
+            echo -e "${YELLOW}Docker is running but Minikube can't connect to it.${NC}"
+            echo -e "${YELLOW}Try restarting Docker and Minikube.${NC}"
+        fi
+    else
+        echo -e "${GREEN}Minikube-Docker integration successful.${NC}"
+    fi
+    
+    echo -e "${GREEN}Minikube diagnostics complete.${NC}"
+    return 0
 }
 
 # Fix common issues
@@ -283,18 +1174,60 @@ reset_project() {
     echo -e "${RED}Warning: This will delete ALL Kubernetes resources and clean up unnecessary files. Are you sure? (y/n)${NC}"
     read -r confirmation
     if [[ $confirmation =~ ^[Yy]$ ]]; then
-        # Step 1: Delete all Kubernetes resources
-        echo -e "${BLUE}Deleting all Kubernetes resources...${NC}"
-        kubectl delete namespace analytics-platform --ignore-not-found=true
-        
-        # Step 2: Clean up Docker images
-        echo -e "${BLUE}Cleaning Docker images...${NC}"
+        # Step 1: Check if minikube is running before trying to delete resources
         if minikube status &>/dev/null; then
+            # Step 1a: Delete all Kubernetes resources
+            echo -e "${BLUE}Deleting all Kubernetes resources...${NC}"
+            kubectl delete namespace analytics-platform --ignore-not-found=true --timeout=60s || {
+                echo -e "${YELLOW}Namespace deletion timed out or failed. This can happen if resources are stuck.${NC}"
+                echo -e "${YELLOW}Attempting to force delete...${NC}"
+                kubectl delete namespace analytics-platform --ignore-not-found=true --grace-period=0 --force || true
+            }
+            
+            # Step 1b: Clean up Docker images
+            echo -e "${BLUE}Cleaning Docker images...${NC}"
             eval $(minikube docker-env)
             docker system prune -af --volumes
         else
-            echo "Minikube not running, skipping Docker cleanup"
+            echo -e "${YELLOW}Minikube is not running. Attempting to start it...${NC}"
+            minikube start
+            
+            if minikube status &>/dev/null; then
+                echo -e "${GREEN}Minikube started successfully. Proceeding with cleanup...${NC}"
+                # Now try to delete resources
+                echo -e "${BLUE}Deleting all Kubernetes resources...${NC}"
+                kubectl delete namespace analytics-platform --ignore-not-found=true --timeout=60s || true
+                
+                echo -e "${BLUE}Cleaning Docker images...${NC}"
+                eval $(minikube docker-env)
+                docker system prune -af --volumes
+            else
+                echo -e "${RED}Failed to start Minikube. Skipping Kubernetes resource deletion.${NC}"
+                echo -e "${YELLOW}You may need to manually delete resources after fixing Minikube.${NC}"
+                
+                # Should we attempt to fix minikube?
+                echo -e "${YELLOW}Would you like to try to fix Minikube issues? (y/n)${NC}"
+                read -r fix_minikube
+                if [[ $fix_minikube =~ ^[Yy]$ ]]; then
+                    echo -e "${BLUE}Attempting to fix Minikube...${NC}"
+                    minikube delete
+                    sleep 2
+                    minikube start
+                    
+                    if minikube status &>/dev/null; then
+                        echo -e "${GREEN}Minikube has been reset successfully.${NC}"
+                    else
+                        echo -e "${RED}Minikube reset failed. Please check your Minikube installation.${NC}"
+                    fi
+                fi
+            fi
         fi
+        
+        # Step 3: Cleanup local temporary files (optional)
+        echo -e "${BLUE}Cleaning up temporary local files...${NC}"
+        find . -name "*.log" -type f -delete
+        find . -name "__pycache__" -type d -exec rm -rf {} +
+        find . -name "*.pyc" -type f -delete
         
         echo -e "${GREEN}Project reset complete!${NC}"
         echo -e "Run ${YELLOW}./manage.sh deploy${NC} to redeploy the platform."
@@ -305,17 +1238,35 @@ reset_project() {
 
 # Clean up all resources
 cleanup_resources() {
-    ensure_minikube_running
+  ensure_minikube_running
+  
+  echo -e "${RED}Warning: This will remove all platform resources. Are you sure? (y/n)${NC}"
+  read -r confirmation
+  if [[ $confirmation =~ ^[Yy]$ ]]; then
+    echo -e "${BLUE}Removing all platform resources...${NC}"
     
-    echo -e "${RED}Warning: This will remove all platform resources. Are you sure? (y/n)${NC}"
-    read -r confirmation
-    if [[ $confirmation =~ ^[Yy]$ ]]; then
-        echo -e "${BLUE}Removing all platform resources...${NC}"
-        kubectl delete namespace analytics-platform --ignore-not-found=true
-        echo -e "${GREEN}Cleanup complete!${NC}"
-    else
-        echo -e "${BLUE}Cleanup cancelled.${NC}"
-    fi
+    # Remove specific resources first to avoid dependency issues
+    echo "Removing deployments first..."
+    kubectl delete deployment --all -n analytics-platform --ignore-not-found=true
+    
+    echo "Removing services..."
+    kubectl delete service --all -n analytics-platform --ignore-not-found=true
+    
+    echo "Removing configmaps and secrets..."
+    kubectl delete configmap --all -n analytics-platform --ignore-not-found=true
+    kubectl delete secret --all -n analytics-platform --ignore-not-found=true
+    
+    echo "Removing persistent volumes and claims..."
+    kubectl delete pvc --all -n analytics-platform --ignore-not-found=true
+    kubectl delete pv --all --ignore-not-found=true
+    
+    echo "Finally removing namespace..."
+    kubectl delete namespace analytics-platform --ignore-not-found=true
+    
+    echo -e "${GREEN}Cleanup complete!${NC}"
+  else
+    echo -e "${BLUE}Cleanup cancelled.${NC}"
+  fi
 }
 
 fix_config_issues() {
@@ -516,6 +1467,9 @@ case "$1" in
         minikube stop
         echo -e "${GREEN}Minikube stopped.${NC}"
         ;;
+    build)
+        build_images
+        ;;        
     deploy)
         deploy_platform
         ;;
@@ -568,6 +1522,9 @@ case "$1" in
     fix)
         fix_common_issues
         ;;
+    fix-minikube)
+        fix_minikube
+        ;;        
     fix-config)
         fix_config_issues
         ;;     
@@ -576,7 +1533,28 @@ case "$1" in
         ;;        
     standardize-config)
         standardize_config
-        ;;           
+        ;;
+    list-tenants)
+        list_tenants
+        ;;
+    enable-tenant-isolation)
+        enable_tenant_isolation
+        ;;
+    deploy-tenant-mgmt)
+        deploy_tenant_mgmt
+        ;;
+    create-tenant)
+        create_tenant "$2" "$3" "$4"
+        ;;
+    tunnel-start)
+        start_minikube_tunnel
+        ;;
+    tunnel-stop)
+        stop_minikube_tunnel
+        ;;
+    reset-minikube)
+        full_minikube_reset
+        ;;                           
     reset)
         reset_project
         ;;
