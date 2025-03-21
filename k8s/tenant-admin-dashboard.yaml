@@ -1,0 +1,187 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tenant-admin-dashboard
+  namespace: analytics-platform
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Tenant Administration - Real-Time Analytics Platform</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+          line-height: 1.6;
+          color: #333;
+          max-width: 1200px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+        h1, h2, h3 {
+          color: #0066cc;
+        }
+        .card {
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          padding: 15px;
+          margin-bottom: 20px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+        }
+        th, td {
+          border: 1px solid #ddd;
+          padding: 8px;
+          text-align: left;
+        }
+        th {
+          background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+          background-color: #f9f9f9;
+        }
+        .status {
+          display: inline-block;
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 12px;
+          font-weight: bold;
+        }
+        .status-active {
+          background-color: #d4edda;
+          color: #155724;
+        }
+        .status-inactive {
+          background-color: #f8d7da;
+          color: #721c24;
+        }
+        button {
+          background-color: #0066cc;
+          color: white;
+          border: none;
+          padding: 8px 12px;
+          border-radius: 4px;
+          cursor: pointer;
+        }
+        button:hover {
+          background-color: #0056b3;
+        }
+        .form-group {
+          margin-bottom: 15px;
+        }
+        label {
+          display: block;
+          margin-bottom: 5px;
+          font-weight: bold;
+        }
+        input, select {
+          width: 100%;
+          padding: 8px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+        }
+      </style>
+    </head>
+    <body>
+      <h1>Tenant Administration Dashboard</h1>
+      
+      <div class="card">
+        <h2>Active Tenants</h2>
+        <table id="tenant-table">
+          <thead>
+            <tr>
+              <th>Tenant ID</th>
+              <th>API Key</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th>API Requests (24h)</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>tenant1</td>
+              <td>test-key-1</td>
+              <td><span class="status status-active">Active</span></td>
+              <td>2023-08-15</td>
+              <td>1,245</td>
+              <td>
+                <button onclick="viewTenant('tenant1')">View</button>
+                <button onclick="editTenant('tenant1')">Edit</button>
+              </td>
+            </tr>
+            <tr>
+              <td>tenant2</td>
+              <td>test-key-2</td>
+              <td><span class="status status-active">Active</span></td>
+              <td>2023-08-17</td>
+              <td>893</td>
+              <td>
+                <button onclick="viewTenant('tenant2')">View</button>
+                <button onclick="editTenant('tenant2')">Edit</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <div class="card">
+        <h2>Create New Tenant</h2>
+        <form id="new-tenant-form">
+          <div class="form-group">
+            <label for="tenant-id">Tenant ID:</label>
+            <input type="text" id="tenant-id" name="tenant-id" required>
+          </div>
+          
+          <div class="form-group">
+            <label for="tenant-name">Tenant Name:</label>
+            <input type="text" id="tenant-name" name="tenant-name" required>
+          </div>
+          
+          <div class="form-group">
+            <label for="rate-limit">Rate Limit (requests/minute):</label>
+            <input type="number" id="rate-limit" name="rate-limit" min="10" max="1000" value="100">
+          </div>
+          
+          <div class="form-group">
+            <label for="retention-days">Data Retention (days):</label>
+            <input type="number" id="retention-days" name="retention-days" min="1" max="365" value="30">
+          </div>
+          
+          <button type="submit">Create Tenant</button>
+        </form>
+      </div>
+      
+      <div class="card">
+        <h2>Tenant Metrics</h2>
+        <p>View detailed tenant metrics in <a href="/grafana">Grafana Dashboards</a></p>
+        
+        <h3>API Usage by Tenant (Last 24 Hours)</h3>
+        <div id="usage-chart">
+          <!-- Placeholder for chart - in real implementation this would be a chart library -->
+          <img src="data:image/png;base64,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" alt="API Usage Chart" style="max-width:100%;">
+        </div>
+      </div>
+      
+      <script>
+        // Just a placeholder for actual functionality
+        function viewTenant(tenantId) {
+          alert('View tenant: ' + tenantId);
+        }
+        
+        function editTenant(tenantId) {
+          alert('Edit tenant: ' + tenantId);
+        }
+        
+        document.getElementById('new-tenant-form').addEventListener('submit', function(e) {
+          e.preventDefault();
+          alert('New tenant created');
+        });
+      </script>
+    </body>
+    </html>

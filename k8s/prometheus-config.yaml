@@ -8,7 +8,8 @@ data:
     global:
       scrape_interval: 15s
       evaluation_interval: 15s
-    
+      
+    # Add tenant metadata to metrics
     scrape_configs:
       - job_name: 'kubernetes-pods'
         kubernetes_sd_configs:
@@ -32,7 +33,13 @@ data:
         - source_labels: [__meta_kubernetes_pod_name]
           action: replace
           target_label: kubernetes_pod_name
+        # Extract tenant label from pod annotations if available
+        - source_labels: [__meta_kubernetes_pod_annotation_tenant_id]
+          action: replace
+          target_label: tenant_id
+          regex: (.+)
       
+      # Add service monitor with tenant info
       - job_name: 'kubernetes-services'
         kubernetes_sd_configs:
         - role: service
@@ -55,6 +62,11 @@ data:
         - source_labels: [__meta_kubernetes_service_name]
           action: replace
           target_label: kubernetes_service_name
+        # Extract tenant label from service annotations if available
+        - source_labels: [__meta_kubernetes_service_annotation_tenant_id]
+          action: replace
+          target_label: tenant_id
+          regex: (.+)
       
       - job_name: 'prometheus'
         static_configs:
