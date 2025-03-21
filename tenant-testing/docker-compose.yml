@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  tenant-api:
+    build:
+      context: ../flask-api
+      dockerfile: Dockerfile
+    ports:
+      - "5050:5000"
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - KAFKA_TOPIC=sensor-data
+      - API_KEY_1=test-key-1
+      - API_KEY_2=test-key-2
+      - TENANT_API_KEY_MAP={"test-key-1":"tenant1","test-key-2":"tenant2"}
+      - ENABLE_TENANT_ISOLATION=true
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+    depends_on:
+      - kafka
+    networks:
+      - kafka-network
+    volumes:
+      # Mount for development
+      - ../flask-api/src:/app/src
+
+  tenant-mgmt:
+    build:
+      context: ../platform/tenant-management
+      dockerfile: Dockerfile
+    ports:
+      - "5010:5010"
+    environment:
+      - PLATFORM_MODE=docker
+    volumes:
+      - ../platform/tenant-management:/app
+    networks:
+      - kafka-network
+
+  kafka:
+    image: bitnami/kafka:3.4.1
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      - KAFKA_CFG_NODE_ID=1
+      - KAFKA_CFG_PROCESS_ROLES=broker,controller
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_KRAFT_CLUSTER_ID=${KAFKA_KRAFT_CLUSTER_ID:-testclusterid}
+    networks:
+      - kafka-network
+
+networks:
+  kafka-network:
+    driver: bridge
