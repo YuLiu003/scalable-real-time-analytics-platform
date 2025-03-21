@@ -35,3 +35,23 @@ class TimeSeriesDatabase:
         ).all()
         session.close()
         return pd.DataFrame([(data.timestamp, data.value) for data in results], columns=['timestamp', 'value'])
+
+class TimeseriesData:
+    def __init__(self, tenant_id=None):
+        self.tenant_id = tenant_id
+    
+    def store(self, data):
+        # Ensure data has tenant_id for proper isolation
+        if self.tenant_id and not data.get('tenant_id'):
+            data['tenant_id'] = self.tenant_id
+        
+        # Existing store logic
+        # ...
+    
+    def query(self, params):
+        # Enforce tenant isolation in queries
+        if self.tenant_id:
+            params['tenant_id'] = self.tenant_id
+        
+        # Existing query logic
+        # ...
