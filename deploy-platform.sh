@@ -1,6 +1,16 @@
 #!/bin/bash
 set -e
 
+# Improved error handling
+handle_error() {
+  echo "❌ Error occurred at line $1"
+  echo "Command: '${BASH_COMMAND}'"
+  echo "Deployment failed. Check logs above for details."
+  exit 1
+}
+
+trap 'handle_error $LINENO' ERR
+
 echo "🚀 Deploying Real-Time Analytics Platform..."
 
 # Make sure minikube is running
@@ -46,16 +56,10 @@ echo "Deploying Kafka (KRaft mode)..."
 
 # First apply the secret (should be excluded from version control)
 if [ -f k8s/kafka-secrets.yaml ]; then
-  echo "Applying Kafka secrets..."
   kubectl apply -f k8s/kafka-secrets.yaml
 else
-  echo "Kafka secrets file not found! Generating new secrets..."
-  
-  # Generate a new cluster ID securely
-  CLUSTER_ID=$(openssl rand -hex 11)
-  ENCODED_ID=$(echo -n "$CLUSTER_ID" | base64)
-  
-  # Create the secret
+  # Generate new Kafka KRaft cluster ID
+  ENCODED_ID=$(echo -n "$(openssl rand -hex 11)" | base64)
   cat > k8s/kafka-secrets.yaml << EOF
 apiVersion: v1
 kind: Secret
@@ -66,8 +70,6 @@ type: Opaque
 data:
   KAFKA_KRAFT_CLUSTER_ID: "$ENCODED_ID"
 EOF
-  
-  echo "⚠️ WARNING: Generated new kafka-secrets.yaml - do not commit this file to version control!"
   kubectl apply -f k8s/kafka-secrets.yaml
 fi
 
@@ -91,22 +93,4 @@ kubectl apply -f k8s/storage-layer-service.yaml
 kubectl apply -f k8s/visualization-deployment.yaml
 kubectl apply -f k8s/visualization-service.yaml
 
-# Apply network policies if they exist
-if [ -f k8s/network-policy.yaml ]; then
-  echo "Setting up network policies..."
-  kubectl apply -f k8s/network-policy.yaml
-fi
-
-# Show status
-echo "✅ Checking final status..."
-kubectl get pods -n analytics-platform
-
-echo ""
-echo "🎉 Platform deployment completed!"
-echo ""
-echo "To access the platform services:"
-echo "  - API: minikube service flask-api-service -n analytics-platform"
-echo "  - Visualization Dashboard: minikube service visualization-service -n analytics-platform"
-echo ""
-echo "To view platform status:"
 echo "  ./manage.sh status"

@@ -48,6 +48,10 @@ spec:
             secretKeyRef:
               name: api-keys
               key: API_KEY_2
+        - name: ENABLE_TENANT_ISOLATION
+          value: "true"
+        - name: TENANT_API_KEY_MAP
+          value: '{"test-key-1":"tenant1","test-key-2":"tenant2"}'
         resources:
           limits:
             cpu: 200m

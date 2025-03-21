@@ -114,3 +114,4 @@ docs/generated/
 k8s/kafka-secrets.yaml
 k8s/api-keys.yaml
 k8s/grafana-secret.yaml
+secure_credentials.txt
