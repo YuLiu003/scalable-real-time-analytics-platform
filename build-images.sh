@@ -21,7 +21,8 @@ build_image() {
 }
 
 # Build all service images
-build_image "flask-api"
+# build_image "flask-api"
+build_image "gin-api"
 build_image "data-ingestion"
 build_image "processing-engine"
 build_image "storage-layer"
@@ -31,4 +32,4 @@ echo ""
 echo "🎉 All images built successfully!"
 echo ""
 echo "Available images:"
-docker images | grep -E '(flask-api|data-ingestion|processing-engine|storage-layer|visualization)'
+docker images | grep -E '(gin-api|data-ingestion|processing-engine|storage-layer|visualization)'

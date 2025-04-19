@@ -20,6 +20,23 @@ spec:
   - Ingress
   ingress:
   - from:
-    - namespaceSelector:
-        matchLabels:
-          name: analytics-platform
+    # Allow ingress from any pod in the same namespace
+    - podSelector: {}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-probes
+  namespace: analytics-platform
+spec:
+  # Apply to Prometheus pods
+  podSelector:
+    matchLabels:
+      app: prometheus
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow ingress on port 9090 (for probes) from any source
+  - ports:
+    - protocol: TCP
+      port: 9090
