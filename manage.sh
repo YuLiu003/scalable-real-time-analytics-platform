@@ -533,13 +533,13 @@ deploy_platform() {
     
     # Deploy remaining services
     echo "Deploying platform services..."
-    kubectl apply -f k8s/flask-api-deployment.yaml
-    kubectl apply -f k8s/flask-api-service.yaml
+    kubectl apply -f k8s/gin-api-deployment.yaml
+    kubectl apply -f k8s/gin-api-service.yaml
     kubectl apply -f k8s/data-ingestion-deployment.yaml
     kubectl apply -f k8s/data-ingestion-service.yaml
     
     # Wait for key services before deploying dependent services
-    wait_for_resource deployment flask-api analytics-platform
+    wait_for_resource deployment gin-api analytics-platform
     wait_for_resource deployment data-ingestion analytics-platform
     
     # Deploy processing engine and dependent services
@@ -624,24 +624,55 @@ access_grafana() {
 # Run platform tests
 run_tests() {
     ensure_minikube_running
-    
+
     # Setup port forwarding in background
-    kubectl port-forward svc/flask-api-service -n analytics-platform 5000:80 &
-    API_PF_PID=$!
-    
-    kubectl port-forward svc/kafka-service -n analytics-platform 9092:9092 &
-    KAFKA_PF_PID=$!
-    
-    # Give port forwarding time to establish
     echo -e "${BLUE}Setting up port forwarding for tests...${NC}"
+    kubectl port-forward svc/gin-api-service -n analytics-platform 5051:80 & # Forward to service port 80
+    API_PF_PID=$!
+
+    kubectl port-forward svc/kafka -n analytics-platform 9092:9092 & # Use correct kafka service name
+    KAFKA_PF_PID=$!
+
+    # Give port forwarding time to establish
     sleep 5
-    
+
+    # Check if port-forwarding succeeded before running tests
+    if ! kill -0 $API_PF_PID 2>/dev/null || ! kill -0 $KAFKA_PF_PID 2>/dev/null; then
+        echo -e "${RED}Failed to establish port forwarding. Check service names and availability.${NC}"
+        # Attempt cleanup even if forwarding failed
+        kill $API_PF_PID $KAFKA_PF_PID 2>/dev/null || true
+        return 1
+    fi
+
     echo -e "${BLUE}Running platform tests...${NC}"
-    python3 scripts/test-platform.py
-    
+    # Activate venv and run python script
+    if [ -f "tenant-testing/.venv/bin/activate" ]; then
+        # Export API host/port for the script to use the forwarded port
+        export API_HOST="localhost"
+        export API_PORT="5051"
+        source tenant-testing/.venv/bin/activate && python3 scripts/test-platform.py
+        TEST_EXIT_CODE=$?
+        # Unset env vars and deactivate
+        unset API_HOST
+        unset API_PORT
+        deactivate 2>/dev/null || true
+    else
+        echo -e "${YELLOW}Virtual environment not found at tenant-testing/.venv. Attempting to run without it.${NC}"
+        # Also export here in case venv isn't used
+        export API_HOST="localhost"
+        export API_PORT="5051"
+        python3 scripts/test-platform.py
+        TEST_EXIT_CODE=$?
+        unset API_HOST
+        unset API_PORT
+    fi
+
     # Cleanup
     echo -e "${BLUE}Cleaning up port forwarding...${NC}"
     kill $API_PF_PID $KAFKA_PF_PID 2>/dev/null || true
+
+    # Return the exit code from the python script
+    return $TEST_EXIT_CODE 
 }
 
 # List available pods
@@ -707,7 +738,7 @@ enable_tenant_isolation() {
     
     # Restart API deployments to apply changes
     echo -e "${BLUE}Restarting API deployments to apply changes...${NC}"
-    kubectl rollout restart deployment/flask-api -n analytics-platform
+    kubectl rollout restart deployment/gin-api -n analytics-platform
     kubectl rollout restart deployment/data-ingestion -n analytics-platform
     
     echo -e "${GREEN}Tenant isolation enabled!${NC}"

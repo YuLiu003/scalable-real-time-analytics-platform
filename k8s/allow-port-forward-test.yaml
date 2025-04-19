@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-port-forward-test
+  namespace: analytics-platform
+spec:
+  # Apply to pods that run the gin-api or kafka
+  podSelector:
+    matchLabels:
+      app: gin-api
+  policyTypes:
+  - Ingress
+  ingress:
+  - ports:
+    - protocol: TCP
+      port: 8080 # Allow direct access to gin-api pod port for forwarding
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kafka-port-forward-test
+  namespace: analytics-platform
+spec:
+  # Apply to pods that run kafka
+  podSelector:
+    matchLabels:
+      app: kafka
+  policyTypes:
+  - Ingress
+  ingress:
+  - ports:
+    - protocol: TCP
+      port: 9092 # Allow direct access to kafka pod port for forwarding 

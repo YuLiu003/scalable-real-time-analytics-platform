@@ -13,6 +13,7 @@ spec:
       labels:
         app: prometheus
     spec:
+      serviceAccountName: prometheus-sa
       containers:
       - name: prometheus
         image: prom/prometheus:v2.45.0
@@ -34,13 +35,13 @@ spec:
           runAsNonRoot: true
         livenessProbe:
           httpGet:
-            path: /health
+            path: /-/healthy
             port: 9090
           initialDelaySeconds: 30
           periodSeconds: 10
         readinessProbe:
           httpGet:
-            path: /health
+            path: /-/ready
             port: 9090
           initialDelaySeconds: 10
           periodSeconds: 5

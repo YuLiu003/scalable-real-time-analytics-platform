@@ -1,12 +1,12 @@
 version: '3.8'
 
 services:
-  tenant-api:
+  gin-api:
     build:
-      context: ../flask-api
+      context: ../gin-api
       dockerfile: Dockerfile
     ports:
-      - "5050:5000"
+      - "5050:8080"
     environment:
       - KAFKA_BROKER=kafka:9092
       - KAFKA_TOPIC=sensor-data
@@ -14,16 +14,12 @@ services:
       - API_KEY_2=test-key-2
       - TENANT_API_KEY_MAP={"test-key-1":"tenant1","test-key-2":"tenant2"}
       - ENABLE_TENANT_ISOLATION=true
-      - FLASK_APP=app.py
-      - FLASK_ENV=development
-      - FLASK_DEBUG=1
+      - GIN_MODE=debug
+      - PORT=8080
     depends_on:
       - kafka
     networks:
       - kafka-network
-    volumes:
-      # Mount for development
-      - ../flask-api/src:/app/src
 
   tenant-mgmt:
     build:

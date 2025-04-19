@@ -16,7 +16,7 @@ spec:
       containers:
       - name: tenant-management
         image: tenant-management:latest
-        imagePullPolicy: Never
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 5010
         securityContext:

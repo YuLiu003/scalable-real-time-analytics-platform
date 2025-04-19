@@ -1,32 +1,32 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: flask-api
+  name: gin-api
   namespace: analytics-platform
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: flask-api
+      app: gin-api
   template:
     metadata:
       labels:
-        app: flask-api
+        app: gin-api
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "5000"
+        prometheus.io/port: "8080"
         prometheus.io/path: "/metrics"
     spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
-        fsGroup: 2000  # Common file system group for volumes
+        fsGroup: 2000
       containers:
-      - name: flask-api
-        image: flask-api:latest
-        imagePullPolicy: Never
+      - name: gin-api
+        image: gin-api:latest
+        imagePullPolicy: IfNotPresent
         ports:
-        - containerPort: 5000
+        - containerPort: 8080
         env:
         - name: KAFKA_BROKER
           valueFrom:
@@ -48,6 +48,10 @@ spec:
             secretKeyRef:
               name: api-keys
               key: API_KEY_2
+        - name: GIN_MODE
+          value: "release"
+        - name: PORT
+          value: "8080"
         - name: ENABLE_TENANT_ISOLATION
           value: "true"
         - name: TENANT_API_KEY_MAP
@@ -62,7 +66,7 @@ spec:
         livenessProbe:
           httpGet:
             path: /health
-            port: 5000
+            port: 8080
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
@@ -70,7 +74,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /health
-            port: 5000
+            port: 8080
           initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 2
@@ -83,4 +87,4 @@ spec:
             drop:
             - ALL
           readOnlyRootFilesystem: true
-          allowPrivilegeEscalation: false
+          allowPrivilegeEscalation: false 
