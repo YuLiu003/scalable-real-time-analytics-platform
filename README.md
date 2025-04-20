@@ -32,7 +32,7 @@ The architecture consists of four main microservices:
 
 ## Technology Stack
 
-- **Backend**: Python, Flask
+- **Backend**: Go (Gin), Python
 - **Messaging**: Apache Kafka (KRaft mode, no ZooKeeper)
 - **Data Processing**: NumPy
 - **Frontend**: HTML, CSS, JavaScript
@@ -49,7 +49,7 @@ The project is organized as follows:
 - `processing-engine/`: Service for real-time data processing
 - `storage-layer/`: Service for data persistence
 - `visualization/`: Web dashboard for data visualization
-- `flask-api/`: Secure API for external access
+- `gin-api/`: Secure API for external access (using Go/Gin)
 - `k8s/`: Kubernetes manifests for deployment
 - `test/`: Unit and integration tests
 - `scripts/`: Utility scripts for deployment and security checks
@@ -235,7 +235,7 @@ minikube service prometheus-service -n analytics-platform
 
 4. **Tenant Isolation Issues**:
    - Verify tenant mapping environment variable: `kubectl describe configmap platform-config -n analytics-platform`
-   - Check API logs: `kubectl logs -n analytics-platform deployment/flask-api | grep "tenant"`
+   - Check API logs: `kubectl logs -n analytics-platform deployment/gin-api | grep "tenant"`
    - Test tenant isolation directly: test_multi_tenant_local.sh
 
 ## Development
@@ -328,4 +328,4 @@ Now that you've successfully implemented multi-tenant isolation in your platform
    - Test the platform with multiple tenants
    - Verify isolation under high load conditions
 
-The most critical next step is ensuring that the tenant context continues to flow through your entire pipeline, from API to processing engine to storage layer, maintaining the strict tenant boundaries you've established at the API level.## Next Steps After Implementing Multi-Tenant Capabilities
+The most critical next step is ensuring that the tenant context continues to flow through your entire pipeline, from API to processing engine to storage layer, maintaining the strict tenant boundaries you've established at the API level.
