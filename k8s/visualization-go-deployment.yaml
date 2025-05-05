@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: visualization-go
+  namespace: analytics-platform
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: visualization-go
+  template:
+    metadata:
+      labels:
+        app: visualization-go
+    spec:
+      serviceAccountName: visualization-sa
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 1000
+      containers:
+      - name: visualization-go
+        image: visualization-go:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 5003
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        env:
+        - name: PORT
+          value: "5003"
+        - name: DATA_SERVICE_URL
+          value: "http://data-ingestion-service"
+        - name: MAX_DATA_POINTS
+          value: "100"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5003
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5003
+          initialDelaySeconds: 15
+          periodSeconds: 10 

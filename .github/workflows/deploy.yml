@@ -82,8 +82,8 @@ jobs:
           
           # Create API keys secret securely
           kubectl create secret generic api-keys \
-            --from-literal=test-key-1=${{ secrets.API_KEY_1 }} \
-            --from-literal=test-key-2=${{ secrets.API_KEY_2 }} \
+            --from-literal=API_KEY_1=${{ secrets.API_KEY_1 }} \
+            --from-literal=API_KEY_2=${{ secrets.API_KEY_2 }} \
             -n analytics-platform \
             --dry-run=client -o yaml | kubectl apply -f -
 
@@ -92,8 +92,18 @@ jobs:
         run: |
           helm upgrade --install analytics-platform ./charts/analytics-platform \
             --values ./charts/analytics-platform/values.yaml \
-            --set secureApi.image.repository=${{ secrets.DOCKER_USERNAME }}/secure-api \
-            --set secureApi.image.tag=latest \
+            --set dataIngestion.image.repository=${{ secrets.DOCKER_USERNAME }}/data-ingestion-go \
+            --set dataIngestion.image.tag=latest \
+            --set cleanIngestion.image.repository=${{ secrets.DOCKER_USERNAME }}/clean-ingestion-go \
+            --set cleanIngestion.image.tag=latest \
+            --set processingEngine.image.repository=${{ secrets.DOCKER_USERNAME }}/processing-engine-go \
+            --set processingEngine.image.tag=latest \
+            --set storageLayer.image.repository=${{ secrets.DOCKER_USERNAME }}/storage-layer-go \
+            --set storageLayer.image.tag=latest \
+            --set visualization.image.repository=${{ secrets.DOCKER_USERNAME }}/visualization-go \
+            --set visualization.image.tag=latest \
+            --set tenantManagement.image.repository=${{ secrets.DOCKER_USERNAME }}/tenant-management-go \
+            --set tenantManagement.image.tag=latest \
             -n analytics-platform
 
       - name: Deploy with kubectl
@@ -111,7 +121,7 @@ jobs:
         if: steps.check_secrets.outputs.all_secrets_present == 'true'
         run: |
           # Check if each deployment exists before checking status
-          for deployment in secure-api data-ingestion processing-engine storage-layer visualization; do
+          for deployment in data-ingestion-go clean-ingestion-go processing-engine-go storage-layer-go visualization-go tenant-management-go; do
             if kubectl get deployment $deployment -n analytics-platform &>/dev/null; then
               echo "Waiting for deployment/$deployment to be ready..."
               kubectl rollout status deployment/$deployment -n analytics-platform --timeout=120s
@@ -123,9 +133,9 @@ jobs:
       - name: Run basic security test
         if: steps.check_secrets.outputs.all_secrets_present == 'true'
         run: |
-          # Check if secure-api service exists
-          if ! kubectl get svc secure-api-service -n analytics-platform &>/dev/null; then
-            echo "Warning: secure-api-service not found. Skipping security tests."
+          # Check if API service exists
+          if ! kubectl get svc data-ingestion-go-service -n analytics-platform &>/dev/null; then
+            echo "Warning: data-ingestion-go-service not found. Skipping security tests."
             exit 0
           fi
           
@@ -135,7 +145,7 @@ jobs:
           
           # Set up port forwarding for testing
           echo "Setting up port forwarding..."
-          kubectl port-forward svc/secure-api-service 8090:80 -n analytics-platform &
+          kubectl port-forward svc/data-ingestion-go-service 8090:80 -n analytics-platform &
           PF_PID=$!
           sleep 5
           
@@ -144,7 +154,7 @@ jobs:
           RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
             http://localhost:8090/api/data \
             -H "Content-Type: application/json" \
-            -d '{"device_id": "test-001", "temperature": 25.5}' \
+            -d '{"sensor_id": "test-001", "value": 25.5, "timestamp": "2023-06-01T12:00:00Z"}' \
             --connect-timeout 5 \
             --max-time 10)
             
@@ -160,7 +170,7 @@ jobs:
             http://localhost:8090/api/data \
             -H "Content-Type: application/json" \
             -H "X-API-Key: ${{ secrets.API_KEY_1 }}" \
-            -d '{"device_id": "test-001", "temperature": 25.5}' \
+            -d '{"sensor_id": "test-001", "value": 25.5, "timestamp": "2023-06-01T12:00:00Z"}' \
             --connect-timeout 5 \
             --max-time 10)
             

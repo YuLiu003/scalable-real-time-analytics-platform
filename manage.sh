@@ -18,6 +18,9 @@ show_help() {
     echo "  stop        - Stop minikube cluster"
     echo "  build       - Build Docker images for all services"
     echo "  deploy      - Deploy the full platform"
+    echo "  setup-all   - Complete setup: start minikube, build images and deploy"
+    echo "  reset-all   - Complete cleanup: delete namespace, PVs, and start fresh"
+    echo "  fix-storage - Rebuild only the storage-layer-go image"
     echo "  monitoring  - Deploy monitoring stack (Prometheus/Grafana)"
     echo "  dashboard   - Open Kubernetes dashboard"
     echo "  prometheus  - Access Prometheus UI (port-forward)"
@@ -500,7 +503,7 @@ deploy_platform() {
     
     # Check if images exist
     eval $(minikube docker-env)
-    if ! docker images | grep -q "flask-api"; then
+    if ! docker images | grep -q "data-ingestion-go"; then
         echo -e "${YELLOW}Required images not found. Building images first...${NC}"
         build_images || {
             echo -e "${RED}Failed to build images. Deployment aborted.${NC}"
@@ -509,48 +512,70 @@ deploy_platform() {
     else
         echo -e "${GREEN}Using existing Docker images...${NC}"
     fi
-
-    # Instead of just executing deploy-platform.sh, we'll add more control here
     
     # Make sure namespace exists
     ensure_namespace_exists
     
-    # Apply core infrastructure 
-    echo "Creating necessary secrets and configmaps..."
+    # Apply RBAC first for security
+    echo -e "${BLUE}Applying RBAC configurations...${NC}"
+    kubectl apply -f k8s/rbac.yaml
+    
+    # Apply secrets and configmaps
+    echo -e "${BLUE}Creating secrets and configmaps...${NC}"
     kubectl apply -f k8s/configmap.yaml
     kubectl apply -f k8s/secrets.yaml
-    kubectl apply -f k8s/grafana-secret.yaml
-    
-    # Deploy Kafka first
-    echo "Deploying Kafka..."
+    kubectl apply -f k8s/api-keys-secret.yaml
     kubectl apply -f k8s/kafka-secrets.yaml
+    kubectl apply -f k8s/grafana-secret.yaml
+    kubectl apply -f k8s/tenant-management-secrets.yaml
+    
+    # Apply network policies
+    echo -e "${BLUE}Applying network policies...${NC}"
+    kubectl apply -f k8s/network-policy.yaml
+    
+    # Deploy core infrastructure
+    echo -e "${BLUE}Deploying core infrastructure...${NC}"
     kubectl apply -f k8s/kafka-pvc.yaml
-    kubectl apply -f k8s/kafka-kraft-deployment.yaml
+    kubectl apply -f k8s/zookeeper-pvc.yaml
+    kubectl apply -f k8s/storage-layer-pvc.yaml
+    kubectl apply -f k8s/zookeeper-deployment.yaml
+    kubectl apply -f k8s/kafka-deployment.yaml
     kubectl apply -f k8s/kafka-service.yaml
     
     # Wait for Kafka to be ready before continuing
-    wait_for_resource deployment kafka analytics-platform 300
+    echo -e "${YELLOW}Waiting for Kafka to be ready...${NC}"
+    wait_for_resource deployment kafka analytics-platform 200
     
-    # Deploy remaining services
-    echo "Deploying platform services..."
-    kubectl apply -f k8s/gin-api-deployment.yaml
-    kubectl apply -f k8s/gin-api-service.yaml
-    kubectl apply -f k8s/data-ingestion-deployment.yaml
-    kubectl apply -f k8s/data-ingestion-service.yaml
+    # Deploy microservices
+    echo -e "${BLUE}Deploying Go microservices...${NC}"
+    kubectl apply -f k8s/data-ingestion-go-deployment.yaml
+    kubectl apply -f k8s/data-ingestion-go-service.yaml
     
-    # Wait for key services before deploying dependent services
-    wait_for_resource deployment gin-api analytics-platform
-    wait_for_resource deployment data-ingestion analytics-platform
+    kubectl apply -f k8s/clean-ingestion-go-deployment.yaml
+    kubectl apply -f k8s/clean-ingestion-go-service.yaml
     
-    # Deploy processing engine and dependent services
-    kubectl apply -f k8s/processing-engine-deployment.yaml
-    kubectl apply -f k8s/processing-engine-service.yaml
-    kubectl apply -f k8s/storage-layer-deployment.yaml
-    kubectl apply -f k8s/storage-layer-service.yaml
-    kubectl apply -f k8s/visualization-deployment.yaml
-    kubectl apply -f k8s/visualization-service.yaml
+    kubectl apply -f k8s/processing-engine-go-deployment.yaml
+    kubectl apply -f k8s/processing-engine-go-service.yaml
+    
+    kubectl apply -f k8s/storage-layer-go-deployment.yaml
+    kubectl apply -f k8s/storage-layer-go-service.yaml
+    
+    kubectl apply -f k8s/visualization-go-deployment.yaml
+    kubectl apply -f k8s/visualization-go-service.yaml
+    
+    kubectl apply -f k8s/tenant-management-go-deployment.yaml
+    kubectl apply -f k8s/tenant-management-go-service.yaml
+    
+    # Deploy monitoring tools
+    echo -e "${BLUE}Deploying monitoring (Prometheus)...${NC}"
+    kubectl apply -f k8s/prometheus-config.yaml
+    kubectl apply -f k8s/prometheus-deployment.yaml
+    kubectl apply -f k8s/prometheus-rbac.yaml
     
     echo -e "${GREEN}Deployment complete!${NC}"
+    echo -e "${YELLOW}Running security check...${NC}"
+    ./scripts/security-check.sh
+    
     show_status
 }
 
@@ -1484,6 +1509,135 @@ EOF
   echo -e "${GREEN}Naming conventions documented in docs/naming-conventions.md${NC}"
 }
 
+# Complete setup: start minikube, build images and deploy
+setup_all() {
+    echo -e "${BLUE}Starting complete platform setup...${NC}"
+    
+    # Step 1: Start minikube
+    echo -e "${BLUE}Step 1/3: Starting Minikube...${NC}"
+    ensure_minikube_operational || {
+        echo -e "${RED}Failed to start Minikube. Setup aborted.${NC}"
+        return 1
+    }
+    
+    # Step 2: Build all images
+    echo -e "${BLUE}Step 2/3: Building all Docker images...${NC}"
+    build_images || {
+        echo -e "${RED}Failed to build all images. Setup aborted.${NC}"
+        echo -e "${YELLOW}You may try running './manage.sh fix-storage' to fix storage layer issues and then retry.${NC}"
+        return 1
+    }
+    
+    # Step 3: Deploy the platform
+    echo -e "${BLUE}Step 3/3: Deploying platform...${NC}"
+    deploy_platform || {
+        echo -e "${RED}Failed to deploy platform.${NC}"
+        return 1
+    }
+    
+    echo -e "${GREEN}Complete setup successful!${NC}"
+    echo -e "${YELLOW}To access services, run:${NC}"
+    echo -e "  - './manage.sh status' to check component status"
+    echo -e "  - './manage.sh monitoring' to deploy monitoring stack"
+    echo -e "  - './manage.sh tunnel-start' to enable LoadBalancer services"
+}
+
+# Complete cleanup: delete namespace, PVs, and start fresh
+reset_all() {
+    echo -e "${RED}WARNING: This will completely remove all platform resources and data.${NC}"
+    echo -e "${RED}All persistent volumes and their data will be deleted.${NC}"
+    echo -e "${YELLOW}Are you sure you want to proceed? (y/n)${NC}"
+    read -r confirmation
+    
+    if [[ ! $confirmation =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}Reset cancelled.${NC}"
+        return 0
+    fi
+    
+    # Step 1: Delete the namespace (and all resources in it)
+    echo -e "${BLUE}Step 1/4: Deleting analytics-platform namespace...${NC}"
+    kubectl delete namespace analytics-platform --ignore-not-found=true --timeout=60s || {
+        echo -e "${YELLOW}Attempting force deletion of namespace...${NC}"
+        kubectl delete namespace analytics-platform --grace-period=0 --force --ignore-not-found=true
+    }
+    
+    # Step 2: Delete any persistent volumes linked to our PVCs
+    echo -e "${BLUE}Step 2/4: Deleting persistent volumes...${NC}"
+    pvs=$(kubectl get pv -o jsonpath='{.items[?(@.spec.claimRef.namespace=="analytics-platform")].metadata.name}')
+    if [ -n "$pvs" ]; then
+        echo -e "${YELLOW}Found PVs to delete: $pvs${NC}"
+        for pv in $pvs; do
+            kubectl delete pv "$pv" --ignore-not-found=true
+        done
+    else
+        echo -e "${GREEN}No persistent volumes found for analytics-platform namespace.${NC}"
+    fi
+    
+    # Step 3: Prune Docker images (optional)
+    echo -e "${YELLOW}Step 3/4: Would you like to prune Docker images? (y/n)${NC}"
+    echo -e "${YELLOW}This will remove all unused images and free up space.${NC}"
+    read -r prune_confirmation
+    
+    if [[ $prune_confirmation =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}Pruning Docker images...${NC}"
+        eval $(minikube docker-env)
+        docker system prune -af --volumes
+    fi
+    
+    # Step 4: Recreate the namespace
+    echo -e "${BLUE}Step 4/4: Recreating analytics-platform namespace...${NC}"
+    kubectl create namespace analytics-platform
+    
+    echo -e "${GREEN}Reset complete!${NC}"
+    echo -e "${YELLOW}You can now run:${NC}"
+    echo -e "  - './manage.sh build' to rebuild Docker images"
+    echo -e "  - './manage.sh deploy' to redeploy the platform"
+    echo -e "  - './manage.sh setup-all' for a complete setup"
+}
+
+# Fix storage layer: rebuild only the storage-layer-go image
+fix_storage() {
+    echo -e "${BLUE}Fixing storage-layer-go image...${NC}"
+    
+    # First check if minikube is operational
+    ensure_minikube_operational || {
+        echo -e "${RED}Cannot build images because Minikube is not fully operational.${NC}"
+        echo -e "${YELLOW}Try running './manage.sh fix-minikube' or './manage.sh reset-minikube' to fix issues.${NC}"
+        return 1
+    }
+    
+    # Connect to minikube's Docker daemon
+    echo -e "${BLUE}Connecting to minikube's Docker daemon...${NC}"
+    eval $(minikube docker-env)
+    
+    # Build just the storage-layer-go image
+    echo -e "${BLUE}Building storage-layer-go image...${NC}"
+    cd storage-layer-go || {
+        echo -e "${RED}Error: storage-layer-go directory not found${NC}"
+        return 1
+    }
+    
+    docker build -t storage-layer-go:latest . || {
+        echo -e "${RED}Failed to build storage-layer-go image${NC}"
+        cd ..
+        return 1
+    }
+    
+    cd ..
+    
+    echo -e "${GREEN}Storage layer image successfully rebuilt!${NC}"
+    echo -e "${YELLOW}Do you want to restart the storage-layer deployment? (y/n)${NC}"
+    read -r restart_confirmation
+    
+    if [[ $restart_confirmation =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}Restarting storage-layer deployment...${NC}"
+        kubectl rollout restart deployment/storage-layer-go -n analytics-platform || {
+            echo -e "${YELLOW}No existing deployment found. If you haven't deployed yet, run './manage.sh deploy'${NC}"
+        }
+    fi
+    
+    echo -e "${GREEN}Fix complete!${NC}"
+}
 
 # Main logic
 case "$1" in
@@ -1503,6 +1657,15 @@ case "$1" in
         ;;        
     deploy)
         deploy_platform
+        ;;
+    setup-all)
+        setup_all
+        ;;
+    reset-all)
+        reset_all
+        ;;
+    fix-storage)
+        fix_storage
         ;;
     monitoring)
         deploy_monitoring
