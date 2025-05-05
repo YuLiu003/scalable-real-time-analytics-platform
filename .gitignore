@@ -1,5 +1,69 @@
-# Secrets and environment variables
+# Kubernetes secrets and configs
+*secrets.yaml
+*sensitive*.yaml
+k8s/dev-*.yaml
+
+# Local development
 .env
+.env.*
+*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Dependencies
+node_modules/
+vendor/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Build files
+dist/
+build/
+target/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Certificates
+*.pem
+*.key
+*.crt
+*.cer
+*.ca-bundle
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+*.tmp
+*.bak
+
+# Python files
 *.env
 *.pem
 *.key
@@ -64,10 +128,6 @@ k8s/generated/
 ehthumbs.db
 Thumbs.db
 
-# Logs
-logs/
-*.log
-
 # Docker
 .docker/
 docker-compose.override.yml
@@ -122,3 +182,8 @@ secure_credentials.txt
 **/.venv/
 
 venv/
+
+# Archived Python components
+archive/python-components/
+# Archived files from Go migration
+archive/redundant-files/

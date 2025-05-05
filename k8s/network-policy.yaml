@@ -12,7 +12,86 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-app-communication
+  name: data-ingestion-policy
+  namespace: analytics-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: data-ingestion-go
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    # Allow ingress from API gateway or direct access
+    - podSelector:
+        matchLabels:
+          app: api-gateway
+    ports:
+    - protocol: TCP
+      port: 5000
+  egress:
+  - to:
+    # Allow egress to Kafka
+    - podSelector:
+        matchLabels:
+          app: kafka
+    ports:
+    - protocol: TCP
+      port: 9092
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: processing-engine-policy
+  namespace: analytics-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: processing-engine-go
+  policyTypes:
+  - Ingress
+  - Egress
+  egress:
+  - to:
+    # Allow egress to Kafka
+    - podSelector:
+        matchLabels:
+          app: kafka
+    ports:
+    - protocol: TCP
+      port: 9092
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: visualization-policy
+  namespace: analytics-platform
+spec:
+  podSelector:
+    matchLabels:
+      app: visualization-go
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 5003
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: storage-layer-go
+    ports:
+    - protocol: TCP
+      port: 5002
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-monitoring
   namespace: analytics-platform
 spec:
   podSelector: {}
@@ -20,23 +99,36 @@ spec:
   - Ingress
   ingress:
   - from:
-    # Allow ingress from any pod in the same namespace
-    - podSelector: {}
+    - podSelector:
+        matchLabels:
+          app: prometheus
+    # Allow Prometheus to scrape metrics from all pods
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-prometheus-probes
+  name: storage-layer-policy
   namespace: analytics-platform
 spec:
-  # Apply to Prometheus pods
   podSelector:
     matchLabels:
-      app: prometheus
+      app: storage-layer-go
   policyTypes:
   - Ingress
+  - Egress
   ingress:
-  # Allow ingress on port 9090 (for probes) from any source
-  - ports:
+  - from:
+    - podSelector:
+        matchLabels:
+          app: visualization-go
+    ports:
     - protocol: TCP
-      port: 9090
+      port: 5002
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app: kafka
+    ports:
+    - protocol: TCP
+      port: 9092

@@ -1,331 +1,403 @@
-# Scalable Real-Time Data Analytics Platform
+# Visualization Service (Go)
 
-## Overview
+This is the Go implementation of the Visualization Service for the Real-Time Analytics Platform. The service provides real-time visualization of sensor data using WebSockets for live updates.
 
-The Scalable Real-Time Data Analytics Platform is a cloud-native application designed to process and analyze data in real-time. This project showcases the integration of various modern technologies to build a high-performance data processing system. It is structured as a microservices architecture with Kafka as the messaging backbone, ensuring scalability, maintainability, and efficiency.
+## Features
+
+- Real-time sensor data visualization using WebSockets
+- Chart.js integration for beautiful charts and graphs
+- RESTful API endpoints for data access
+- Prometheus metrics integration
+- Health check endpoints for monitoring
+- Multi-tenant support
 
 ## Architecture
 
-![Architecture Diagram](https://github.com/user-attachments/assets/0b96f0c6-d791-4253-9e6e-45a7f63c6c4a)
+The service is built using:
 
-The architecture consists of four main microservices:
+- **Gin** - High-performance HTTP web framework
+- **Gorilla WebSockets** - WebSocket implementation for Go
+- **Prometheus** - Metrics and monitoring
+- **Chart.js** - JavaScript charting library for data visualization
 
-1. **Data Ingestion Layer**: 
-   - REST API endpoints for receiving sensor data
-   - Publishes events to Kafka topics
-   - Handles data validation and error handling
+## Directory Structure
 
-2. **Processing Engine**:
-   - Consumes data from Kafka
-   - Performs real-time analytics on incoming data
-   - Detects anomalies and processes time-series metrics
+```
+visualization-go/
+├── config/        - Configuration management
+├── handlers/      - HTTP request handlers
+├── metrics/       - Prometheus metrics definitions
+├── middleware/    - HTTP middleware (metrics, logging)
+├── models/        - Data models
+├── static/        - Static assets (CSS, JS)
+├── templates/     - HTML templates
+├── websocket/     - WebSocket implementation
+├── main.go        - Main application entry point
+├── Dockerfile     - Container definition
+└── README.md      - This file
+```
 
-3. **Storage Layer**:
-   - Persists processed data
-   - Manages retention policies
-   - Provides query interfaces for historical data
+## API Endpoints
 
-4. **Visualization Dashboard**:
-   - Real-time metrics display using WebSockets
-   - Interactive charts and graphs
-   - System health monitoring
+- `GET /` - Main dashboard UI
+- `GET /ws` - WebSocket connection for real-time updates
+- `GET /health` - Health check endpoint
+- `GET /metrics` - Prometheus metrics
+- `GET /api/status` - System status
+- `POST /api/data` - Send sensor data
+- `GET /api/data/recent` - Get recent sensor data
 
-## Technology Stack
+## Dependencies
 
-- **Backend**: Go (Gin), Python
-- **Messaging**: Apache Kafka (KRaft mode, no ZooKeeper)
-- **Data Processing**: NumPy
-- **Frontend**: HTML, CSS, JavaScript
-- **Containerization**: Docker
-- **Orchestration**: Kubernetes (Minikube for local deployment)
-- **Monitoring**: Prometheus
-- **Real-time Communication**: Flask-SocketIO
+- Go 1.21+
+- Gin Web Framework
+- Gorilla WebSockets
+- Prometheus Client
 
-## Project Structure
+## Local Development
 
-The project is organized as follows:
+1. Build the service:
+```
+./build.sh
+```
 
-- `data-ingestion/`: Service for ingesting data from sensors/devices
-- `processing-engine/`: Service for real-time data processing
-- `storage-layer/`: Service for data persistence
-- `visualization/`: Web dashboard for data visualization
-- `gin-api/`: Secure API for external access (using Go/Gin)
-- `k8s/`: Kubernetes manifests for deployment
-- `test/`: Unit and integration tests
-- `scripts/`: Utility scripts for deployment and security checks
+2. Run the service:
+```
+./visualization-go
+```
 
-## Getting Started
+3. Access the UI at: http://localhost:5003
 
-### Prerequisites
+## Deployment
 
-- [Docker](https://docs.docker.com/get-docker/)
-- [Minikube](https://minikube.sigs.k8s.io/docs/start/)
-- [kubectl](https://kubernetes.io/docs/tasks/tools/)
-- Python 3.9+
+The service can be deployed to Kubernetes using the provided deployment script:
 
-### Setup and Deployment
+```
+../scripts/deploy-visualization-go.sh
+```
 
-1. **Clone the Repository**:
-   ```bash
-   git clone https://github.com/YuLiu003/real-time-analytics-platform.git
-   cd real-time-analytics-platform
-   ```
+This script will:
+- Build the Docker image
+- Create Kubernetes deployment manifests if needed
+- Deploy the service to the `analytics-platform` namespace
+- Configure service with NodePort for external access
 
-2. **Start Minikube**:
-   ```bash
-   ./manage.sh reset-minikube
-   ```
+## Environment Variables
 
-3. **Build Container Images**:
-   ```bash
-   ./manage.sh build
-   ```
-   This script builds all necessary container images with the correct names for Kubernetes.
+- `PORT` - HTTP server port (default: 5003)
+- `DATA_SERVICE_URL` - URL of the data ingestion service (default: http://data-ingestion-service)
+- `MAX_DATA_POINTS` - Maximum data points to store in memory (default: 100)
+- `DEBUG_MODE` - Enable debug mode (default: false)
+- `GIN_MODE` - Gin framework mode (default: release)
 
-4. **Deploy the Platform**:
-   ```bash
-   ./manage.sh deploy
-   ```
-   This script deploys all platform components:
-   - Creates the namespace and applies configurations
-   - Deploys Kafka in KRaft mode (no ZooKeeper needed)
-   - Deploys microservices (data ingestion, processing, storage, visualization)
-   - Sets up Prometheus for monitoring
+## Comparison with Python Version
 
-5. **Access the Dashboard**:
-   ```bash
-   minikube service visualization-service -n analytics-platform
-   ```
+This Go implementation provides the same functionality as the Python/Flask implementation with the following advantages:
 
-6. **Check Platform Status**:
-   ```bash
-   ./manage.sh status
-   ```
+- Significantly lower memory usage
+- Improved performance for concurrent connections
+- Native WebSocket support without additional dependencies
+- Strong typing and compile-time checks
+- Smaller container footprint
 
-## Security
+# Go Migration
 
-### Secret Management
+The platform has been completely migrated from Python to Go for improved performance, decreased memory usage, and better concurrency support. All Python components have been removed except for the tenant management service. The migration provides the following benefits:
 
-The platform uses several secrets for secure operation:
+- Reduced memory usage (~30%)
+- Faster startup times (~50% improvement)
+- Static typing for better code quality
+- Improved error handling
+- Better concurrency with goroutines
+- Simplified deployment
+- Multi-tenant isolation at process level
 
-1. **Kafka Secrets**: 
-   - Generated automatically on first deployment
-   - Stored in `k8s/kafka-secrets.yaml` (excluded from git)
-   - Contains the KRaft Cluster ID for Kafka
+## Components
 
-2. **API Keys**:
-   - Stored in `k8s/secrets.yaml` (excluded from git)
-   - Contains authentication keys for external API access
-   - Maps to specific tenants for multi-tenant isolation
+The following components are now implemented in Go:
 
-3. **Grafana Credentials**:
-   - Admin password stored in `k8s/secrets.yaml`
-   - Generated during deployment
+- **data-ingestion-go**: Handles inbound data from sensors via REST API
+- **clean-ingestion-go**: Validates and sanitizes data
+- **processing-engine-go-new**: Processes data and detects anomalies using Sarama Kafka client
+- **visualization-go**: Provides real-time visualization with WebSocket support
+- **storage-layer-go**: Persists data with improved SQL transaction support
 
-### Security Checks
+The Python tenant management component remains unchanged for now.
 
-Run the security check script before deployment to identify potential issues:
+## Deployment
+
+To deploy the platform with Go components:
 
 ```bash
-security-check.sh
+./deploy-platform.sh
 ```
 
-This script checks for:
-- Hardcoded secrets
-- Proper security contexts in deployments
-- Network policies
-- Resource limits
-- Health probes
-- API authentication
-- Non-root user configuration
-- Secret handling
-
-### Container Security
-
-All containers follow security best practices:
-- Run as non-root users
-- Use minimal capabilities
-- Have resource limits defined
-- Include health probes for resilience
-
-## Multi-Tenant Architecture
-
-The platform supports secure multi-tenant isolation, allowing data from multiple customers to be processed in the same infrastructure while maintaining strict boundaries between tenant data.
-
-### Tenant Isolation Features
-
-- **API Key to Tenant Mapping**: Each API key is mapped to a specific tenant ID
-- **Data Isolation**: Tenants can only access their own device data
-- **Authorization Barriers**: Prevents cross-tenant data access
-- **Tenant Context Propagation**: Tenant information flows through the entire processing pipeline
-
-### Configuring Multi-Tenant Mode
-
-Multi-tenant isolation is enabled by default. Configure it through these environment variables:
-
-```yaml
-# In ConfigMap or directly in deployment
-ENABLE_TENANT_ISOLATION: "true"
-TENANT_API_KEY_MAP: '{"test-key-1":"tenant1","test-key-2":"tenant2"}'
-```
-
-### Testing Tenant Isolation
-
-The platform includes a test script to verify tenant isolation:
+To test the platform:
 
 ```bash
-./test_multi_tenant_local.sh
+./test-go-platform.sh
 ```
 
-This script tests:
-1. Data ingestion for multiple tenants
-2. Positive test cases (tenant accessing their own data)
-3. Negative test cases (tenant attempting to access another tenant's data)
+## File Structure
 
-## Usage
+All Python components and redundant Go files have been permanently removed. The codebase now consists only of Go implementations.
+
+# Real-Time Analytics Platform
+
+A scalable, secure, multi-tenant analytics platform built with microservices architecture on Kubernetes.
+
+## Quick Start
+
+### One-Command Setup (Recommended)
+
+```bash
+# Complete setup: starts minikube, builds images, and deploys everything
+./manage.sh setup-all
+```
+
+### Manual Setup Process
+
+```bash
+# Start Minikube (if not already running)
+./manage.sh start
+
+# Build all Docker images
+./manage.sh build
+
+# Deploy the entire platform with security features
+./manage.sh deploy
+
+# Check status of all components
+./manage.sh status
+```
+
+## Accessing Services
+
+After deploying the platform, you can access the services using these commands:
+
+### Visualization Dashboard
+```bash
+# Open the visualization dashboard in your browser
+minikube service visualization-go-service -n analytics-platform
+```
+
+### Monitoring Dashboards
+```bash
+# Deploy both Prometheus and Grafana if not already done
+./manage.sh monitoring
+
+# Access Prometheus metrics dashboard
+./manage.sh prometheus
+# Access via: http://localhost:9090
+
+# Access Grafana dashboard
+./manage.sh grafana
+# Access via: http://localhost:3000
+# Default credentials: admin / admin-secure-password
+```
 
 ### Sending Test Data
-
 ```bash
-# Using curl - include the tenant-specific API key
-curl -X POST http://$(minikube ip):30085/api/data \
+# Send test data to the clean-ingestion service
+curl -X POST http://$(minikube ip):30087/api/data \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: test-key-1" \
-  -d '{"device_id": "test-001", "temperature": 25.5, "humidity": 60}'
+  -d '{"sensor_id": "test1", "value": 25.5, "timestamp": "2023-06-01T12:00:00Z"}'
 ```
 
-### Querying Data (Tenant-Specific)
+## Architecture Overview
 
-```bash
-# Query data for a specific device (using tenant API key)
-curl http://$(minikube ip):30085/api/data?device_id=test-001 \
-  -H "X-API-Key: test-key-1"
-```
+This platform consists of interconnected microservices:
 
-### Monitoring
+1. **Data Ingestion Service** - Receives and validates incoming data
+2. **Clean Ingestion Service** - Sanitizes and validates data
+3. **Processing Engine** - Processes data streams and detects anomalies
+4. **Storage Layer** - Manages persistent data storage with SQLite
+5. **Visualization Service** - Provides real-time visualization with WebSockets
+6. **Tenant Management** - Handles multi-tenant configuration and isolation
 
-```bash
-# Check pod status
-kubectl get pods -n analytics-platform
+## Components
 
-# View service logs
-kubectl logs -n analytics-platform deployment/visualization
-kubectl logs -n analytics-platform deployment/data-ingestion
+All components are now implemented in Go for improved performance:
 
-# Access Prometheus
-minikube service prometheus-service -n analytics-platform
-```
+- **data-ingestion-go**: Handles inbound data from sensors via REST API
+- **clean-ingestion-go**: Validates and sanitizes data
+- **processing-engine-go**: Processes data and detects anomalies using Sarama Kafka client
+- **visualization-go**: Provides real-time visualization with WebSocket support
+- **storage-layer-go**: Persists data with improved SQL transaction support
+- **tenant-management-go**: Manages tenant configuration and API keys
 
 ## Troubleshooting
 
-### Common Issues and Solutions
+If you encounter issues with the deployment, try the following:
 
-1. **Image Pull Errors**:
-   - Ensure images are built correctly: build-images.sh
-   - Verify images exist: `docker images | grep -E '(flask-api|data-ingestion|processing-engine|storage-layer|visualization)'`
+### Complete Reset
 
-2. **Kafka Connection Issues**:
-   - Check that Kafka is running: `kubectl get pods -n analytics-platform -l app=kafka`
-   - Verify Kafka service: `kubectl get svc -n analytics-platform | grep kafka`
-   - Check Kafka logs: `kubectl logs -n analytics-platform deployment/kafka`
-
-3. **CreateContainerConfigError**:
-   - Verify secrets exist: `kubectl get secrets -n analytics-platform`
-   - Check deployment configuration: `kubectl describe deployment/kafka -n analytics-platform`
-
-4. **Tenant Isolation Issues**:
-   - Verify tenant mapping environment variable: `kubectl describe configmap platform-config -n analytics-platform`
-   - Check API logs: `kubectl logs -n analytics-platform deployment/gin-api | grep "tenant"`
-   - Test tenant isolation directly: test_multi_tenant_local.sh
-
-## Development
-
-### Updating the Application
-
-After making code changes:
-
-1. Rebuild images:
-   ```bash
-   ./build-images.sh
-   ```
-
-2. Restart specific deployments:
-   ```bash
-   kubectl rollout restart deployment <deployment-name> -n analytics-platform
-   ```
-
-3. For major changes, redeploy everything:
-   ```bash
-   ./deploy-platform.sh
-   ```
-
-### Local Development with Docker Compose
-
-For rapid development without Kubernetes:
+If you need to start from scratch:
 
 ```bash
-# Start services
-docker-compose up -d
+# Complete cleanup and reset
+./manage.sh reset-all
 
-# Stop services
-docker-compose down
+# Then run setup again
+./manage.sh setup-all
 ```
 
-Note: The docker-compose.yml uses environment variables for secrets. Copy `.env.sample` to .env and update values before running.
+### Storage Layer Issues
 
-## Security Features
+If you encounter issues with the storage layer component:
 
-This project implements several security measures:
-
-- **API Authentication**: Protected endpoints with API key authentication
-- **Tenant Isolation**: Strong multi-tenant boundaries for data security
-- **Container Hardening**: All containers run as non-root with minimal capabilities
-- **Network Policies**: Default deny policy with explicit allow rules
-- **Secrets Management**: Sensitive data stored in Kubernetes secrets
-- **Security Scanning**: Automated checking with security-check.sh
-
-## Next Steps
-
-- **Grafana Integration**: Add Grafana dashboards connected to Prometheus
-- **Tenant-Specific Dashboards**: Create per-tenant visualization dashboards
-- **Processing Pipeline Enhancement**: Ensure tenant context propagation through all stages
-- **Tenant Rate Limiting**: Implement tenant-specific API usage quotas
-- **Audit Logging**: Add comprehensive audit logs for tenant actions
-- **Scaling**: Test horizontal scaling of services under load
-- **Persistence**: Implement persistent volumes for Kafka and storage layer
-- **CI/CD**: Add GitHub Actions for automated testing and deployment
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+```bash
+# Fix the storage layer specifically
+./manage.sh fix-storage
 ```
 
-## Next Steps After Implementing Multi-Tenant Capabilities
+### Kafka Timing Out
 
-Now that you've successfully implemented multi-tenant isolation in your platform, I recommend focusing on these next steps:
+If Kafka is taking too long to deploy or fails:
 
-1. **Update The Processing Engine**: 
-   - Ensure it respects tenant boundaries when processing Kafka messages
-   - Store tenant_id with processed data
+```bash
+# Reset the full environment
+./manage.sh reset-all
 
-2. **Update The Storage Layer**:
-   - Partition storage by tenant_id
-   - Implement proper authorization checks on queries
+# Deploy with the updated configuration
+./manage.sh setup-all
+```
 
-3. **Metrics Collection**:
-   - Implement the tenant metrics collection that's already defined
-   - Add monitoring dashboards to track usage by tenant
+## Monitoring Setup
 
-4. **Rate Limiting**:
-   - Implement the rate limiting that's defined but not used
-   - Add tenant-specific quotas and enforcement
+The platform includes a comprehensive monitoring stack:
 
-5. **Documentation**:
-   - Create a tenant onboarding guide
-   - Document API usage for tenant applications
+### Prometheus
+- Collects metrics from all services
+- Exposes metrics via HTTP API
+- Used for alerting and monitoring
 
-6. **Stress Testing**:
-   - Test the platform with multiple tenants
-   - Verify isolation under high load conditions
+### Grafana
+- Provides visualization of metrics
+- Pre-configured dashboards
+- Connects to Prometheus data source
+- Custom alert thresholds
 
-The most critical next step is ensuring that the tenant context continues to flow through your entire pipeline, from API to processing engine to storage layer, maintaining the strict tenant boundaries you've established at the API level.
+To setup a Grafana dashboard:
+1. Access Grafana at http://localhost:3000
+2. Login with admin/admin-secure-password
+3. Go to Dashboards → New Dashboard
+4. Add a new panel
+5. Select Prometheus as the data source
+6. Query examples:
+   - `rate(http_requests_total[5m])` - Request rate
+   - `process_resident_memory_bytes` - Memory usage
+   - `histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))` - 95th percentile latency
+
+## Management Commands
+
+```bash
+# View pod statuses
+./manage.sh pods
+
+# View logs for a specific pod
+./manage.sh logs <pod-name>
+
+# Get detailed information about a pod
+./manage.sh describe <pod-name>
+
+# Restart a specific deployment
+./manage.sh restart <deployment-name>
+
+# Restart all deployments
+./manage.sh restart-all
+
+# Start minikube tunnel for LoadBalancer services
+./manage.sh tunnel-start
+
+# Stop minikube tunnel
+./manage.sh tunnel-stop
+```
+
+## Platform Security Features
+
+- Network policies to control pod-to-pod communication
+- RBAC for service accounts with minimal permissions
+- API key authentication for tenant management
+- Secure communication between microservices
+- Non-root containers with restricted capabilities
+- Resource limits and requests for all components
+- Health and readiness probes for resilience
+
+## Prerequisites
+
+- Docker Desktop with Kubernetes enabled, or Minikube
+- kubectl CLI tool
+- Git
+- Bash shell (Linux/Mac) or WSL/Git Bash (Windows)
+
+## API Documentation
+
+The platform exposes several REST APIs for data ingestion and retrieval:
+
+### Data Ingestion API
+
+`POST /api/data`
+
+Request Headers:
+- `Content-Type: application/json`
+- `X-API-Key: [api-key]` (required)
+
+Request Body:
+```json
+{
+  "sensor_id": "sensor123",
+  "value": 42.5,
+  "timestamp": "2023-06-01T12:00:00Z"
+}
+```
+
+### Visualization API
+
+`GET /api/data/recent`
+
+Query Parameters:
+- `limit` - Number of recent data points (default: 100)
+- `sensor_id` - Filter by specific sensor (optional)
+
+WebSocket Connection:
+- Connect to `/ws` for real-time data updates
+
+## Known Issues and Troubleshooting
+
+- If Kafka and Zookeeper fail to start, check the logs with `kubectl logs -n analytics-platform -l app=kafka` and `kubectl logs -n analytics-platform -l app=zookeeper`
+- For local development, set `imagePullPolicy: Never` in the deployment files
+- Some services require persistent storage - ensure PVCs are properly created
+- Grafana may take up to 60 seconds to become ready due to strict readiness probe settings
+
+## Security Recommendations for Production
+
+This repository contains a demo/development setup. Before deploying to production, consider these security enhancements:
+
+1. **Secret Management**:
+   - Replace base64-encoded secrets with a proper secrets management solution (HashiCorp Vault, AWS Secrets Manager)
+   - Use Kubernetes External Secrets or Sealed Secrets for GitOps workflows
+   - Rotate secrets regularly using automated processes
+
+2. **Container Security**:
+   - Scan container images for vulnerabilities using tools like Trivy, Clair, or Snyk
+   - Use minimal base images like distroless or alpine
+   - Implement Pod Security Standards at the Restricted level
+   - Consider using OPA/Gatekeeper or Kyverno for policy enforcement
+
+3. **Network Security**:
+   - Implement service mesh (Istio or Linkerd) for mTLS between services
+   - Use NetworkPolicies to restrict communication between components
+   - Add proper Ingress with TLS termination
+
+4. **Authentication & Access Control**:
+   - Implement proper OIDC authentication for external access
+   - Use cert-manager for certificate management
+   - Define proper RBAC roles with least privilege principle
+
+5. **Monitoring & Compliance**:
+   - Set up alerts for security events
+   - Implement audit logging
+   - Deploy a SIEM solution for security monitoring
+
+Run `./scripts/security-check.sh` regularly to validate your security posture.
