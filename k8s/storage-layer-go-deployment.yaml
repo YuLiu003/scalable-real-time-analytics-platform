@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storage-layer-go
+  namespace: analytics-platform
+  labels:
+    app: storage-layer-go
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: storage-layer-go
+  template:
+    metadata:
+      labels:
+        app: storage-layer-go
+    spec:
+      serviceAccountName: storage-layer-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: storage-layer-go
+        image: storage-layer-go:latest
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+        ports:
+        - containerPort: 5002
+        env:
+        - name: KAFKA_BROKER
+          valueFrom:
+            configMapKeyRef:
+              name: platform-config
+              key: KAFKA_BROKER
+        - name: KAFKA_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: platform-config
+              key: KAFKA_TOPIC
+        - name: DB_PATH
+          value: "/data/analytics.db"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        volumeMounts:
+        - name: storage-data
+          mountPath: /data
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5002
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5002
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+      volumes:
+      - name: storage-data
+        persistentVolumeClaim:
+          claimName: storage-layer-data 

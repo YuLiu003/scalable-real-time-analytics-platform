@@ -1,42 +1,15 @@
 version: '3.8'
 
 services:
-  secure-api:
+  tenant-mgmt-go:
     build:
-      context: ./flask-api
+      context: ./tenant-management-go
       dockerfile: Dockerfile
-    image: flask-api:latest
-    ports:
-      - "5000:5000"
-    environment:
-      - KAFKA_BROKER=kafka:9092
-      - KAFKA_TOPIC=sensor-data
-      - API_KEY_1=${API_KEY_1:-test-key-1}
-      - API_KEY_2=${API_KEY_2:-test-key-2}
-      - TENANT_API_KEY_MAP={"test-key-1":"tenant1","test-key-2":"tenant2"}
-      - ENABLE_TENANT_ISOLATION=true
-    depends_on:
-      - kafka
-    networks:
-      - kafka-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-
-  tenant-mgmt:
-    build:
-      context: ./platform/tenant-management
-      dockerfile: Dockerfile
-    image: tenant-management:latest
+    image: tenant-management-go:latest
     ports:
       - "5010:5010"
     environment:
       - PLATFORM_MODE=docker
-    volumes:
-      - ./platform/tenant-management:/app
     networks:
       - kafka-network
     healthcheck:
@@ -46,17 +19,20 @@ services:
       retries: 3
       start_period: 15s
 
-  data-ingestion:
+  data-ingestion-go:
     build:
-      context: ./data-ingestion
+      context: ./data-ingestion-go
       dockerfile: Dockerfile
-    image: data-ingestion:latest
+    image: data-ingestion-go:latest
     ports:
       - "5001:5000"
     environment:
       - KAFKA_BROKER=kafka:9092
       - KAFKA_TOPIC=sensor-data
       - ENABLE_TENANT_ISOLATION=true
+      # Use environment variables for API keys
+      - API_KEY_1=${API_KEY_1:-test-key-1}
+      - API_KEY_2=${API_KEY_2:-test-key-2}
     depends_on:
       - kafka
     networks:
@@ -68,34 +44,64 @@ services:
       retries: 3
       start_period: 15s
 
-  processing-engine:
+  clean-ingestion-go:
     build:
-      context: ./processing-engine
+      context: ./clean-ingestion-go
       dockerfile: Dockerfile
-    image: processing-engine:latest
+    image: clean-ingestion-go:latest
     ports:
-      - "5002:5001"
+      - "5002:5000"
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - KAFKA_TOPIC=sensor-data-clean
     depends_on:
-      - data-ingestion
       - kafka
+      - data-ingestion-go
     networks:
       - kafka-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 15s
 
-  storage-layer:
+  processing-engine-go:
     build:
-      context: ./storage-layer
+      context: ./processing-engine-go
       dockerfile: Dockerfile
-    image: storage-layer:latest
+    image: processing-engine-go:latest
     ports:
-      - "5003:5002"
+      - "5003:8000"
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - KAFKA_INPUT_TOPIC=sensor-data-clean
+      - KAFKA_OUTPUT_TOPIC=processed-data
+      - CONSUMER_GROUP=processing-engine-group
     depends_on:
-      - processing-engine
+      - clean-ingestion-go
+      - kafka
+    networks:
+      - kafka-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  storage-layer-go:
+    build:
+      context: ./storage-layer-go
+      dockerfile: Dockerfile
+    image: storage-layer-go:latest
+    ports:
+      - "5004:5002"
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - KAFKA_TOPIC=processed-data
+    depends_on:
+      - processing-engine-go
     networks:
       - kafka-network
     healthcheck:
@@ -105,15 +111,17 @@ services:
       retries: 3
       start_period: 15s
 
-  visualization:
+  visualization-go:
     build:
-      context: ./visualization
+      context: ./visualization-go
       dockerfile: Dockerfile
-    image: visualization:latest
+    image: visualization-go:latest
     ports:
-      - "5004:5003"
+      - "5005:5003"
+    environment:
+      - DATA_SERVICE_URL=http://storage-layer-go:5002
     depends_on:
-      - storage-layer
+      - storage-layer-go
     networks:
       - kafka-network
     healthcheck:
@@ -124,33 +132,55 @@ services:
       start_period: 15s
 
   kafka:
-    image: bitnami/kafka:3.4.1
+    image: confluentinc/cp-kafka:7.3.0
     ports:
       - "9092:9092"
-      - "9093:9093"
     environment:
-      - KAFKA_CFG_NODE_ID=1
-      - KAFKA_CFG_PROCESS_ROLES=broker,controller
-      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
-      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
-      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
-      - ALLOW_PLAINTEXT_LISTENER=yes
-      - KAFKA_KRAFT_CLUSTER_ID=${KAFKA_KRAFT_CLUSTER_ID:-$(openssl rand -hex 11)}
+      - KAFKA_BROKER_ID=1
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT
+      - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+    depends_on:
+      - zookeeper
     volumes:
-      - kafka-data:/bitnami/kafka
+      - kafka-data:/var/lib/kafka/data
     networks:
       - kafka-network
     healthcheck:
-      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
 
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.0
+    ports:
+      - "2181:2181"
+    environment:
+      - ZOOKEEPER_CLIENT_PORT=2181
+      - ZOOKEEPER_TICK_TIME=2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-logs:/var/lib/zookeeper/log
+    networks:
+      - kafka-network
+    healthcheck:
+      test: ["CMD-SHELL", "echo stat | nc localhost 2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
 volumes:
   kafka-data:
+    driver: local
+  zookeeper-data:
+    driver: local
+  zookeeper-logs:
     driver: local
 
 networks:

@@ -13,15 +13,27 @@ spec:
       labels:
         app: tenant-management
     spec:
+      serviceAccountName: tenant-management-sa
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 1000
       containers:
       - name: tenant-management
         image: tenant-management:latest
         imagePullPolicy: IfNotPresent
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
         ports:
         - containerPort: 5010
-        securityContext:
-          runAsUser: 1001
-          runAsNonRoot: true
+        env:
+        - name: PLATFORM_MODE
+          value: kubernetes
         resources:
           requests:
             memory: "128Mi"
@@ -29,18 +41,18 @@ spec:
           limits:
             memory: "256Mi"
             cpu: "200m"
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 5010
-          initialDelaySeconds: 10
-          periodSeconds: 5
         livenessProbe:
           httpGet:
             path: /health
             port: 5010
-          initialDelaySeconds: 15
+          initialDelaySeconds: 30
           periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5010
+          initialDelaySeconds: 5
+          periodSeconds: 5
 ---
 apiVersion: v1
 kind: Service
@@ -51,7 +63,6 @@ spec:
   selector:
     app: tenant-management
   ports:
-  - port: 80
+  - port: 5010
     targetPort: 5010
-    nodePort: 30090
-  type: NodePort
+  type: ClusterIP 
