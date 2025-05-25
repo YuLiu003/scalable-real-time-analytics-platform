@@ -349,12 +349,31 @@ func (p *Processor) processData(data models.SensorData) (*models.ProcessedDataPa
 		messagesProcessed.WithLabelValues("normal").Inc()
 	}
 
+	// Update global statistics and device-specific tracking
+	p.mu.Lock()
+	
+	// Ensure device exists in the devices map
+	if p.processedData.Devices[data.DeviceID] == nil {
+		p.processedData.Devices[data.DeviceID] = &models.DeviceStats{}
+		// Initialize device temperature and humidity stats
+		if data.Temperature != nil {
+			p.processedData.Devices[data.DeviceID].Temperature.Min = *data.Temperature
+			p.processedData.Devices[data.DeviceID].Temperature.Max = *data.Temperature
+		}
+		if data.Humidity != nil {
+			p.processedData.Devices[data.DeviceID].Humidity.Min = *data.Humidity
+			p.processedData.Devices[data.DeviceID].Humidity.Max = *data.Humidity
+		}
+	}
+	
+	deviceStats := p.processedData.Devices[data.DeviceID]
+	
 	if data.Temperature != nil {
-		p.mu.Lock()
+		// Update global temperature stats
 		p.processedData.Temperature.Count++
 		p.processedData.Temperature.Sum += *data.Temperature
 
-		// Handle first temperature reading
+		// Handle first temperature reading globally
 		if p.processedData.Temperature.Count == 1 {
 			p.processedData.Temperature.Min = *data.Temperature
 			p.processedData.Temperature.Max = *data.Temperature
@@ -362,17 +381,38 @@ func (p *Processor) processData(data models.SensorData) (*models.ProcessedDataPa
 			p.processedData.Temperature.Min = math.Min(p.processedData.Temperature.Min, *data.Temperature)
 			p.processedData.Temperature.Max = math.Max(p.processedData.Temperature.Max, *data.Temperature)
 		}
-
 		p.processedData.Temperature.Avg = p.processedData.Temperature.Sum / float64(p.processedData.Temperature.Count)
-		p.mu.Unlock()
+		
+		// Update device-specific temperature stats
+		deviceStats.Temperature.Readings = append(deviceStats.Temperature.Readings, *data.Temperature)
+		if len(deviceStats.Temperature.Readings) > 100 { // Keep only last 100 readings
+			deviceStats.Temperature.Readings = deviceStats.Temperature.Readings[1:]
+		}
+		
+		// Calculate device temperature statistics
+		sum := 0.0
+		min := deviceStats.Temperature.Readings[0]
+		max := deviceStats.Temperature.Readings[0]
+		for _, reading := range deviceStats.Temperature.Readings {
+			sum += reading
+			if reading < min {
+				min = reading
+			}
+			if reading > max {
+				max = reading
+			}
+		}
+		deviceStats.Temperature.Avg = sum / float64(len(deviceStats.Temperature.Readings))
+		deviceStats.Temperature.Min = min
+		deviceStats.Temperature.Max = max
 	}
 
 	if data.Humidity != nil {
-		p.mu.Lock()
+		// Update global humidity stats
 		p.processedData.Humidity.Count++
 		p.processedData.Humidity.Sum += *data.Humidity
 
-		// Handle first humidity reading
+		// Handle first humidity reading globally
 		if p.processedData.Humidity.Count == 1 {
 			p.processedData.Humidity.Min = *data.Humidity
 			p.processedData.Humidity.Max = *data.Humidity
@@ -380,10 +420,41 @@ func (p *Processor) processData(data models.SensorData) (*models.ProcessedDataPa
 			p.processedData.Humidity.Min = math.Min(p.processedData.Humidity.Min, *data.Humidity)
 			p.processedData.Humidity.Max = math.Max(p.processedData.Humidity.Max, *data.Humidity)
 		}
-
 		p.processedData.Humidity.Avg = p.processedData.Humidity.Sum / float64(p.processedData.Humidity.Count)
-		p.mu.Unlock()
+		
+		// Update device-specific humidity stats
+		deviceStats.Humidity.Readings = append(deviceStats.Humidity.Readings, *data.Humidity)
+		if len(deviceStats.Humidity.Readings) > 100 { // Keep only last 100 readings
+			deviceStats.Humidity.Readings = deviceStats.Humidity.Readings[1:]
+		}
+		
+		// Calculate device humidity statistics
+		sum := 0.0
+		min := deviceStats.Humidity.Readings[0]
+		max := deviceStats.Humidity.Readings[0]
+		for _, reading := range deviceStats.Humidity.Readings {
+			sum += reading
+			if reading < min {
+				min = reading
+			}
+			if reading > max {
+				max = reading
+			}
+		}
+		deviceStats.Humidity.Avg = sum / float64(len(deviceStats.Humidity.Readings))
+		deviceStats.Humidity.Min = min
+		deviceStats.Humidity.Max = max
 	}
+	
+	// Update last seen time for the device
+	if data.Timestamp != nil {
+		deviceStats.LastSeen = data.Timestamp
+	} else {
+		now := time.Now()
+		deviceStats.LastSeen = &now
+	}
+	
+	p.mu.Unlock()
 
 	return result, nil
 }
