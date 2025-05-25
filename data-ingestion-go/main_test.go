@@ -20,6 +20,13 @@ func setupRouter() *gin.Engine {
 	// Switch to test mode to avoid extra logging
 	gin.SetMode(gin.TestMode)
 
+	// Set up test environment variables for API keys
+	os.Setenv("API_KEY_1", "test-key-1")
+	os.Setenv("API_KEY_2", "test-key-2")
+
+	// Initialize API keys for testing
+	initAPIKeys()
+
 	// Setup router
 	r := gin.Default()
 	r.POST("/api/data", requireAPIKey(), ingestData)
