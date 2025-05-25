@@ -1,4 +1,4 @@
-FROM golang:1.24-alpine AS build
+FROM golang:1.21-alpine AS build
 
 # Install required dependencies (combining apk commands for better layer caching)
 RUN apk update && apk add --no-cache git ca-certificates tzdata wget
