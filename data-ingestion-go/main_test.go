@@ -20,6 +20,9 @@ func setupRouter() *gin.Engine {
 	// Switch to test mode to avoid extra logging
 	gin.SetMode(gin.TestMode)
 
+	// Clear any previous auth bypass settings
+	os.Unsetenv("BYPASS_AUTH")
+
 	// Set up test environment variables for API keys
 	os.Setenv("API_KEY_1", "test-key-1")
 	os.Setenv("API_KEY_2", "test-key-2")
@@ -75,8 +78,15 @@ func TestAPIKeyAuthMiddleware(t *testing.T) {
 	assert.Equal(t, 200, w.Code)
 
 	// Test with auth bypass
+	originalBypass := os.Getenv("BYPASS_AUTH")
 	os.Setenv("BYPASS_AUTH", "true")
-	defer os.Setenv("BYPASS_AUTH", "false")
+	defer func() {
+		if originalBypass == "" {
+			os.Unsetenv("BYPASS_AUTH")
+		} else {
+			os.Setenv("BYPASS_AUTH", originalBypass)
+		}
+	}()
 
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequest("POST", "/api/data", bytes.NewBuffer([]byte(`{"device_id": "test"}`)))
