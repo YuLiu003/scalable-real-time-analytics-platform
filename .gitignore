@@ -208,15 +208,15 @@ archive/python-components/
 # Archived files from Go migration
 archive/redundant-files/
 
-# Go compiled binaries and build artifacts
-**/data-ingestion
-**/clean-ingestion
-**/processing-engine-go
-**/processing-engine-go-new
-**/visualization-go
-**/admin-ui-go
-**/storage-layer-go
-**/tenant-management-go
+# Go compiled binaries and build artifacts (specific binaries, not directories)
+data-ingestion-go/data-ingestion
+clean-ingestion-go/clean-ingestion
+processing-engine-go/processing-engine-go
+processing-engine-go/processing-engine-go-new
+visualization-go/visualization-go
+admin-ui-go/admin-ui-go
+storage-layer-go/storage-layer
+tenant-management-go/tenant-management-go
 
 # Go build outputs
 *.test
