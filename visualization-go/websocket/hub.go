@@ -77,3 +77,33 @@ func (h *Hub) Run() {
 func (h *Hub) BroadcastMessage(message []byte) {
 	h.broadcast <- message
 }
+
+// BroadcastToTenant sends a message to clients for a specific tenant
+func (h *Hub) BroadcastToTenant(message []byte, tenantID string) {
+	// Do nothing if no tenant specified
+	if tenantID == "" {
+		return
+	}
+
+	log.Printf("Broadcasting message to tenant: %s", tenantID)
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	count := 0
+	for client := range h.clients {
+		if client.tenantID == tenantID || client.tenantID == "all" {
+			select {
+			case client.send <- message:
+				metrics.WebSocketMessages.Inc()
+				count++
+			default:
+				close(client.send)
+				delete(h.clients, client)
+				metrics.WebSocketConnections.Dec()
+			}
+		}
+	}
+
+	log.Printf("Message broadcast to %d clients for tenant %s", count, tenantID)
+}

@@ -1,9 +1,29 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: analytics-platform
+  labels:
+    app: prometheus
+    component: monitoring
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: standard
+  resources:
+    requests:
+      storage: 50Gi
+---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: prometheus
   namespace: analytics-platform
+  labels:
+    app: prometheus
+    component: monitoring
 spec:
+  serviceName: prometheus
   replicas: 1
   selector:
     matchLabels:
@@ -12,9 +32,14 @@ spec:
     metadata:
       labels:
         app: prometheus
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
     spec:
+      serviceAccountName: prometheus
       securityContext:
         runAsNonRoot: true
+        runAsUser: 65534
         fsGroup: 65534
       containers:
       - name: prometheus
@@ -27,27 +52,40 @@ spec:
             drop:
             - ALL
           readOnlyRootFilesystem: false
+        args:
+          - --config.file=/etc/prometheus/prometheus.yml
+          - --storage.tsdb.path=/prometheus
+          - --storage.tsdb.retention.time=15d
+          - --storage.tsdb.retention.size=50GB
+          - --web.console.templates=/etc/prometheus/consoles
+          - --web.console.libraries=/etc/prometheus/console_libraries
+          - --web.enable-lifecycle
         ports:
         - containerPort: 9090
+          name: http
         resources:
           requests:
-            memory: "256Mi"
-            cpu: "100m"
-          limits:
             memory: "512Mi"
-            cpu: "300m"
+            cpu: "200m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
         livenessProbe:
           httpGet:
             path: /-/healthy
             port: 9090
           initialDelaySeconds: 30
           periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /-/ready
             port: 9090
           initialDelaySeconds: 15
           periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 3
         volumeMounts:
         - name: config-volume
           mountPath: /etc/prometheus/
@@ -58,17 +96,22 @@ spec:
         configMap:
           name: prometheus-config
       - name: prometheus-data
-        emptyDir: {}
+        persistentVolumeClaim:
+          claimName: prometheus-data
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: prometheus
   namespace: analytics-platform
+  labels:
+    app: prometheus
+    component: monitoring
 spec:
   selector:
     app: prometheus
   ports:
   - port: 9090
     targetPort: 9090
-  type: ClusterIP 
+    name: http
+  type: ClusterIP

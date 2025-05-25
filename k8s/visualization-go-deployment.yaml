@@ -20,7 +20,7 @@ spec:
       containers:
       - name: visualization-go
         image: visualization-go:latest
-        imagePullPolicy: Never
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 5003
         securityContext:
@@ -42,9 +42,21 @@ spec:
         - name: PORT
           value: "5003"
         - name: DATA_SERVICE_URL
-          value: "http://data-ingestion-service"
+          value: "http://storage-layer-go-service:5002"
         - name: MAX_DATA_POINTS
           value: "100"
+        - name: API_KEY_1
+          valueFrom:
+            secretKeyRef:
+              name: tenant-management-secrets
+              key: API_KEY_1
+        - name: API_KEY_2
+          valueFrom:
+            secretKeyRef:
+              name: tenant-management-secrets
+              key: API_KEY_2
+        - name: BYPASS_AUTH
+          value: "false"
         readinessProbe:
           httpGet:
             path: /health

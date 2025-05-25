@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.21-alpine AS build
+FROM golang:alpine AS build
 
 # Set working directory
 WORKDIR /app
@@ -20,7 +20,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o visualization-go .
 
 # Final stage
-FROM alpine:3.18
+FROM alpine:latest
 
 # Add non root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

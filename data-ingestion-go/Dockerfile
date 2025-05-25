@@ -1,5 +1,5 @@
 # Stage 1: Build the Go application
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -14,12 +14,12 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o data-ingestion .
 
 # Stage 2: Create a minimal runtime image
-FROM alpine:3.18
+FROM alpine:latest
 
 WORKDIR /app
 
-# Install CA certificates for HTTPS support
-RUN apk --no-cache add ca-certificates
+# Install CA certificates and wget for HTTPS support and health checks
+RUN apk --no-cache add ca-certificates wget
 
 # Copy the binary from the builder stage
 COPY --from=builder /app/data-ingestion .

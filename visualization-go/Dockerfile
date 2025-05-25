@@ -21,7 +21,10 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o visualization-go .
 
 # Final stage
-FROM alpine:3.18
+FROM alpine:latest
+
+# Install CA certificates and wget for HTTPS support and health checks
+RUN apk --no-cache add ca-certificates wget
 
 # Add non root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
@@ -44,10 +47,12 @@ USER appuser
 
 # Define environment variables
 ENV PORT=5003
-ENV DATA_SERVICE_URL=http://storage-layer-go:5002
+ENV DATA_SERVICE_URL=http://storage-layer-go-service:5002
 ENV MAX_DATA_POINTS=100
 ENV DEBUG_MODE=false
 ENV GIN_MODE=release
+# Note: API keys and sensitive data should be injected via Kubernetes secrets
+# ENV BYPASS_AUTH will be set via deployment configuration
 
 # Expose port
 EXPOSE 5003

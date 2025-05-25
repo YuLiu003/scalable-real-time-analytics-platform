@@ -1,17 +1,27 @@
 #!/bin/bash
 
-# This script performs benchmarking tests comparing Python and Go implementations
+# This script performs benchmarking tests comparing different Go implementations
 # Usage: ./benchmark-go.sh [requests] [concurrency]
 
 set -e
+
+# Get API keys from environment or use defaults for testing
+API_KEY_1=${API_KEY_1:-"demo-key-for-testing-only"}
+API_KEY_2=${API_KEY_2:-"demo-key-for-testing-only"}
+
+# SECURITY WARNING: Default API keys are for testing only!
+# For production benchmarks, set API_KEY_1 and API_KEY_2 environment variables
+if [[ "$API_KEY_1" == "demo-key-for-testing-only" ]]; then
+    echo "⚠️  WARNING: Using demo API keys. Set API_KEY_1 and API_KEY_2 for production tests."
+fi
 
 REQUESTS=${1:-1000}    # Number of requests to send, default 1000
 CONCURRENCY=${2:-10}   # Number of concurrent requests, default 10
 TARGET_ENDPOINT="/api/data"
 DATA_FILE="/tmp/test-data.json"
 TEST_REPORT="/tmp/benchmark-report.txt"
-PYTHON_HOST="http://localhost:5001"
-GO_HOST="http://localhost:5001"  # Same port, use Docker Compose to switch between them
+GO_SVC1_HOST="http://localhost:5001"  # First service endpoint
+GO_SVC2_HOST="http://localhost:5002"  # Second service endpoint
 
 cat > $DATA_FILE << EOF
 {
@@ -22,7 +32,7 @@ cat > $DATA_FILE << EOF
 }
 EOF
 
-echo "📊 Starting benchmark tests comparing Python and Go implementations"
+echo "📊 Starting benchmark tests comparing Go service implementations"
 echo "Requests: $REQUESTS"
 echo "Concurrency: $CONCURRENCY"
 echo "Target endpoint: $TARGET_ENDPOINT"
@@ -51,37 +61,35 @@ run_benchmark() {
 # Make sure the report is empty
 > $TEST_REPORT
 
-echo "🔄 Deploying Python implementation..."
-echo "Running docker-compose up -d python"
-docker-compose stop data-ingestion-go
-docker-compose up -d data-ingestion
-
-# Wait for service to become available
-echo "⏱️ Waiting for Python service to start..."
-sleep 10
-while ! curl -s "$PYTHON_HOST/health" > /dev/null; do
-  sleep 2
-  echo "Still waiting for Python service..."
-done
-
-# Run benchmark for Python implementation
-run_benchmark "Python" "$PYTHON_HOST" "test-key-1"
-
-echo "🔄 Deploying Go implementation..."
-echo "Running docker-compose up -d go"
-docker-compose stop data-ingestion
+echo "🔄 Deploying data-ingestion-go service..."
+echo "Running docker-compose up -d data-ingestion-go"
 docker-compose up -d data-ingestion-go
 
 # Wait for service to become available
-echo "⏱️ Waiting for Go service to start..."
+echo "⏱️ Waiting for data-ingestion-go service to start..."
 sleep 10
-while ! curl -s "$GO_HOST/health" > /dev/null; do
+while ! curl -s "$GO_SVC1_HOST/health" > /dev/null; do
   sleep 2
-  echo "Still waiting for Go service..."
+  echo "Still waiting for data-ingestion-go service..."
 done
 
-# Run benchmark for Go implementation
-run_benchmark "Go" "$GO_HOST" "test-key-1"
+# Run benchmark for first Go implementation
+run_benchmark "data-ingestion-go" "$GO_SVC1_HOST" "$API_KEY_1"
+
+echo "🔄 Deploying clean-ingestion-go service..."
+echo "Running docker-compose up -d clean-ingestion-go"
+docker-compose up -d clean-ingestion-go
+
+# Wait for service to become available
+echo "⏱️ Waiting for clean-ingestion-go service to start..."
+sleep 10
+while ! curl -s "$GO_SVC2_HOST/health" > /dev/null; do
+  sleep 2
+  echo "Still waiting for clean-ingestion-go service..."
+done
+
+# Run benchmark for second Go implementation
+run_benchmark "clean-ingestion-go" "$GO_SVC2_HOST" "$API_KEY_2"
 
 echo "✅ Benchmark tests completed!"
 echo "Test report saved to $TEST_REPORT"
@@ -93,10 +101,10 @@ echo "-------------------------------------------------"
 grep -A 3 "Time per request" $TEST_REPORT
 
 # Calculate performance difference
-PY_RPS=$(grep "Requests per second" $TEST_REPORT | head -1 | awk '{print $4}')
-GO_RPS=$(grep "Requests per second" $TEST_REPORT | tail -1 | awk '{print $4}')
-IMPROVEMENT=$(echo "scale=2; ($GO_RPS - $PY_RPS) * 100 / $PY_RPS" | bc)
+SVC1_RPS=$(grep "Requests per second" $TEST_REPORT | head -1 | awk '{print $4}')
+SVC2_RPS=$(grep "Requests per second" $TEST_REPORT | tail -1 | awk '{print $4}')
+DIFFERENCE=$(echo "scale=2; ($SVC2_RPS - $SVC1_RPS) * 100 / $SVC1_RPS" | bc)
 
 echo "-------------------------------------------------"
-echo "Performance improvement: $IMPROVEMENT%"
-echo "-------------------------------------------------" 
+echo "Performance difference: $DIFFERENCE%"
+echo "-------------------------------------------------"

@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.21-alpine AS build
+FROM golang:1.24-alpine AS build
 
 # Set working directory
 WORKDIR /app
@@ -20,7 +20,10 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o tenant-management-go .
 
 # Final stage
-FROM alpine:3.18
+FROM alpine:latest
+
+# Install CA certificates and wget for HTTPS support and health checks
+RUN apk --no-cache add ca-certificates wget
 
 # Add non root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

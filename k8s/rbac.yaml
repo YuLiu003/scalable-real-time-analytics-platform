@@ -3,30 +3,158 @@ kind: ServiceAccount
 metadata:
   name: data-ingestion-sa
   namespace: analytics-platform
+  labels:
+    app: data-ingestion-go
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: processing-engine-sa
   namespace: analytics-platform
+  labels:
+    app: processing-engine-go
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: storage-layer-sa
   namespace: analytics-platform
+  labels:
+    app: storage-layer-go
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: visualization-sa
   namespace: analytics-platform
+  labels:
+    app: visualization-go
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: tenant-management-sa
   namespace: analytics-platform
+  labels:
+    app: tenant-management-go
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: analytics-platform
+  labels:
+    app: prometheus
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus-role
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - nodes/proxy
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["extensions"]
+  resources:
+  - ingresses
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources:
+  - configmaps
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus-role-binding
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: analytics-platform
+roleRef:
+  kind: ClusterRole
+  name: prometheus-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pod-reader
+  namespace: analytics-platform
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pod-reader-binding
+  namespace: analytics-platform
+subjects:
+- kind: ServiceAccount
+  name: data-ingestion-sa
+  namespace: analytics-platform
+- kind: ServiceAccount
+  name: processing-engine-sa
+  namespace: analytics-platform
+- kind: ServiceAccount
+  name: storage-layer-sa
+  namespace: analytics-platform
+- kind: ServiceAccount
+  name: visualization-sa
+  namespace: analytics-platform
+- kind: ServiceAccount
+  name: tenant-management-sa
+  namespace: analytics-platform
+roleRef:
+  kind: Role
+  name: pod-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: configmap-reader
+  namespace: analytics-platform
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: configmap-reader-binding
+  namespace: analytics-platform
+subjects:
+- kind: ServiceAccount
+  name: data-ingestion-sa
+  namespace: analytics-platform
+- kind: ServiceAccount
+  name: processing-engine-sa
+  namespace: analytics-platform
+- kind: ServiceAccount
+  name: storage-layer-sa
+  namespace: analytics-platform
+- kind: ServiceAccount
+  name: visualization-sa
+  namespace: analytics-platform
+- kind: ServiceAccount
+  name: tenant-management-sa
+  namespace: analytics-platform
+roleRef:
+  kind: Role
+  name: configmap-reader
+  apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role

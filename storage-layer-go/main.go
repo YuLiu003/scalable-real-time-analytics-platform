@@ -21,6 +21,8 @@ var (
 	defaultAPIPort       = 5002
 	defaultMetricsPort   = 8001
 	defaultRetentionDays = 60
+	defaultKafkaBroker   = "kafka:9092"
+	defaultKafkaTopic    = "processed-data"
 
 	// Default tenant retention policies
 	tenantRetentionPolicies = map[string]RetentionPolicy{
@@ -33,6 +35,7 @@ var (
 )
 
 func main() {
+	log.Println("[DEBUG] (main) Storage Layer image build: 2025-05-23T00:10Z")
 	// Initialize logger
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.Println("Starting storage layer service...")
@@ -59,6 +62,16 @@ func main() {
 		}
 	}
 
+	kafkaBroker := os.Getenv("KAFKA_BROKER")
+	if kafkaBroker == "" {
+		kafkaBroker = defaultKafkaBroker
+	}
+
+	kafkaTopic := os.Getenv("KAFKA_TOPIC")
+	if kafkaTopic == "" {
+		kafkaTopic = defaultKafkaTopic
+	}
+
 	// Initialize database
 	var err error
 	db, err = NewDB(dbPath)
@@ -71,13 +84,26 @@ func main() {
 		log.Fatalf("Failed to initialize database schema: %v", err)
 	}
 
+	// Start Kafka consumer
+	log.Printf("[DEBUG] (main) About to start Kafka consumer for topic %s on broker %s", kafkaTopic, kafkaBroker)
+	kafkaConsumer, err := NewKafkaConsumer(kafkaBroker, kafkaTopic, db)
+	if err != nil {
+		log.Fatalf("FATAL: Failed to create Kafka consumer: %v", err)
+	}
+
+	if err := kafkaConsumer.Start(); err != nil {
+		log.Fatalf("FATAL: Failed to start Kafka consumer: %v", err)
+	}
+	log.Printf("[DEBUG] (main) Kafka consumer started successfully")
+
+	// Ensure Kafka consumer stops when service shuts down
+	defer kafkaConsumer.Stop()
+
 	// Start metrics server
 	go func() {
 		metricsAddr := fmt.Sprintf(":%d", metricsPort)
 		log.Printf("Starting metrics server on %s", metricsAddr)
-
 		http.Handle("/metrics", promhttp.Handler())
-
 		if err := http.ListenAndServe(metricsAddr, nil); err != nil {
 			log.Printf("Metrics server stopped: %v", err)
 		}
@@ -98,17 +124,13 @@ func main() {
 	router.GET("/api/data/:tenant_id/:device_id", getTenantDeviceDataHandler)
 	router.GET("/api/stats/:tenant_id", getTenantStatsHandler)
 
-	// Start API server
+	// Start API server in goroutine
 	apiAddr := fmt.Sprintf(":%d", apiPort)
 	log.Printf("Starting API server on %s", apiAddr)
-
-	// Create HTTP server with graceful shutdown
 	srv := &http.Server{
 		Addr:    apiAddr,
 		Handler: router,
 	}
-
-	// Start server in a goroutine
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Failed to start server: %v", err)
@@ -122,10 +144,8 @@ func main() {
 
 	// Shutdown gracefully
 	log.Println("Shutting down server...")
-
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}

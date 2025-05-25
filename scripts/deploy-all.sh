@@ -54,22 +54,11 @@ kubectl apply -f k8s/network-policy.yaml
 
 # Clean up old deployments if they exist
 echo -e "${BLUE}Cleaning up old statefulsets if they exist...${NC}"
-kubectl delete statefulset -n analytics-platform zookeeper --ignore-not-found
 kubectl delete statefulset -n analytics-platform kafka --ignore-not-found
-kubectl delete pvc -n analytics-platform data-zookeeper-0 --ignore-not-found
 kubectl delete pvc -n analytics-platform data-kafka-0 --ignore-not-found
 
-echo -e "${BLUE}Deploying Zookeeper StatefulSet...${NC}"
-kubectl apply -f k8s/zookeeper-statefulset.yaml
-if ! check_pod_status "analytics-platform" "zookeeper" 1 300; then
-  echo -e "${RED}Failed to start Zookeeper. Check logs with: kubectl logs -n analytics-platform -l app=zookeeper${NC}"
-  echo -e "${YELLOW}Continuing with deployment, but services may not function correctly.${NC}"
-else
-  echo -e "${GREEN}Zookeeper started successfully.${NC}"
-fi
-
-echo -e "${BLUE}Deploying Kafka StatefulSet...${NC}"
-kubectl apply -f k8s/kafka-statefulset.yaml
+echo -e "${BLUE}Deploying Kafka with KRaft mode...${NC}"
+kubectl apply -f k8s/kafka-kraft-statefulset.yaml
 if ! check_pod_status "analytics-platform" "kafka" 1 300; then
   echo -e "${RED}Failed to start Kafka. Check logs with: kubectl logs -n analytics-platform -l app=kafka${NC}"
   echo -e "${YELLOW}Continuing with deployment, but services may not function correctly.${NC}"

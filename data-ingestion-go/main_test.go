@@ -12,6 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// SECURITY NOTE: The API key "test-key-1" used in these tests is for
+// TESTING PURPOSES ONLY and should NEVER be used in production.
+// Production deployments must use securely generated API keys.
+
 func setupRouter() *gin.Engine {
 	// Switch to test mode to avoid extra logging
 	gin.SetMode(gin.TestMode)

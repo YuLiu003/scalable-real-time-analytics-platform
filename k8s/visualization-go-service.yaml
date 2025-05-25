@@ -3,11 +3,13 @@ kind: Service
 metadata:
   name: visualization-go-service
   namespace: analytics-platform
+  labels:
+    app: visualization-go
 spec:
   selector:
     app: visualization-go
   ports:
   - port: 80
     targetPort: 5003
-    nodePort: 30083
+    nodePort: 30085
   type: NodePort 

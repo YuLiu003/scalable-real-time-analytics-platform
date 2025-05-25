@@ -22,7 +22,7 @@ data:
   DB_NAME: "analytics"
   DB_USER: "user"
   ENABLE_TENANT_ISOLATION: "true"
-  TENANT_API_KEY_MAP: '{"test-key-1":"tenant1","test-key-2":"tenant2"}'
+  TENANT_API_KEY_MAP: '{"api-key-tenant1":"tenant1","api-key-tenant2":"tenant2"}'
   TENANT_RATE_LIMITS: '{"tenant1":100,"tenant2":200}'
   TENANT_RETENTION_DAYS: '{"tenant1":90,"tenant2":30}'
 EOF
@@ -175,4 +175,5 @@ kubectl rollout status deployment/visualization -n analytics-platform
 kubectl rollout status deployment/grafana -n analytics-platform
 
 echo "✅ Multi-tenant enhancements successfully deployed!"
-echo "Run the test_multi_tenant_local.sh script to verify the implementation."
+echo "Use './manage.sh test-api' to verify the multi-tenant implementation."
+echo "Or run 'python3 scripts/test-platform.py' for comprehensive testing."

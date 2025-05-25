@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.21-alpine AS build
+FROM golang:1.24-alpine AS builder
 
 # Install SQLite with a specific gcc version to avoid build issues
 RUN apk update && \
@@ -8,20 +8,20 @@ RUN apk update && \
 
 # Copy go mod and sum files
 WORKDIR /app
-COPY go.mod ./
+COPY go.mod go.sum ./
 RUN go mod download
 
 # Copy the source code
 COPY . .
 
 # Build the application with CGO enabled
-RUN CGO_ENABLED=1 GOOS=linux go build -o storage-layer-go .
+RUN CGO_ENABLED=1 GOOS=linux go build -o storage-layer
 
 # Final stage
-FROM alpine:3.18
+FROM alpine:latest
 
-# Install SQLite and other runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata sqlite
+# Install SQLite and other runtime dependencies including wget for health checks
+RUN apk add --no-cache ca-certificates tzdata sqlite wget
 
 # Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
@@ -33,7 +33,7 @@ WORKDIR /app
 RUN mkdir -p /data && chown -R appuser:appgroup /data
 
 # Copy binary from build stage
-COPY --from=build /app/storage-layer-go .
+COPY --from=builder /app/storage-layer .
 
 # Set ownership
 RUN chown -R appuser:appgroup /app
@@ -51,4 +51,4 @@ ENV DB_PATH=/data/analytics.db
 EXPOSE 5002
 
 # Run the binary
-CMD ["./storage-layer-go"] 
+CMD ["./storage-layer"] 

@@ -55,16 +55,6 @@ if [ -d "./processing-engine-go" ]; then
     echo -e "${YELLOW}Warning: Failed to build processing-engine-go image, but continuing...${NC}"
     FAILED_IMAGES+=("processing-engine-go")
   fi
-elif [ -d "./storage-layer-go/processing-engine-go" ]; then
-  echo -e "${BLUE}Building processing-engine-go image...${NC}"
-  echo -e "${YELLOW}Note: Using directory at ./storage-layer-go/processing-engine-go${NC}"
-  if docker build -t processing-engine-go:latest ./storage-layer-go/processing-engine-go; then
-    echo -e "${GREEN}Successfully built processing-engine-go image${NC}"
-    BUILT_IMAGES+=("processing-engine-go")
-  else
-    echo -e "${YELLOW}Warning: Failed to build processing-engine-go image, but continuing...${NC}"
-    FAILED_IMAGES+=("processing-engine-go")
-  fi
 else
   echo -e "${YELLOW}processing-engine-go directory not found, skipping...${NC}"
 fi

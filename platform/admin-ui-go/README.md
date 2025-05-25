@@ -11,7 +11,7 @@ This project provides a modernized Admin UI for the Analytics Platform, built wi
 This project represents a step in migrating the platform to Go while maintaining compatibility with existing Python services:
 
 - **Admin UI (Go)**: This service, built with Go and Gin, provides an improved frontend for platform administration.
-- **Tenant Management (Python)**: The existing Python-based tenant management service remains as the backend, handling business logic and data persistence.
+- **Tenant Management (Go)**: The Go-based tenant management service handles backend functionality, business logic, and data persistence.
 
 ## Features
 
@@ -19,7 +19,7 @@ This project represents a step in migrating the platform to Go while maintaining
 - Real-time system status monitoring
 - Tenant management operations (create, list, delete)
 - API key management for tenants
-- Proxy requests to the Python tenant management service
+- Proxy requests to the Go tenant management service
 
 ## Technologies
 
@@ -61,7 +61,7 @@ Configuration is handled through environment variables:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | PORT | Port to run the service on | 5050 |
-| TENANT_SERVICE_URL | URL of the Python tenant management service | http://tenant-management-service:5010 |
+| TENANT_SERVICE_URL | URL of the Go tenant management service | http://tenant-management-go-service:80 |
 | DEBUG_MODE | Enable debug mode | false |
 
 ## Directory Structure

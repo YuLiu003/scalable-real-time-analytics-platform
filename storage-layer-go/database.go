@@ -152,7 +152,7 @@ func (d *DB) GetTenantData(tenantID string, limit, offset int) ([]SensorData, er
 	var results []SensorData
 	for rows.Next() {
 		var data SensorData
-		var timestamp, createdAt int64
+		var timestamp, createdAt float64
 		var temp, humidity, anomalyScore sql.NullFloat64
 		var isAnomaly int
 
@@ -182,9 +182,9 @@ func (d *DB) GetTenantData(tenantID string, limit, offset int) ([]SensorData, er
 			data.AnomalyScore = &anomalyScore.Float64
 		}
 
-		// Convert timestamps
-		data.Timestamp = time.Unix(timestamp, 0)
-		data.CreatedAt = time.Unix(createdAt, 0)
+		// Convert timestamps from float64 to time.Time
+		data.Timestamp = time.Unix(int64(timestamp), 0)
+		data.CreatedAt = time.Unix(int64(createdAt), 0)
 		data.IsAnomaly = isAnomaly == 1
 
 		results = append(results, data)
@@ -224,7 +224,7 @@ func (d *DB) GetTenantDeviceData(tenantID, deviceID string, limit int) ([]Sensor
 	var results []SensorData
 	for rows.Next() {
 		var data SensorData
-		var timestamp, createdAt int64
+		var timestamp, createdAt float64
 		var temp, humidity, anomalyScore sql.NullFloat64
 		var isAnomaly int
 
@@ -254,9 +254,9 @@ func (d *DB) GetTenantDeviceData(tenantID, deviceID string, limit int) ([]Sensor
 			data.AnomalyScore = &anomalyScore.Float64
 		}
 
-		// Convert timestamps
-		data.Timestamp = time.Unix(timestamp, 0)
-		data.CreatedAt = time.Unix(createdAt, 0)
+		// Convert timestamps from float64 to time.Time
+		data.Timestamp = time.Unix(int64(timestamp), 0)
+		data.CreatedAt = time.Unix(int64(createdAt), 0)
 		data.IsAnomaly = isAnomaly == 1
 
 		results = append(results, data)

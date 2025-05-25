@@ -53,7 +53,7 @@ func GetConfig() *Config {
 		OutputTopic:       getEnv("OUTPUT_TOPIC", "processed-data"),
 		ConsumerGroup:     getEnv("CONSUMER_GROUP", "processing-engine-go-new"),
 		MetricsPort:       metricsPort,
-		StorageServiceURL: getEnv("STORAGE_SERVICE_URL", "http://storage-layer-service"),
+		StorageServiceURL: getEnv("STORAGE_SERVICE_URL", "http://storage-layer-go:5002"),
 		MaxReadings:       maxReadings,
 		KafkaEnabled:      getEnv("KAFKA_ENABLED", "true") == "true",
 		Debug:             getEnv("DEBUG", "false") == "true",
