@@ -64,12 +64,12 @@ func initAPIKeys() {
 	apiKey1 := os.Getenv("API_KEY_1")
 	apiKey2 := os.Getenv("API_KEY_2")
 
-	// Default keys if environment variables are not set
+	// Required API keys from environment variables
 	if apiKey1 == "" {
-		apiKey1 = "test-key-1"
+		log.Fatal("API_KEY_1 environment variable is required")
 	}
 	if apiKey2 == "" {
-		apiKey2 = "test-key-2"
+		log.Fatal("API_KEY_2 environment variable is required")
 	}
 
 	// Create the validAPIKeys slice
@@ -121,6 +121,10 @@ func initKafkaProducer() error {
 		WriteTimeout: 10 * time.Second,
 		ReadTimeout:  10 * time.Second,
 		Async:        false,
+		MaxAttempts:  3,
+		BatchSize:    1, // Send messages immediately
+		BatchTimeout: 0, // No batching
+		RequiredAcks: kafka.RequireAll,
 		Completion: func(messages []kafka.Message, err error) {
 			if err != nil {
 				log.Printf("Kafka async write failed: %v", err)
@@ -144,6 +148,9 @@ func produceMessage(ctx context.Context, data SensorData) error {
 		log.Printf("Error marshalling data to JSON for Kafka: %v", err)
 		return err
 	}
+
+	// Log message size
+	log.Printf("Message size: %d bytes", len(jsonData))
 
 	// Use device_id as the message key if available, for partitioning
 	var messageKey []byte

@@ -1,0 +1,248 @@
+openapi: 3.0.3
+info:
+  title: Real-Time Analytics Platform - Data Ingestion API
+  description: |
+    Data Ingestion Service API for the Real-Time Analytics Platform.
+    This service handles the initial ingestion of data from various sources
+    and forwards it to the processing pipeline.
+  version: 1.0.0
+  contact:
+    name: Platform Team
+    email: platform-team@company.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Development server
+  - url: https://api.analytics-platform.dev
+    description: Development environment
+  - url: https://api.analytics-platform.com
+    description: Production environment
+
+security:
+  - ApiKeyAuth: []
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Returns the health status of the data ingestion service
+      operationId: healthCheck
+      tags:
+        - Health
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  timestamp:
+                    type: string
+                    format: date-time
+                  uptime:
+                    type: string
+                    example: "5m30s"
+                required:
+                  - status
+
+  /api/data:
+    post:
+      summary: Ingest data
+      description: |
+        Accepts data from various sources and forwards it to the processing pipeline.
+        Data is validated and enriched before being sent to Kafka.
+      operationId: ingestData
+      tags:
+        - Data Ingestion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataPayload'
+            examples:
+              sensor_data:
+                summary: IoT sensor data
+                value:
+                  device_id: "sensor-001"
+                  timestamp: 1640995200
+                  temperature: 23.5
+                  humidity: 65.2
+                  location:
+                    lat: 37.7749
+                    lng: -122.4194
+              user_event:
+                summary: User interaction event
+                value:
+                  device_id: "app-user-12345"
+                  timestamp: 1640995200
+                  event_type: "page_view"
+                  user_id: "user-67890"
+                  page: "/dashboard"
+      responses:
+        '200':
+          description: Data ingested successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '400':
+          description: Invalid data format or missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized - invalid or missing API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      description: Returns metrics in Prometheus format for monitoring
+      operationId: getMetrics
+      tags:
+        - Monitoring
+      security: []
+      responses:
+        '200':
+          description: Metrics in Prometheus format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication
+
+  schemas:
+    DataPayload:
+      type: object
+      required:
+        - device_id
+      properties:
+        device_id:
+          type: string
+          description: Unique identifier for the data source
+          example: "sensor-001"
+          minLength: 1
+          maxLength: 100
+        timestamp:
+          type: integer
+          format: int64
+          description: Unix timestamp when the data was generated
+          example: 1640995200
+        temperature:
+          type: number
+          format: float
+          description: Temperature reading in Celsius
+          example: 23.5
+          minimum: -273.15
+          maximum: 1000
+        humidity:
+          type: number
+          format: float
+          description: Humidity percentage
+          example: 65.2
+          minimum: 0
+          maximum: 100
+        location:
+          type: object
+          description: Geographic location data
+          properties:
+            lat:
+              type: number
+              format: double
+              description: Latitude coordinate
+              example: 37.7749
+              minimum: -90
+              maximum: 90
+            lng:
+              type: number
+              format: double
+              description: Longitude coordinate
+              example: -122.4194
+              minimum: -180
+              maximum: 180
+        metadata:
+          type: object
+          description: Additional metadata fields
+          additionalProperties: true
+
+    SuccessResponse:
+      type: object
+      required:
+        - status
+        - message
+      properties:
+        status:
+          type: string
+          example: success
+        message:
+          type: string
+          example: "Data received successfully"
+        data_id:
+          type: string
+          description: Unique identifier for the ingested data
+          example: "ing_1640995200_abc123"
+        timestamp:
+          type: string
+          format: date-time
+          description: When the data was processed
+
+    ErrorResponse:
+      type: object
+      required:
+        - status
+        - message
+      properties:
+        status:
+          type: string
+          example: error
+        message:
+          type: string
+          example: "device_id is required"
+        error_code:
+          type: string
+          description: Machine-readable error code
+          example: "MISSING_DEVICE_ID"
+        details:
+          type: object
+          description: Additional error details
+          additionalProperties: true
+
+tags:
+  - name: Health
+    description: Service health and status endpoints
+  - name: Data Ingestion
+    description: Data ingestion operations
+  - name: Monitoring
+    description: Monitoring and metrics endpoints

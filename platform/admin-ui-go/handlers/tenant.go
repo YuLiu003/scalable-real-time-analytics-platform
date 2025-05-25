@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	// URL of the Python tenant management service
+	// URL of the Go tenant management service
 	tenantServiceURL = getTenantServiceURL()
 )
 

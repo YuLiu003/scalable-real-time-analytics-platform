@@ -1,0 +1,179 @@
+version: '3.8'
+
+services:
+  tenant-mgmt-go:
+    build:
+      context: ./tenant-management-go
+      dockerfile: Dockerfile
+    image: tenant-management-go:latest
+    ports:
+      - "5010:5010"
+    environment:
+      - PLATFORM_MODE=docker
+    networks:
+      - kafka-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:5010/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  data-ingestion-go:
+    build:
+      context: ./data-ingestion-go
+      dockerfile: Dockerfile
+    image: data-ingestion-go:latest
+    ports:
+      - "5001:5000"
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - KAFKA_TOPIC=sensor-data
+      - ENABLE_TENANT_ISOLATION=true
+      # Use environment variables for API keys
+      - API_KEY_1=${API_KEY_1:-your-api-key-1}
+      - API_KEY_2=${API_KEY_2:-your-api-key-2}
+    depends_on:
+      - kafka
+    networks:
+      - kafka-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  clean-ingestion-go:
+    build:
+      context: ./clean-ingestion-go
+      dockerfile: Dockerfile
+    image: clean-ingestion-go:latest
+    ports:
+      - "5002:5000"
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - KAFKA_TOPIC=sensor-data
+    depends_on:
+      - kafka
+      - data-ingestion-go
+    networks:
+      - kafka-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  processing-engine-go:
+    image: processing-engine-go-consumer-group:latest
+    ports:
+      - "5003:8000"
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - INPUT_TOPIC=sensor-data-clean
+      - OUTPUT_TOPIC=processed-data
+      - CONSUMER_GROUP=processing-engine-group
+    depends_on:
+      - clean-ingestion-go
+      - kafka
+    networks:
+      - kafka-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  storage-layer-go:
+    build:
+      context: ./storage-layer-go
+      dockerfile: Dockerfile
+    image: storage-layer-go:latest
+    ports:
+      - "5004:5002"
+    environment:
+      - KAFKA_BROKER=kafka:9092
+      - KAFKA_TOPIC=processed-data
+    depends_on:
+      - processing-engine-go
+    networks:
+      - kafka-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:5002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  visualization-go:
+    build:
+      context: ./visualization-go
+      dockerfile: Dockerfile
+    image: visualization-go:latest
+    ports:
+      - "5005:5003"
+    environment:
+      - DATA_SERVICE_URL=http://storage-layer-go:5002
+    depends_on:
+      - storage-layer-go
+    networks:
+      - kafka-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:5003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      # KRaft settings
+      - KAFKA_NODE_ID=1
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093
+      # Listeners
+      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      # Other settings
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0
+      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+      - CLUSTER_ID=abcdefghijklmnopqrstuv
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - kafka-network
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    # Format the storage directory with the cluster ID
+    command: >
+      bash -c "
+        echo 'Formatting storage directory with cluster ID'
+        kafka-storage format -t $${CLUSTER_ID} -c /etc/kafka/kafka.properties
+        echo 'Starting Kafka with KRaft mode'
+        /etc/confluent/docker/run
+      "
+
+volumes:
+  kafka-data:
+    driver: local
+
+networks:
+  kafka-network:
+    driver: bridge 

@@ -4,7 +4,6 @@ go 1.21
 
 require (
 	github.com/IBM/sarama v1.45.1
-	github.com/confluentinc/confluent-kafka-go v1.9.2
 	github.com/gin-gonic/gin v1.9.0
 	github.com/prometheus/client_golang v1.16.0
 	github.com/stretchr/testify v1.10.0
