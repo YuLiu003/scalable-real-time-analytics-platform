@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storage-layer
+  labels:
+    app: storage-layer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: storage-layer
+  template:
+    metadata:
+      labels:
+        app: storage-layer
+    spec:
+      containers:
+      - name: storage-layer
+        image: storage-layer:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5002
+          name: api
+        - containerPort: 8001
+          name: metrics
+        env:
+        - name: DB_PATH
+          value: "/data/analytics.db"
+        - name: API_PORT
+          value: "5002"
+        - name: METRICS_PORT
+          value: "8001"
+        - name: KAFKA_BROKER
+          value: "kafka:9092"
+        - name: KAFKA_TOPIC
+          value: "processed-data"
+        volumeMounts:
+        - name: data-volume
+          mountPath: /data
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: api
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: api
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      volumes:
+      - name: data-volume
+        persistentVolumeClaim:
+          claimName: storage-layer-pvc 
