@@ -3,15 +3,23 @@ kind: Deployment
 metadata:
   name: grafana
   namespace: analytics-platform
+  labels:
+    app: grafana
+    component: monitoring
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: grafana
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:
         app: grafana
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
     spec:
       securityContext:
         fsGroup: 472
@@ -28,16 +36,19 @@ spec:
               protocol: TCP
           resources:
             limits:
-              cpu: 200m
-              memory: 256Mi
+              cpu: 500m
+              memory: 512Mi
             requests:
-              cpu: 100m
-              memory: 128Mi
+              cpu: 250m
+              memory: 256Mi
           volumeMounts:
             - mountPath: /var/lib/grafana
               name: grafana-pv
             - mountPath: /etc/grafana/provisioning/datasources
               name: grafana-datasources
+              readOnly: false
+            - mountPath: /etc/grafana/provisioning/dashboards
+              name: grafana-dashboards
               readOnly: false
           env:
             - name: GF_SECURITY_ADMIN_USER
@@ -58,6 +69,22 @@ spec:
               value: /var/lib/grafana/plugins
             - name: GF_PATHS_PROVISIONING
               value: /etc/grafana/provisioning
+            - name: GF_AUTH_BASIC_ENABLED
+              value: "true"
+            - name: GF_AUTH_DISABLE_LOGIN_FORM
+              value: "false"
+            - name: GF_SECURITY_ALLOW_EMBEDDING
+              value: "true"
+            - name: GF_SECURITY_COOKIE_SECURE
+              value: "true"
+            - name: GF_SECURITY_STRICT_TRANSPORT_SECURITY
+              value: "true"
+            - name: GF_SECURITY_STRICT_TRANSPORT_SECURITY_MAX_AGE_SECONDS
+              value: "31536000"
+            - name: GF_LOG_MODE
+              value: "console file"
+            - name: GF_LOG_LEVEL
+              value: "info"
           securityContext:
             runAsUser: 472
             runAsGroup: 472
@@ -69,32 +96,42 @@ spec:
             initialDelaySeconds: 60
             timeoutSeconds: 30
             failureThreshold: 10
+            periodSeconds: 30
           readinessProbe:
             httpGet:
               path: /api/health
               port: 3000
-            initialDelaySeconds: 60
-            timeoutSeconds: 30
-            failureThreshold: 10
+            initialDelaySeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+            periodSeconds: 10
       volumes:
         - name: grafana-pv
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: grafana-data
         - name: grafana-datasources
           configMap:
             name: grafana-datasources
+        - name: grafana-dashboards
+          configMap:
+            name: grafana-tenant-dashboards
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: grafana-service
   namespace: analytics-platform
+  labels:
+    app: grafana
+    component: monitoring
 spec:
   selector:
     app: grafana
   ports:
-    - port: 3000
+    - port: 80
       targetPort: 3000
       protocol: TCP
+      name: http
   type: ClusterIP
 ---
 apiVersion: v1
@@ -102,6 +139,9 @@ kind: ConfigMap
 metadata:
   name: grafana-datasources
   namespace: analytics-platform
+  labels:
+    app: grafana
+    component: monitoring
 data:
   prometheus.yaml: |-
     apiVersion: 1
@@ -110,4 +150,8 @@ data:
         type: prometheus
         access: proxy
         url: http://prometheus:9090
-        isDefault: true 
+        isDefault: true
+        jsonData:
+          timeInterval: "5s"
+          queryTimeout: "30s"
+        editable: true

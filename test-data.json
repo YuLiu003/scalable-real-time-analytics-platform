@@ -1,6 +1,0 @@
-{
-  "device_id": "test-device-001",
-  "temperature": 25.5,
-  "humidity": 60,
-  "tenant_id": "tenant1"
-} 

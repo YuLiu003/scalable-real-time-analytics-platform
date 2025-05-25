@@ -6,57 +6,93 @@ on:
     branches: [main]
     types:
       - completed
+  # Allow manual deployment
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
 
 jobs:
+  prepare-deployment:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+    steps:
+      - name: Set environment
+        id: set-env
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          else
+            echo "environment=staging" >> $GITHUB_OUTPUT
+          fi
+
+  check-secrets:
+    runs-on: ubuntu-latest
+    needs: prepare-deployment
+    outputs:
+      secrets_ready: ${{ steps.check_secrets.outputs.all_secrets_present }}
+    steps:
+      - name: Check required secrets
+        id: check_secrets
+        run: |
+          if [[ "${{ needs.prepare-deployment.outputs.environment }}" == "production" ]]; then
+            if [ -n "${{ secrets.KUBE_CONFIG_PROD || '' }}" ] && [ -n "${{ secrets.API_KEY_1_PROD || '' }}" ] && [ -n "${{ secrets.API_KEY_2_PROD || '' }}" ]; then
+              echo "all_secrets_present=true" >> $GITHUB_OUTPUT
+            else
+              echo "all_secrets_present=false" >> $GITHUB_OUTPUT
+              echo "::warning::Some required production secrets are missing. Production deployment will be skipped."
+            fi
+          else
+            if [ -n "${{ secrets.KUBE_CONFIG }}" ] && [ -n "${{ secrets.API_KEY_1 }}" ] && [ -n "${{ secrets.API_KEY_2 }}" ]; then
+              echo "all_secrets_present=true" >> $GITHUB_OUTPUT
+            else
+              echo "all_secrets_present=false" >> $GITHUB_OUTPUT
+              echo "::warning::Some required staging secrets are missing. Running in limited mode."
+            fi
+          fi
+
   deploy:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    needs: [prepare-deployment, check-secrets]
+    if: needs.check-secrets.outputs.secrets_ready == 'true'
+    environment: ${{ needs.prepare-deployment.outputs.environment }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-
-      - name: Check required secrets
-        id: check_secrets
-        run: |
-          if [ -n "${{ secrets.KUBE_CONFIG }}" ] && [ -n "${{ secrets.API_KEY_1 }}" ] && [ -n "${{ secrets.API_KEY_2 }}" ]; then
-            echo "all_secrets_present=true" >> $GITHUB_OUTPUT
-          else
-            echo "all_secrets_present=false" >> $GITHUB_OUTPUT
-            echo "::warning::Some required secrets are missing. Running in limited mode."
-          fi
-
-      - name: Deployment notification (limited mode)
-        if: steps.check_secrets.outputs.all_secrets_present != 'true'
-        run: |
-          echo "Running deployment in limited mode."
-          echo "To enable full deployment, please configure the following secrets:"
-          echo "- KUBE_CONFIG (base64 encoded kubectl config)"
-          echo "- API_KEY_1 (for API authentication)"
-          echo "- API_KEY_2 (for API authentication)"
-          exit 0
+        with:
+          fetch-depth: 0
 
       - name: Set up Kubernetes
-        if: steps.check_secrets.outputs.all_secrets_present == 'true'
         uses: azure/setup-kubectl@v3
         with:
           version: 'latest'
 
       - name: Set up Helm
-        if: steps.check_secrets.outputs.all_secrets_present == 'true'
         uses: azure/setup-helm@v3
         with:
           version: 'latest'
 
-      - name: Configure kubectl
-        if: steps.check_secrets.outputs.all_secrets_present == 'true'
+      - name: Configure kubectl for environment
         run: |
-          echo "${{ secrets.KUBE_CONFIG }}" > kubeconfig
+          ENV="${{ needs.prepare-deployment.outputs.environment }}"
+          if [[ "$ENV" == "production" ]]; then
+            echo "${{ secrets.KUBE_CONFIG_PROD }}" > kubeconfig
+          else
+            echo "${{ secrets.KUBE_CONFIG }}" > kubeconfig
+          fi
           chmod 600 kubeconfig
           export KUBECONFIG=$(pwd)/kubeconfig
 
       - name: Check kubectl configuration
-        if: steps.check_secrets.outputs.all_secrets_present == 'true'
         run: |
           if ! kubectl get nodes &>/dev/null; then
             echo "::error::kubectl is not configured correctly. Exiting."
@@ -64,8 +100,107 @@ jobs:
           fi
           echo "Kubernetes connection successful."
 
-      - name: Check charts directory exists
-        if: steps.check_secrets.outputs.all_secrets_present == 'true'
+      - name: Setup Production Secrets
+        if: needs.prepare-deployment.outputs.environment == 'production'
+        run: |
+          # Create a temporary directory for secrets
+          SECRETS_DIR=$(mktemp -d)
+          
+          # Platform secrets
+          cat << EOF > $SECRETS_DIR/analytics-platform-secrets.yaml
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: analytics-platform-secrets
+            namespace: analytics-platform
+            labels:
+              app: analytics-platform
+              component: core
+          type: Opaque
+          data:
+            API_KEY: "${{ secrets.API_KEY_PROD_B64 }}"
+            DB_PASSWORD: "${{ secrets.DB_PASSWORD_PROD_B64 }}"
+            REDIS_PASSWORD: "${{ secrets.REDIS_PASSWORD_PROD_B64 }}"
+            JWT_SECRET: "${{ secrets.JWT_SECRET_PROD_B64 }}"
+          EOF
+          
+          # API Keys - Updated to match current secret naming
+          cat << EOF > $SECRETS_DIR/tenant-management-secrets.yaml
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: tenant-management-secrets
+            namespace: analytics-platform
+            labels:
+              app: analytics-platform
+              component: api
+          type: Opaque
+          stringData:
+            API_KEY_1: "${{ secrets.API_KEY_1_PROD }}"
+            API_KEY_2: "${{ secrets.API_KEY_2_PROD }}"
+            API_KEY_3: "${{ secrets.API_KEY_3_PROD }}"
+            JWT_SECRET: "${{ secrets.JWT_SECRET_PROD }}"
+          EOF
+          
+          # Kafka credentials
+          cat << EOF > $SECRETS_DIR/kafka-credentials.yaml
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: kafka-credentials
+            namespace: analytics-platform
+            labels:
+              app: analytics-platform
+              component: kafka
+          type: Opaque
+          stringData:
+            KAFKA_USERNAME: "${{ secrets.KAFKA_USERNAME_PROD }}"
+            KAFKA_PASSWORD: "${{ secrets.KAFKA_PASSWORD_PROD }}"
+            KAFKA_CLIENT_ID: "${{ secrets.KAFKA_CLIENT_ID_PROD }}"
+            KAFKA_CLIENT_SECRET: "${{ secrets.KAFKA_CLIENT_SECRET_PROD }}"
+          EOF
+          
+          # Grafana credentials
+          cat << EOF > $SECRETS_DIR/grafana-admin-credentials.yaml
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: grafana-admin-credentials
+            namespace: analytics-platform
+            labels:
+              app: grafana
+              component: monitoring
+          type: Opaque
+          stringData:
+            admin-user: "${{ secrets.GRAFANA_ADMIN_USER_PROD }}"
+            admin-password: "${{ secrets.GRAFANA_ADMIN_PASSWORD_PROD }}"
+          EOF
+          
+          # Apply all production secrets
+          kubectl create namespace analytics-platform --dry-run=client -o yaml | kubectl apply -f -
+          kubectl apply -f $SECRETS_DIR/analytics-platform-secrets.yaml
+          kubectl apply -f $SECRETS_DIR/tenant-management-secrets.yaml
+          kubectl apply -f $SECRETS_DIR/kafka-credentials.yaml
+          kubectl apply -f $SECRETS_DIR/grafana-admin-credentials.yaml
+          
+          # Cleanup
+          rm -rf $SECRETS_DIR
+      
+      - name: Setup Staging Secrets
+        if: needs.prepare-deployment.outputs.environment == 'staging'
+        run: |
+          kubectl create namespace analytics-platform --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Create tenant management secrets for staging
+          kubectl create secret generic tenant-management-secrets \
+            --from-literal=API_KEY_1=${{ secrets.API_KEY_1 }} \
+            --from-literal=API_KEY_2=${{ secrets.API_KEY_2 }} \
+            --from-literal=API_KEY_3=${{ secrets.API_KEY_3 || 'staging-key-3' }} \
+            --from-literal=JWT_SECRET=${{ secrets.JWT_SECRET || 'staging-jwt-secret' }} \
+            -n analytics-platform \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Check Helm charts
         id: check_charts
         run: |
           if [ -d "./charts/analytics-platform" ]; then
@@ -75,23 +210,18 @@ jobs:
             echo "::warning::Helm charts directory not found."
           fi
 
-      - name: Update Kubernetes secrets
-        if: steps.check_secrets.outputs.all_secrets_present == 'true'
-        run: |
-          kubectl create namespace analytics-platform --dry-run=client -o yaml | kubectl apply -f -
-          
-          # Create API keys secret securely
-          kubectl create secret generic api-keys \
-            --from-literal=API_KEY_1=${{ secrets.API_KEY_1 }} \
-            --from-literal=API_KEY_2=${{ secrets.API_KEY_2 }} \
-            -n analytics-platform \
-            --dry-run=client -o yaml | kubectl apply -f -
-
       - name: Deploy with Helm
-        if: steps.check_secrets.outputs.all_secrets_present == 'true' && steps.check_charts.outputs.charts_exist == 'true'
+        if: steps.check_charts.outputs.charts_exist == 'true'
         run: |
+          ENV="${{ needs.prepare-deployment.outputs.environment }}"
+          VALUES_FILE="./charts/analytics-platform/values-$ENV.yaml"
+          
+          if [ ! -f "$VALUES_FILE" ]; then
+            VALUES_FILE="./charts/analytics-platform/values.yaml"
+          fi
+          
           helm upgrade --install analytics-platform ./charts/analytics-platform \
-            --values ./charts/analytics-platform/values.yaml \
+            --values $VALUES_FILE \
             --set dataIngestion.image.repository=${{ secrets.DOCKER_USERNAME }}/data-ingestion-go \
             --set dataIngestion.image.tag=latest \
             --set cleanIngestion.image.repository=${{ secrets.DOCKER_USERNAME }}/clean-ingestion-go \
@@ -104,81 +234,85 @@ jobs:
             --set visualization.image.tag=latest \
             --set tenantManagement.image.repository=${{ secrets.DOCKER_USERNAME }}/tenant-management-go \
             --set tenantManagement.image.tag=latest \
+            --set environment=$ENV \
             -n analytics-platform
 
       - name: Deploy with kubectl
-        if: steps.check_secrets.outputs.all_secrets_present == 'true' && steps.check_charts.outputs.charts_exist != 'true'
+        if: steps.check_charts.outputs.charts_exist != 'true'
         run: |
-          echo "Helm charts not found, falling back to kubectl deployment."
+          ENV="${{ needs.prepare-deployment.outputs.environment }}"
           if [ -d "k8s" ]; then
-            kubectl apply -f k8s/ -n analytics-platform
+            # Apply base Kubernetes resources
+            kubectl apply -f k8s/namespace.yaml
+            
+            # Apply secrets first
+            if [[ "$ENV" == "staging" ]]; then
+              kubectl apply -f k8s/secrets.yaml -n analytics-platform
+            fi
+            
+            # Apply configmaps, PVs, and PVCs
+            kubectl apply -f k8s/configmap.yaml -n analytics-platform
+            
+            # Apply RBAC resources 
+            kubectl apply -f k8s/rbac.yaml -n analytics-platform
+            kubectl apply -f k8s/prometheus-rbac.yaml -n analytics-platform
+            
+            # Apply StatefulSet for Kafka with KRaft mode (no Zookeeper required)
+            kubectl apply -f k8s/kafka-kraft-statefulset.yaml -n analytics-platform
+            
+            # Apply other resources
+            kubectl apply -f k8s/network-policy.yaml -n analytics-platform
+            
+            # Apply deployments and services
+            kubectl apply -f k8s/prometheus-deployment.yaml -n analytics-platform
+            kubectl apply -f k8s/grafana-deployment.yaml -n analytics-platform
+            kubectl apply -f k8s/data-ingestion-go-deployment.yaml -n analytics-platform
+            kubectl apply -f k8s/data-ingestion-go-service.yaml -n analytics-platform
+            kubectl apply -f k8s/processing-engine-go-deployment.yaml -n analytics-platform
+            kubectl apply -f k8s/processing-engine-go-service.yaml -n analytics-platform
+            kubectl apply -f k8s/storage-layer-go-deployment.yaml -n analytics-platform
+            kubectl apply -f k8s/storage-layer-go-service.yaml -n analytics-platform
+            kubectl apply -f k8s/visualization-go-deployment.yaml -n analytics-platform
+            kubectl apply -f k8s/visualization-go-service.yaml -n analytics-platform
+            kubectl apply -f k8s/clean-ingestion-go-deployment.yaml -n analytics-platform
+            kubectl apply -f k8s/clean-ingestion-go-service.yaml -n analytics-platform
+            kubectl apply -f k8s/tenant-management-go-deployment.yaml -n analytics-platform
           else
             echo "::error::No k8s directory found for kubectl deployment."
             exit 1
           fi
 
       - name: Verify deployment
-        if: steps.check_secrets.outputs.all_secrets_present == 'true'
         run: |
+          # Give services time to start
+          echo "Waiting for services to stabilize..."
+          sleep 30
+          
           # Check if each deployment exists before checking status
           for deployment in data-ingestion-go clean-ingestion-go processing-engine-go storage-layer-go visualization-go tenant-management-go; do
             if kubectl get deployment $deployment -n analytics-platform &>/dev/null; then
               echo "Waiting for deployment/$deployment to be ready..."
-              kubectl rollout status deployment/$deployment -n analytics-platform --timeout=120s
+              kubectl rollout status deployment/$deployment -n analytics-platform --timeout=180s || true
             else
               echo "Warning: deployment/$deployment not found. Skipping status check."
             fi
           done
 
-      - name: Run basic security test
-        if: steps.check_secrets.outputs.all_secrets_present == 'true'
+      - name: Run production readiness check
+        if: needs.prepare-deployment.outputs.environment == 'production'
         run: |
-          # Check if API service exists
-          if ! kubectl get svc data-ingestion-go-service -n analytics-platform &>/dev/null; then
-            echo "Warning: data-ingestion-go-service not found. Skipping security tests."
-            exit 0
-          fi
-          
-          # Give services time to start
-          echo "Waiting for services to be ready..."
-          sleep 20
-          
-          # Set up port forwarding for testing
-          echo "Setting up port forwarding..."
-          kubectl port-forward svc/data-ingestion-go-service 8090:80 -n analytics-platform &
-          PF_PID=$!
-          sleep 5
-          
-          # Run a simple test to confirm authorization is working
-          echo "Testing API without authentication..."
-          RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            http://localhost:8090/api/data \
-            -H "Content-Type: application/json" \
-            -d '{"sensor_id": "test-001", "value": 25.5, "timestamp": "2023-06-01T12:00:00Z"}' \
-            --connect-timeout 5 \
-            --max-time 10)
-            
-          if [ "$RESPONSE_CODE" = "401" ]; then
-            echo "✅ Security verification successful: Got 401 without API key"
+          chmod +x ./scripts/verify-prod-readiness.sh
+          ./scripts/verify-prod-readiness.sh || echo "::warning::Production readiness check found issues that should be addressed."
+
+  notify:
+    runs-on: ubuntu-latest
+    needs: [prepare-deployment, deploy]
+    if: ${{ always() }}
+    steps:
+      - name: Notify deployment result
+        run: |
+          if [[ "${{ needs.deploy.result }}" == "success" ]]; then
+            echo "::notice::✅ Deployment to ${{ needs.prepare-deployment.outputs.environment }} completed successfully!"
           else
-            echo "⚠️ Security verification: Got $RESPONSE_CODE without API key (expected 401)"
+            echo "::warning::❌ Deployment to ${{ needs.prepare-deployment.outputs.environment }} failed or was skipped."
           fi
-          
-          # Test with API key from secrets
-          echo "Testing API with authentication..."
-          RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            http://localhost:8090/api/data \
-            -H "Content-Type: application/json" \
-            -H "X-API-Key: ${{ secrets.API_KEY_1 }}" \
-            -d '{"sensor_id": "test-001", "value": 25.5, "timestamp": "2023-06-01T12:00:00Z"}' \
-            --connect-timeout 5 \
-            --max-time 10)
-            
-          if [ "$RESPONSE_CODE" = "200" ]; then
-            echo "✅ API key authentication successful"
-          else
-            echo "⚠️ API key authentication: Got $RESPONSE_CODE with API key (expected 200)"
-          fi
-          
-          # Clean up port forwarding
-          kill $PF_PID

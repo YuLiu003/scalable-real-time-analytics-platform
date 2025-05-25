@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -47,7 +48,7 @@ var (
 // Processor handles the processing of data from Kafka
 type Processor struct {
 	cfg           *config.Config
-	consumer      sarama.Consumer
+	consumerGroup sarama.ConsumerGroup
 	producer      sarama.SyncProducer
 	processedData models.ProcessedStats
 	status        models.ProcessingStatus
@@ -68,11 +69,12 @@ func NewProcessor(cfg *config.Config) (*Processor, error) {
 		done: make(chan struct{}),
 	}
 
-	// Initialize temperature min/max values
-	p.processedData.Temperature.Min = math.Inf(1)
-	p.processedData.Temperature.Max = math.Inf(-1)
-	p.processedData.Humidity.Min = math.Inf(1)
-	p.processedData.Humidity.Max = math.Inf(-1)
+	// Initialize temperature min/max values with realistic defaults
+	// These will be updated when first data arrives
+	p.processedData.Temperature.Min = 999999  // Will be updated on first temperature reading
+	p.processedData.Temperature.Max = -999999 // Will be updated on first temperature reading
+	p.processedData.Humidity.Min = 999999     // Will be updated on first humidity reading
+	p.processedData.Humidity.Max = -999999    // Will be updated on first humidity reading
 
 	return p, nil
 }
@@ -90,7 +92,8 @@ func (p *Processor) Start() error {
 	config.Producer.Return.Successes = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
 	config.Producer.Retry.Max = 5
-	config.Consumer.Offsets.Initial = sarama.OffsetNewest
+	config.Consumer.Offsets.Initial = sarama.OffsetOldest
+	config.Consumer.Group.Rebalance.Strategy = sarama.BalanceStrategyRoundRobin
 
 	// Add connection timeout
 	config.Net.DialTimeout = 10 * time.Second
@@ -103,14 +106,14 @@ func (p *Processor) Start() error {
 
 	var consumerErr, producerErr error
 
-	// Create consumer with retries
+	// Create consumer group with retries
 	for retry := 0; retry < maxRetries; retry++ {
-		p.consumer, consumerErr = sarama.NewConsumer([]string{p.cfg.KafkaBroker}, config)
+		p.consumerGroup, consumerErr = sarama.NewConsumerGroup([]string{p.cfg.KafkaBroker}, "processing-engine-group", config)
 		if consumerErr == nil {
 			break
 		}
 
-		log.Printf("Failed to connect to Kafka consumer (attempt %d/%d): %v",
+		log.Printf("Failed to connect to Kafka consumer group (attempt %d/%d): %v",
 			retry+1, maxRetries, consumerErr)
 
 		if retry < maxRetries-1 {
@@ -120,7 +123,7 @@ func (p *Processor) Start() error {
 	}
 
 	if consumerErr != nil {
-		return fmt.Errorf("failed to create consumer after %d attempts: %v", maxRetries, consumerErr)
+		return fmt.Errorf("failed to create consumer group after %d attempts: %v", maxRetries, consumerErr)
 	}
 
 	// Create producer with retries
@@ -140,43 +143,11 @@ func (p *Processor) Start() error {
 	}
 
 	if producerErr != nil {
-		// Clean up consumer if producer fails
-		if p.consumer != nil {
-			p.consumer.Close()
+		// Clean up consumer group if producer fails
+		if p.consumerGroup != nil {
+			p.consumerGroup.Close()
 		}
 		return fmt.Errorf("failed to create producer after %d attempts: %v", maxRetries, producerErr)
-	}
-
-	// Get the partition consumer with retries
-	var partitionConsumer sarama.PartitionConsumer
-	var partitionErr error
-
-	for retry := 0; retry < maxRetries; retry++ {
-		partitionConsumer, partitionErr = p.consumer.ConsumePartition(
-			p.cfg.InputTopic, 0, sarama.OffsetNewest)
-		if partitionErr == nil {
-			break
-		}
-
-		log.Printf("Failed to create partition consumer (attempt %d/%d): %v",
-			retry+1, maxRetries, partitionErr)
-
-		if retry < maxRetries-1 {
-			log.Printf("Retrying in %v...", retryDelay)
-			time.Sleep(retryDelay)
-		}
-	}
-
-	if partitionErr != nil {
-		// Clean up resources
-		if p.consumer != nil {
-			p.consumer.Close()
-		}
-		if p.producer != nil {
-			p.producer.Close()
-		}
-		return fmt.Errorf("failed to create partition consumer after %d attempts: %v",
-			maxRetries, partitionErr)
 	}
 
 	p.mu.Lock()
@@ -185,7 +156,7 @@ func (p *Processor) Start() error {
 	p.mu.Unlock()
 
 	// Start processing messages in a goroutine
-	go p.processMessages(partitionConsumer)
+	go p.consumeMessages()
 
 	log.Printf("Processing engine started. Input topic: %s, Output topic: %s",
 		p.cfg.InputTopic, p.cfg.OutputTopic)
@@ -201,39 +172,79 @@ func (p *Processor) Stop() {
 
 	close(p.done)
 
-	if p.consumer != nil {
-		p.consumer.Close()
+	if p.consumerGroup != nil {
+		p.consumerGroup.Close()
 	}
 	if p.producer != nil {
 		p.producer.Close()
 	}
 }
 
-// processMessages continuously processes messages from Kafka
-func (p *Processor) processMessages(partitionConsumer sarama.PartitionConsumer) {
+// consumeMessages starts the consumer group and processes messages
+func (p *Processor) consumeMessages() {
+	ctx := context.Background()
+	handler := &ProcessorHandler{processor: p}
+
 	for {
 		select {
 		case <-p.done:
 			return
-		case msg := <-partitionConsumer.Messages():
+		default:
+			if err := p.consumerGroup.Consume(ctx, []string{p.cfg.InputTopic}, handler); err != nil {
+				log.Printf("Error consuming messages: %v", err)
+				time.Sleep(time.Second)
+			}
+		}
+	}
+}
+
+// ProcessorHandler implements sarama.ConsumerGroupHandler
+type ProcessorHandler struct {
+	processor *Processor
+}
+
+// Setup is run at the beginning of a new session, before ConsumeClaim
+func (h *ProcessorHandler) Setup(sarama.ConsumerGroupSession) error {
+	return nil
+}
+
+// Cleanup is run at the end of a session, once all ConsumeClaim goroutines have exited
+func (h *ProcessorHandler) Cleanup(sarama.ConsumerGroupSession) error {
+	return nil
+}
+
+// ConsumeClaim must start a consumer loop of ConsumerGroupClaim's Messages()
+func (h *ProcessorHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+	for {
+		select {
+		case message := <-claim.Messages():
+			if message == nil {
+				return nil
+			}
+
+			log.Printf("Received message from topic %s, partition %d, offset %d",
+				message.Topic, message.Partition, message.Offset)
+
 			// Process the message
 			var rawData models.SensorData
-			if err := json.Unmarshal(msg.Value, &rawData); err != nil {
+			if err := json.Unmarshal(message.Value, &rawData); err != nil {
 				log.Printf("Error unmarshaling message: %v", err)
 				messagesProcessed.WithLabelValues("error").Inc()
-				p.mu.Lock()
-				p.status.Errors++
-				p.mu.Unlock()
+				h.processor.mu.Lock()
+				h.processor.status.Errors++
+				h.processor.mu.Unlock()
+				session.MarkMessage(message, "")
 				continue
 			}
 
-			result, err := p.processData(rawData)
+			result, err := h.processor.processData(rawData)
 			if err != nil {
 				log.Printf("Error processing data: %v", err)
 				messagesProcessed.WithLabelValues("error").Inc()
-				p.mu.Lock()
-				p.status.Errors++
-				p.mu.Unlock()
+				h.processor.mu.Lock()
+				h.processor.status.Errors++
+				h.processor.mu.Unlock()
+				session.MarkMessage(message, "")
 				continue
 			}
 
@@ -241,23 +252,33 @@ func (p *Processor) processMessages(partitionConsumer sarama.PartitionConsumer) 
 			resultBytes, err := json.Marshal(result)
 			if err != nil {
 				log.Printf("Error marshaling result: %v", err)
+				session.MarkMessage(message, "")
 				continue
 			}
 
-			_, _, err = p.producer.SendMessage(&sarama.ProducerMessage{
-				Topic: p.cfg.OutputTopic,
+			_, _, err = h.processor.producer.SendMessage(&sarama.ProducerMessage{
+				Topic: h.processor.cfg.OutputTopic,
 				Value: sarama.ByteEncoder(resultBytes),
 			})
 			if err != nil {
 				log.Printf("Error sending message to Kafka: %v", err)
+				session.MarkMessage(message, "")
 				continue
 			}
 
+			log.Printf("Successfully processed and sent message to %s", h.processor.cfg.OutputTopic)
+
 			// Update status
-			p.mu.Lock()
-			p.status.MessagesProcessed++
-			p.status.LastProcessed = time.Now().Format(time.RFC3339)
-			p.mu.Unlock()
+			h.processor.mu.Lock()
+			h.processor.status.MessagesProcessed++
+			h.processor.status.LastProcessed = time.Now().Format(time.RFC3339)
+			h.processor.mu.Unlock()
+
+			// Mark message as processed
+			session.MarkMessage(message, "")
+
+		case <-session.Context().Done():
+			return nil
 		}
 	}
 }
@@ -332,8 +353,16 @@ func (p *Processor) processData(data models.SensorData) (*models.ProcessedDataPa
 		p.mu.Lock()
 		p.processedData.Temperature.Count++
 		p.processedData.Temperature.Sum += *data.Temperature
-		p.processedData.Temperature.Min = math.Min(p.processedData.Temperature.Min, *data.Temperature)
-		p.processedData.Temperature.Max = math.Max(p.processedData.Temperature.Max, *data.Temperature)
+
+		// Handle first temperature reading
+		if p.processedData.Temperature.Count == 1 {
+			p.processedData.Temperature.Min = *data.Temperature
+			p.processedData.Temperature.Max = *data.Temperature
+		} else {
+			p.processedData.Temperature.Min = math.Min(p.processedData.Temperature.Min, *data.Temperature)
+			p.processedData.Temperature.Max = math.Max(p.processedData.Temperature.Max, *data.Temperature)
+		}
+
 		p.processedData.Temperature.Avg = p.processedData.Temperature.Sum / float64(p.processedData.Temperature.Count)
 		p.mu.Unlock()
 	}
@@ -342,8 +371,16 @@ func (p *Processor) processData(data models.SensorData) (*models.ProcessedDataPa
 		p.mu.Lock()
 		p.processedData.Humidity.Count++
 		p.processedData.Humidity.Sum += *data.Humidity
-		p.processedData.Humidity.Min = math.Min(p.processedData.Humidity.Min, *data.Humidity)
-		p.processedData.Humidity.Max = math.Max(p.processedData.Humidity.Max, *data.Humidity)
+
+		// Handle first humidity reading
+		if p.processedData.Humidity.Count == 1 {
+			p.processedData.Humidity.Min = *data.Humidity
+			p.processedData.Humidity.Max = *data.Humidity
+		} else {
+			p.processedData.Humidity.Min = math.Min(p.processedData.Humidity.Min, *data.Humidity)
+			p.processedData.Humidity.Max = math.Max(p.processedData.Humidity.Max, *data.Humidity)
+		}
+
 		p.processedData.Humidity.Avg = p.processedData.Humidity.Sum / float64(p.processedData.Humidity.Count)
 		p.mu.Unlock()
 	}

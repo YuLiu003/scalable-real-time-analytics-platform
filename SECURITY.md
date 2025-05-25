@@ -15,13 +15,13 @@ To use the API, include a valid API key in your requests:
 # When accessing the API locally through port-forwarding
 curl -X POST http://localhost:8090/api/data \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: test-key-1" \
+  -H "X-API-Key: YOUR_API_KEY_HERE" \
   -d '{"device_id": "test-001", "temperature": 25.5, "humidity": 60}'
 
 # When accessing through the Kubernetes cluster
 curl -X POST http://<cluster-ip>/api/data \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: test-key-1" \
+  -H "X-API-Key: YOUR_API_KEY_HERE" \
   -d '{"device_id": "test-001", "temperature": 25.5, "humidity": 60}'
 ```
 

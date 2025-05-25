@@ -3,7 +3,27 @@
 *sensitive*.yaml
 k8s/dev-*.yaml
 
-# Local development
+# Production and development credentials
+production-secrets/
+dev-secrets/
+*.credentials
+credentials.*
+secure_credentials.*
+*-secure.*
+
+# API keys and tokens
+*.apikey
+*.token
+*.key.json
+auth-keys.*
+oauth.*
+
+# Backup files containing sensitive data
+*.backup
+*.bak
+*.old
+
+# Environment files
 .env
 .env.*
 *.local
@@ -187,3 +207,53 @@ venv/
 archive/python-components/
 # Archived files from Go migration
 archive/redundant-files/
+
+# Go compiled binaries and build artifacts
+**/data-ingestion
+**/clean-ingestion
+**/processing-engine-go
+**/processing-engine-go-new
+**/visualization-go
+**/admin-ui-go
+**/storage-layer-go
+**/tenant-management-go
+
+# Go build outputs
+*.test
+*.out
+**/build_output.txt
+
+# Test data files
+large_payload*.json
+*payload*.json
+test-data.json
+recent_logs.txt
+
+# CRITICAL SECURITY ITEMS REMOVED (May 25, 2025)
+
+# ❌ IMMEDIATE SECURITY FIXES APPLIED:
+k8s/secrets-secure.yaml
+
+# Additional security patterns
+*secrets-secure*
+*production-secrets*
+*.env.production
+*.env.prod
+*prod-secrets*
+*staging-secrets*
+
+# Private key patterns
+*private*key*
+*id_rsa*
+*id_ed25519*
+*.p12
+*.pfx
+
+# Database dumps and sensitive data
+*.sql.gz
+*.dump
+*backup*.sql
+
+# Configuration with secrets
+*config.prod*
+*settings.production*

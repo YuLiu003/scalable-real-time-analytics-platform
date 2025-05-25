@@ -1,0 +1,175 @@
+# Recommended resource settings:
+# - For local development (Minikube):
+#     requests: 1Gi RAM, 300m CPU; limits: 2Gi RAM, 600m CPU
+# - For production:
+#     requests: 2Gi RAM, 1000m CPU; limits: 4Gi RAM, 2000m CPU (or higher, depending on workload)
+# Adjust the StatefulSet spec below as needed for your environment.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: analytics-platform
+spec:
+  ports:
+  - port: 9092
+    name: kafka
+  - port: 9093
+    name: controller
+  selector:
+    app: kafka
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-headless
+  namespace: analytics-platform
+spec:
+  clusterIP: None
+  ports:
+  - port: 9092
+    name: kafka
+  - port: 9093
+    name: controller
+  selector:
+    app: kafka
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka
+  namespace: analytics-platform
+spec:
+  serviceName: "kafka-headless"
+  # Single node Kafka
+  replicas: 1
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9092"
+    spec:
+      # DNS config still included for better resolution
+      dnsPolicy: ClusterFirst
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"
+          - name: timeout
+            value: "2"
+          - name: attempts
+            value: "5"
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - kafka
+              topologyKey: kubernetes.io/hostname
+      terminationGracePeriodSeconds: 180
+      securityContext:
+        fsGroup: 1001
+      containers:
+      - name: kafka
+        image: bitnami/kafka:3.5.1
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: ALLOW_PLAINTEXT_LISTENER
+          value: "yes"
+        - name: BITNAMI_DEBUG
+          value: "true"  # Enable debug to get more verbose logs
+        - name: KAFKA_ENABLE_KRAFT
+          value: "yes"
+        - name: KAFKA_CFG_NODE_ID
+          value: "0"
+        - name: KAFKA_CFG_PROCESS_ROLES
+          value: "broker,controller"
+        - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
+          value: "CONTROLLER"
+        - name: KAFKA_CFG_LISTENERS
+          value: "PLAINTEXT://:9092,CONTROLLER://:9093"
+        - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
+          value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+        - name: KAFKA_CFG_ADVERTISED_LISTENERS
+          value: "PLAINTEXT://:9092"
+        # Simplified quorum voters config for single node
+        - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
+          value: "0@localhost:9093"
+        - name: KAFKA_KRAFT_CLUSTER_ID
+          value: "abcdefghijklmnopqrstuv"
+        - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
+          value: "true"
+        - name: KAFKA_HEAP_OPTS
+          value: "-Xms2g -Xmx3g"
+        - name: KAFKA_CFG_LOG_RETENTION_HOURS
+          value: "168"
+        # Reduced replication factors for single node
+        - name: KAFKA_CFG_DEFAULT_REPLICATION_FACTOR
+          value: "1"
+        - name: KAFKA_CFG_MIN_INSYNC_REPLICAS
+          value: "1" 
+        - name: KAFKA_CFG_NUM_PARTITIONS
+          value: "6"
+        - name: KAFKA_CFG_LOG_FLUSH_INTERVAL_MESSAGES
+          value: "10000"
+        - name: KAFKA_CFG_LOG_FLUSH_INTERVAL_MS
+          value: "1000"
+        - name: KAFKA_CFG_SOCKET_REQUEST_MAX_BYTES
+          value: "268435456"
+        - name: KAFKA_CFG_MESSAGE_MAX_BYTES
+          value: "268435456"
+        - name: KAFKA_CFG_MAX_MESSAGE_BYTES
+          value: "268435456"
+        - name: KAFKA_CFG_NUM_RECOVERY_THREADS_PER_DATA_DIR
+          value: "2"
+        # Reduced replication factors for single node
+        - name: KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR
+          value: "1"
+        - name: KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
+          value: "1"
+        - name: KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR
+          value: "1"
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "500m"
+          limits:
+            memory: "8Gi"
+            cpu: "2000m"
+        volumeMounts:
+        - name: data
+          mountPath: /bitnami/kafka
+        livenessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 90
+          periodSeconds: 20
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          tcpSocket:
+            port: 9092
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 10
+          successThreshold: 1
+          failureThreshold: 3
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 50Gi 

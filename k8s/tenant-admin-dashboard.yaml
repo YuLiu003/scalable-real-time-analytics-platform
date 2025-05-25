@@ -106,7 +106,7 @@ data:
           <tbody>
             <tr>
               <td>tenant1</td>
-              <td>test-key-1</td>
+              <td>api-key-***-tenant1</td>
               <td><span class="status status-active">Active</span></td>
               <td>2023-08-15</td>
               <td>1,245</td>
@@ -117,7 +117,7 @@ data:
             </tr>
             <tr>
               <td>tenant2</td>
-              <td>test-key-2</td>
+              <td>api-key-***-tenant2</td>
               <td><span class="status status-active">Active</span></td>
               <td>2023-08-17</td>
               <td>893</td>

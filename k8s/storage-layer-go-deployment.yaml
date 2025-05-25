@@ -23,7 +23,7 @@ spec:
       containers:
       - name: storage-layer-go
         image: storage-layer-go:latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Never
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -42,7 +42,7 @@ spec:
           valueFrom:
             configMapKeyRef:
               name: platform-config
-              key: KAFKA_TOPIC
+              key: KAFKA_PROCESSED_TOPIC
         - name: DB_PATH
           value: "/data/analytics.db"
         resources:

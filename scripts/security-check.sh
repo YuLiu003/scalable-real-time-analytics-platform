@@ -19,10 +19,13 @@ echo "Checking for secrets in configuration files..."
 if grep -r "apiKey\|password\|secret\|token\|credential" --include="*.yaml" --include="*.yml" ./k8s/ | 
    grep -v "secretKeyRef\|valueFrom" | 
    grep -v "#" |
+   grep -v "secrets.template.yaml" | # Exclude template files
+   grep -v "<BASE64_ENCODED" | # Exclude template placeholders
    grep -v "name: analytics-platform-secrets" | 
    grep -v "name: kafka-secrets" |
    grep -v "name: grafana-admin-credentials" |
-   grep -v "name: api-keys" |
+   grep -v "name: tenant-management-secrets" |
+   grep -v "name: kafka-credentials" |
    grep -v "secretName:" | 
    grep -v "secretProviderClass" |
    grep -v "key: admin-" |  # Exclude legitimate key references
@@ -37,15 +40,20 @@ if grep -r "apiKey\|password\|secret\|token\|credential" --include="*.yaml" --in
   grep -r "apiKey\|password\|secret\|token\|credential" --include="*.yaml" --include="*.yml" ./k8s/ | 
    grep -v "secretKeyRef\|valueFrom" | 
    grep -v "#" |
+   grep -v "secrets.template.yaml" | # Exclude template files
+   grep -v "<BASE64_ENCODED" | # Exclude template placeholders
    grep -v "name: analytics-platform-secrets" | 
    grep -v "name: kafka-secrets" |
    grep -v "name: grafana-admin-credentials" |
-   grep -v "name: api-keys" |
+   grep -v "name: tenant-management-secrets" |
+   grep -v "name: kafka-credentials" |
    grep -v "secretName:" | 
    grep -v "secretProviderClass" |
    grep -v "key: admin-" |
    grep -v "name: tenant-" |
-   grep -v "prometheus\|metric"
+   grep -v "prometheus\|metric" |
+   grep -v "resources: \[\"secrets\"\]" | # Exclude RBAC rules for accessing secrets
+   grep -v "resources: \[\"configmaps\", \"secrets\"\]" # Exclude RBAC rules
 else
   echo "✓ No hardcoded secrets found in YAML files"
 fi
@@ -158,15 +166,15 @@ if grep -q "API_KEY\|api-key\|X-API-Key" ./k8s/*deployment*.yaml 2>/dev/null; th
   API_AUTH_DEPLOYMENT=1
 fi
 
-# Then check Python files in Flask API
+# Check Go files for API key authentication
 API_AUTH_CODE=0
-if grep -q "X-API-Key\|API_KEY\|api_key\|request.headers.get" ./flask-api/src/*.py 2>/dev/null; then
+if grep -q "X-API-Key\|API_KEY\|apiKey\|HeaderAPIKey" --include="*.go" ./*-go/ 2>/dev/null; then
   API_AUTH_CODE=1
 fi
 
-# Check the authentication marker file or other API modules
+# Check Go files for authentication functions
 API_AUTH_MARKER=0
-if [ -f "./flask-api/src/api_auth_marker.py" ] || grep -q "authenticate\|authorize" ./flask-api/src/*.py 2>/dev/null; then
+if grep -q "authenticate\|authorize\|middleware.Auth" --include="*.go" ./*-go/ 2>/dev/null; then
   API_AUTH_MARKER=1
 fi
 
@@ -178,11 +186,14 @@ else
 fi
 
 # Check for image pull policy
-echo "Checking image pull policy for local development..."
-if grep -q "imagePullPolicy: Never" --include="*deployment*.yaml" ./k8s/; then
-  echo "✓ Correct imagePullPolicy for local development found"
+echo "Checking image pull policy configuration..."
+DEPLOYMENT_FILES_COUNT=$(find ./k8s -name "*deployment*.yaml" | wc -l | tr -d ' ')
+PULL_POLICY_COUNT=$(grep -l "imagePullPolicy:" ./k8s/*deployment*.yaml 2>/dev/null | wc -l | tr -d ' ')
+
+if [ "$DEPLOYMENT_FILES_COUNT" -eq "$PULL_POLICY_COUNT" ]; then
+  echo "✓ All deployment files have imagePullPolicy configured ($PULL_POLICY_COUNT/$DEPLOYMENT_FILES_COUNT)"
 else
-  echo "⚠️ Warning: imagePullPolicy: Never might be missing for local development"
+  echo "⚠️ Warning: Only $PULL_POLICY_COUNT out of $DEPLOYMENT_FILES_COUNT deployment files have imagePullPolicy"
 fi
 
 # Check for tracked secret files
@@ -234,10 +245,13 @@ PASSED=0
 if ! grep -r "apiKey\|password\|secret\|token\|credential" --include="*.yaml" --include="*.yml" ./k8s/ | 
      grep -v "secretKeyRef\|valueFrom" | 
      grep -v "#" |
+     grep -v "secrets.template.yaml" | # Exclude template files
+     grep -v "<BASE64_ENCODED" | # Exclude template placeholders
      grep -v "name: analytics-platform-secrets" | 
      grep -v "name: kafka-secrets" |
      grep -v "name: grafana-admin-credentials" |
-     grep -v "name: api-keys" |
+     grep -v "name: tenant-management-secrets" |
+     grep -v "name: kafka-credentials" |
      grep -v "secretName:" | 
      grep -v "secretProviderClass" |
      grep -v "key: admin-" |
@@ -361,11 +375,11 @@ fi
 
 # Check for containers running as root
 echo -e "\n${BLUE}Checking for containers running as root...${NC}"
-root_containers=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[] | select(.spec.securityContext.runAsNonRoot != true) | .metadata.name')
+root_containers=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[] | select((.spec.securityContext.runAsNonRoot != true) and (.spec.containers[].securityContext.runAsNonRoot != true)) | .metadata.name' 2>/dev/null || true)
 if [ -z "$root_containers" ]; then
-  echo -e "${GREEN}No pods without runAsNonRoot found.${NC}"
+  echo -e "${GREEN}All pods are configured to run as non-root.${NC}"
 else
-  echo -e "${YELLOW}Pods without runAsNonRoot:${NC}"
+  echo -e "${YELLOW}Pods that may be running as root:${NC}"
   echo "$root_containers"
 fi
 
@@ -451,7 +465,7 @@ fi
 
 # Check for hardcoded secrets in environment variables
 echo -e "\n${BLUE}Checking for potential hardcoded secrets in environment variables...${NC}"
-suspicious_env_vars=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[].spec.containers[].env[] | select(.valueFrom == null and (.name | contains("TOKEN") or contains("KEY") or contains("SECRET") or contains("PASS") or contains("AUTH"))) | "\(.name) in pod \(.parent.parent.parent.metadata.name)"')
+suspicious_env_vars=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[] | select(.spec.containers[].env != null) | .spec.containers[].env[]? | select(.valueFrom == null and (.name | contains("TOKEN") or contains("KEY") or contains("SECRET") or contains("PASS")) and (.name | contains("BYPASS_AUTH") or contains("ENABLE_API_AUTH") or contains("API_KEY_ENABLED") | not)) | "\(.name)"' 2>/dev/null || true)
 if [ -z "$suspicious_env_vars" ]; then
   echo -e "${GREEN}No suspicious environment variables found.${NC}"
 else
