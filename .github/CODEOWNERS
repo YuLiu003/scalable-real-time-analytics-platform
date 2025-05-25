@@ -1,0 +1,31 @@
+# Code Owners for Real-Time Analytics Platform
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global owners - will be requested for review on all PRs
+* @YuLiu003
+
+# Service-specific owners
+/data-ingestion-go/ @YuLiu003
+/clean-ingestion-go/ @YuLiu003
+/processing-engine-go/ @YuLiu003
+/storage-layer-go/ @YuLiu003
+/visualization-go/ @YuLiu003
+/tenant-management-go/ @YuLiu003
+
+# Infrastructure and configuration
+/.github/ @YuLiu003
+/k8s/ @YuLiu003
+/terraform/ @YuLiu003
+/scripts/ @YuLiu003
+
+# Documentation
+/docs/ @YuLiu003
+README.md @YuLiu003
+*.md @YuLiu003
+
+# Security-related files
+/SECURITY.md @YuLiu003
+/*security* @YuLiu003
+
+# Performance and monitoring
+/config/performance-baselines.yaml @YuLiu003

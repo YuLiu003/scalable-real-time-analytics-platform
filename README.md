@@ -2,6 +2,9 @@
 
 A comprehensive real-time analytics platform built with Go microservices, designed for high-throughput sensor data processing and visualization. The platform provides real-time data ingestion, stream processing, storage, and interactive visualization capabilities.
 
+## 🛡️ Quality Gates Status
+This platform implements comprehensive pre-merge quality gates with 8-stage testing pipeline to ensure code quality, security, and reliability. See [Quality Gates Documentation](docs/QUALITY_GATES.md) for details.
+
 ## 🏗️ Architecture Overview
 
 The platform follows a microservices architecture with the following components:

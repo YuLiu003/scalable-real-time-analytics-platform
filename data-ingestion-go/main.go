@@ -64,12 +64,24 @@ func initAPIKeys() {
 	apiKey1 := os.Getenv("API_KEY_1")
 	apiKey2 := os.Getenv("API_KEY_2")
 
-	// Required API keys from environment variables
+	// In test mode, we allow missing API keys and will use defaults
+	// Check if we're in test mode by looking at gin mode
+	isTestMode := gin.Mode() == gin.TestMode
+
+	// Required API keys from environment variables (unless in test mode)
 	if apiKey1 == "" {
-		log.Fatal("API_KEY_1 environment variable is required")
+		if isTestMode {
+			apiKey1 = "test-key-1" // Default test key
+		} else {
+			log.Fatal("API_KEY_1 environment variable is required")
+		}
 	}
 	if apiKey2 == "" {
-		log.Fatal("API_KEY_2 environment variable is required")
+		if isTestMode {
+			apiKey2 = "test-key-2" // Default test key
+		} else {
+			log.Fatal("API_KEY_2 environment variable is required")
+		}
 	}
 
 	// Create the validAPIKeys slice
