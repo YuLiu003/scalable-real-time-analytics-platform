@@ -1,0 +1,14 @@
+go 1.23
+
+toolchain go1.24.2
+
+use (
+	.
+	./clean-ingestion-go
+	./data-ingestion-go
+	./platform/admin-ui-go
+	./processing-engine-go
+	./storage-layer-go
+	./tenant-management-go
+	./visualization-go
+)
