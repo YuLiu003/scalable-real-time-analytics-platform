@@ -68,8 +68,10 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		// Currently, we're not handling incoming client messages
+		// Clean up the message for logging or processing
+		cleanMessage := bytes.TrimSpace(bytes.ReplaceAll(message, newline, space))
+		log.Printf("Received message: %s", cleanMessage)
+		// Currently, we're not handling incoming client messages beyond logging
 	}
 }
 

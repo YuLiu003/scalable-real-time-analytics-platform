@@ -1,3 +1,4 @@
+// Package processor provides Kafka-based data processing functionality.
 package processor
 
 import (
@@ -12,8 +13,8 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
-	"processing-engine-go/config"
-	"processing-engine-go/models"
+	"github.com/YuLiu003/real-time-analytics-platform/processing-engine-go-new/config"
+	"github.com/YuLiu003/real-time-analytics-platform/processing-engine-go-new/models"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -94,7 +95,7 @@ func (p *Processor) Start() error {
 	config.Producer.RequiredAcks = sarama.WaitForAll
 	config.Producer.Retry.Max = 5
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
-	config.Consumer.Group.Rebalance.Strategy = sarama.BalanceStrategyRoundRobin
+	config.Consumer.Group.Rebalance.Strategy = sarama.NewBalanceStrategyRoundRobin()
 
 	// Add connection timeout
 	config.Net.DialTimeout = 10 * time.Second
@@ -147,7 +148,7 @@ func (p *Processor) Start() error {
 		// Clean up consumer group if producer fails
 		if p.consumerGroup != nil {
 			if err := p.consumerGroup.Close(); err != nil {
-				log.Printf("Error closing consumer group during cleanup: %v", err)
+				log.Printf("Failed to close consumer group: %v", err)
 			}
 		}
 		return fmt.Errorf("failed to create producer after %d attempts: %v", maxRetries, producerErr)
@@ -177,12 +178,12 @@ func (p *Processor) Stop() {
 
 	if p.consumerGroup != nil {
 		if err := p.consumerGroup.Close(); err != nil {
-			log.Printf("Error closing consumer group: %v", err)
+			log.Printf("Failed to close consumer group: %v", err)
 		}
 	}
 	if p.producer != nil {
 		if err := p.producer.Close(); err != nil {
-			log.Printf("Error closing producer: %v", err)
+			log.Printf("Failed to close producer: %v", err)
 		}
 	}
 }
@@ -290,9 +291,145 @@ func (h *ProcessorHandler) ConsumeClaim(session sarama.ConsumerGroupSession, cla
 	}
 }
 
-// processData processes a single piece of data
+// calculateDeviceStats calculates statistics for a set of readings
+func calculateDeviceStats(readings []float64) (avg, minValue, maxValue float64) {
+	if len(readings) == 0 {
+		return 0, 0, 0
+	}
+
+	sum := 0.0
+	minValue = readings[0]
+	maxValue = readings[0]
+
+	for _, reading := range readings {
+		sum += reading
+		if reading < minValue {
+			minValue = reading
+		}
+		if reading > maxValue {
+			maxValue = reading
+		}
+	}
+
+	avg = sum / float64(len(readings))
+	return avg, minValue, maxValue
+}
+
+// updateGlobalStats updates global statistics for temperature or humidity
+func (p *Processor) updateGlobalStats(stats *models.DataStats, value float64) {
+	stats.Count++
+	stats.Sum += value
+
+	if stats.Count == 1 {
+		stats.Min = value
+		stats.Max = value
+	} else {
+		stats.Min = math.Min(stats.Min, value)
+		stats.Max = math.Max(stats.Max, value)
+	}
+	stats.Avg = stats.Sum / float64(stats.Count)
+}
+
+// updateDeviceReadings updates device-specific readings and calculates stats
+func updateDeviceReadings(deviceStats *models.DeviceDataStats, value float64) {
+	deviceStats.Readings = append(deviceStats.Readings, value)
+	if len(deviceStats.Readings) > 100 { // Keep only last 100 readings
+		deviceStats.Readings = deviceStats.Readings[1:]
+	}
+
+	// Calculate device statistics
+	deviceStats.Avg, deviceStats.Min, deviceStats.Max = calculateDeviceStats(deviceStats.Readings)
+}
+
+// processMetricUpdate processes a single metric (temperature or humidity) update
+func (p *Processor) processMetricUpdate(globalStats *models.DataStats, deviceStats *models.DeviceDataStats, value float64) {
+	// Update global stats
+	p.updateGlobalStats(globalStats, value)
+
+	// Update device-specific stats
+	updateDeviceReadings(deviceStats, value)
+}
+
+// validateSensorData validates required fields in sensor data
+func validateSensorData(data models.SensorData) error {
+	if data.DeviceID == "" {
+		return fmt.Errorf("device_id is required")
+	}
+	return nil
+}
+
+// calculateAnomalyScore calculates anomaly score based on sensor values
+func calculateAnomalyScore(data models.SensorData) float64 {
+	anomalyScore := 0.0
+
+	// Check if temperature is outside normal range
+	if data.Temperature != nil && (*data.Temperature > 30 || *data.Temperature < 10) {
+		anomalyScore += 1.0
+	}
+
+	// Check if humidity is outside normal range
+	if data.Humidity != nil && (*data.Humidity > 80 || *data.Humidity < 20) {
+		anomalyScore += 1.0
+	}
+
+	return anomalyScore
+}
+
+// formatTimestamp formats timestamp with fallback to current time
+func formatTimestamp(timestamp *time.Time) string {
+	if timestamp != nil {
+		return timestamp.Format(time.RFC3339)
+	}
+	return time.Now().Format(time.RFC3339)
+}
+
+// recordProcessingMetrics records prometheus metrics for processing
+func recordProcessingMetrics(tenantID string, isAnomaly bool, startTime time.Time) {
+	tenantMessagesProcessed.WithLabelValues(tenantID).Inc()
+	processingTime := time.Since(startTime).Seconds()
+	tenantProcessingLatency.WithLabelValues(tenantID).Observe(processingTime)
+
+	if isAnomaly {
+		messagesProcessed.WithLabelValues("anomaly").Inc()
+	} else {
+		messagesProcessed.WithLabelValues("normal").Inc()
+	}
+}
+
+// initializeDeviceStats initializes device statistics if it doesn't exist
+func (p *Processor) initializeDeviceStats(deviceID string, data models.SensorData) {
+	if p.processedData.Devices[deviceID] == nil {
+		p.processedData.Devices[deviceID] = &models.DeviceStats{}
+		// Initialize device temperature and humidity stats
+		if data.Temperature != nil {
+			p.processedData.Devices[deviceID].Temperature.Min = *data.Temperature
+			p.processedData.Devices[deviceID].Temperature.Max = *data.Temperature
+		}
+		if data.Humidity != nil {
+			p.processedData.Devices[deviceID].Humidity.Min = *data.Humidity
+			p.processedData.Devices[deviceID].Humidity.Max = *data.Humidity
+		}
+	}
+}
+
+// updateDeviceLastSeen updates the last seen timestamp for a device
+func (p *Processor) updateDeviceLastSeen(deviceStats *models.DeviceStats, timestamp *time.Time) {
+	if timestamp != nil {
+		deviceStats.LastSeen = timestamp
+	} else {
+		now := time.Now()
+		deviceStats.LastSeen = &now
+	}
+}
+
+// processData processes sensor data and returns processed data payload
 func (p *Processor) processData(data models.SensorData) (*models.ProcessedDataPayload, error) {
 	startTime := time.Now()
+
+	// Validate input data
+	if err := validateSensorData(data); err != nil {
+		return nil, err
+	}
 
 	// Get the tenant ID or use a default
 	tenantID := data.TenantID
@@ -317,35 +454,17 @@ func (p *Processor) processData(data models.SensorData) (*models.ProcessedDataPa
 	}
 
 	// Calculate anomaly score
-	anomalyScore := 0.0
-
-	// Check if temperature is outside normal range
-	if data.Temperature != nil && (*data.Temperature > 30 || *data.Temperature < 10) {
-		anomalyScore += 1.0
-	}
-
-	// Check if humidity is outside normal range
-	if data.Humidity != nil && (*data.Humidity > 80 || *data.Humidity < 20) {
-		anomalyScore += 1.0
-	}
+	anomalyScore := calculateAnomalyScore(data)
 
 	// Determine if anomaly based on threshold
 	isAnomaly := anomalyScore >= anomalyThreshold
-
-	// Format timestamps properly
-	var timestampStr string
-	if data.Timestamp != nil {
-		timestampStr = data.Timestamp.Format(time.RFC3339)
-	} else {
-		timestampStr = time.Now().Format(time.RFC3339)
-	}
 
 	// Create processed result
 	result := &models.ProcessedDataPayload{
 		DeviceID:     data.DeviceID,
 		Temperature:  data.Temperature,
 		Humidity:     data.Humidity,
-		Timestamp:    timestampStr,
+		Timestamp:    formatTimestamp(data.Timestamp),
 		ProcessedAt:  time.Now().Format(time.RFC3339),
 		IsAnomaly:    isAnomaly,
 		AnomalyScore: anomalyScore,
@@ -353,124 +472,35 @@ func (p *Processor) processData(data models.SensorData) (*models.ProcessedDataPa
 	}
 
 	// Record metrics
-	tenantMessagesProcessed.WithLabelValues(tenantID).Inc()
-	processingTime := time.Since(startTime).Seconds()
-	tenantProcessingLatency.WithLabelValues(tenantID).Observe(processingTime)
+	recordProcessingMetrics(tenantID, isAnomaly, startTime)
 
-	if isAnomaly {
-		messagesProcessed.WithLabelValues("anomaly").Inc()
-	} else {
-		messagesProcessed.WithLabelValues("normal").Inc()
-	}
+	// Update statistics
+	p.updateProcessingStatistics(data)
 
-	// Update global statistics and device-specific tracking
+	return result, nil
+}
+
+// updateProcessingStatistics updates global and device-specific statistics
+func (p *Processor) updateProcessingStatistics(data models.SensorData) {
 	p.mu.Lock()
+	defer p.mu.Unlock()
 
-	// Ensure device exists in the devices map
-	if p.processedData.Devices[data.DeviceID] == nil {
-		p.processedData.Devices[data.DeviceID] = &models.DeviceStats{}
-		// Initialize device temperature and humidity stats
-		if data.Temperature != nil {
-			p.processedData.Devices[data.DeviceID].Temperature.Min = *data.Temperature
-			p.processedData.Devices[data.DeviceID].Temperature.Max = *data.Temperature
-		}
-		if data.Humidity != nil {
-			p.processedData.Devices[data.DeviceID].Humidity.Min = *data.Humidity
-			p.processedData.Devices[data.DeviceID].Humidity.Max = *data.Humidity
-		}
-	}
-
+	// Initialize device if it doesn't exist
+	p.initializeDeviceStats(data.DeviceID, data)
 	deviceStats := p.processedData.Devices[data.DeviceID]
 
+	// Process temperature data
 	if data.Temperature != nil {
-		// Update global temperature stats
-		p.processedData.Temperature.Count++
-		p.processedData.Temperature.Sum += *data.Temperature
-
-		// Handle first temperature reading globally
-		if p.processedData.Temperature.Count == 1 {
-			p.processedData.Temperature.Min = *data.Temperature
-			p.processedData.Temperature.Max = *data.Temperature
-		} else {
-			p.processedData.Temperature.Min = math.Min(p.processedData.Temperature.Min, *data.Temperature)
-			p.processedData.Temperature.Max = math.Max(p.processedData.Temperature.Max, *data.Temperature)
-		}
-		p.processedData.Temperature.Avg = p.processedData.Temperature.Sum / float64(p.processedData.Temperature.Count)
-
-		// Update device-specific temperature stats
-		deviceStats.Temperature.Readings = append(deviceStats.Temperature.Readings, *data.Temperature)
-		if len(deviceStats.Temperature.Readings) > 100 { // Keep only last 100 readings
-			deviceStats.Temperature.Readings = deviceStats.Temperature.Readings[1:]
-		}
-
-		// Calculate device temperature statistics
-		sum := 0.0
-		min := deviceStats.Temperature.Readings[0]
-		max := deviceStats.Temperature.Readings[0]
-		for _, reading := range deviceStats.Temperature.Readings {
-			sum += reading
-			if reading < min {
-				min = reading
-			}
-			if reading > max {
-				max = reading
-			}
-		}
-		deviceStats.Temperature.Avg = sum / float64(len(deviceStats.Temperature.Readings))
-		deviceStats.Temperature.Min = min
-		deviceStats.Temperature.Max = max
+		p.processMetricUpdate(&p.processedData.Temperature, &deviceStats.Temperature, *data.Temperature)
 	}
 
+	// Process humidity data
 	if data.Humidity != nil {
-		// Update global humidity stats
-		p.processedData.Humidity.Count++
-		p.processedData.Humidity.Sum += *data.Humidity
-
-		// Handle first humidity reading globally
-		if p.processedData.Humidity.Count == 1 {
-			p.processedData.Humidity.Min = *data.Humidity
-			p.processedData.Humidity.Max = *data.Humidity
-		} else {
-			p.processedData.Humidity.Min = math.Min(p.processedData.Humidity.Min, *data.Humidity)
-			p.processedData.Humidity.Max = math.Max(p.processedData.Humidity.Max, *data.Humidity)
-		}
-		p.processedData.Humidity.Avg = p.processedData.Humidity.Sum / float64(p.processedData.Humidity.Count)
-
-		// Update device-specific humidity stats
-		deviceStats.Humidity.Readings = append(deviceStats.Humidity.Readings, *data.Humidity)
-		if len(deviceStats.Humidity.Readings) > 100 { // Keep only last 100 readings
-			deviceStats.Humidity.Readings = deviceStats.Humidity.Readings[1:]
-		}
-
-		// Calculate device humidity statistics
-		sum := 0.0
-		min := deviceStats.Humidity.Readings[0]
-		max := deviceStats.Humidity.Readings[0]
-		for _, reading := range deviceStats.Humidity.Readings {
-			sum += reading
-			if reading < min {
-				min = reading
-			}
-			if reading > max {
-				max = reading
-			}
-		}
-		deviceStats.Humidity.Avg = sum / float64(len(deviceStats.Humidity.Readings))
-		deviceStats.Humidity.Min = min
-		deviceStats.Humidity.Max = max
+		p.processMetricUpdate(&p.processedData.Humidity, &deviceStats.Humidity, *data.Humidity)
 	}
 
 	// Update last seen time for the device
-	if data.Timestamp != nil {
-		deviceStats.LastSeen = data.Timestamp
-	} else {
-		now := time.Now()
-		deviceStats.LastSeen = &now
-	}
-
-	p.mu.Unlock()
-
-	return result, nil
+	p.updateDeviceLastSeen(deviceStats, data.Timestamp)
 }
 
 // GetStats returns the current processing statistics

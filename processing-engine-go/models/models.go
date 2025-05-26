@@ -1,6 +1,24 @@
+// Package models defines data structures for the processing engine service.
 package models
 
 import "time"
+
+// DataStats represents global statistics for temperature or humidity data
+type DataStats struct {
+	Count int     `json:"count"`
+	Sum   float64 `json:"sum"`
+	Min   float64 `json:"min"`
+	Max   float64 `json:"max"`
+	Avg   float64 `json:"avg"`
+}
+
+// DeviceDataStats represents device-specific statistics for temperature or humidity
+type DeviceDataStats struct {
+	Readings []float64 `json:"readings"`
+	Avg      float64   `json:"avg"`
+	Min      float64   `json:"min"`
+	Max      float64   `json:"max"`
+}
 
 // SensorData represents raw data coming from sensors
 type SensorData struct {
@@ -13,38 +31,16 @@ type SensorData struct {
 
 // DeviceStats represents statistics for a specific device
 type DeviceStats struct {
-	Temperature struct {
-		Readings []float64 `json:"readings"`
-		Avg      float64   `json:"avg"`
-		Min      float64   `json:"min"`
-		Max      float64   `json:"max"`
-	} `json:"temperature"`
-	Humidity struct {
-		Readings []float64 `json:"readings"`
-		Avg      float64   `json:"avg"`
-		Min      float64   `json:"min"`
-		Max      float64   `json:"max"`
-	} `json:"humidity"`
-	LastSeen *time.Time `json:"last_seen,omitempty"`
+	Temperature DeviceDataStats `json:"temperature"`
+	Humidity    DeviceDataStats `json:"humidity"`
+	LastSeen    *time.Time      `json:"last_seen,omitempty"`
 }
 
 // ProcessedStats represents the overall processed statistics
 type ProcessedStats struct {
-	Temperature struct {
-		Count int     `json:"count"`
-		Sum   float64 `json:"sum"`
-		Min   float64 `json:"min"`
-		Max   float64 `json:"max"`
-		Avg   float64 `json:"avg"`
-	} `json:"temperature"`
-	Humidity struct {
-		Count int     `json:"count"`
-		Sum   float64 `json:"sum"`
-		Min   float64 `json:"min"`
-		Max   float64 `json:"max"`
-		Avg   float64 `json:"avg"`
-	} `json:"humidity"`
-	Devices map[string]*DeviceStats `json:"devices"`
+	Temperature DataStats               `json:"temperature"`
+	Humidity    DataStats               `json:"humidity"`
+	Devices     map[string]*DeviceStats `json:"devices"`
 }
 
 // ProcessingStatus represents the current processing status

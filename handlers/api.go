@@ -3,7 +3,6 @@ package handlers
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"real-time-analytics-platform/config"
-	"real-time-analytics-platform/metrics"
-	"real-time-analytics-platform/models"
-	"real-time-analytics-platform/websocket"
+	"github.com/YuLiu003/real-time-analytics-platform/config"
+	"github.com/YuLiu003/real-time-analytics-platform/metrics"
+	"github.com/YuLiu003/real-time-analytics-platform/models"
+	"github.com/YuLiu003/real-time-analytics-platform/websocket"
 
 	"github.com/gin-gonic/gin"
 )
@@ -62,39 +61,20 @@ func SystemStatus(c *gin.Context) {
 	// Try to contact the data ingestion service
 	start := time.Now()
 	client := &http.Client{Timeout: 2 * time.Second}
-	
-	// Create a context with timeout
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
-	defer cancel()
-	
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/health", dataServiceURL), nil)
+	resp, err := client.Get(fmt.Sprintf("%s/health", dataServiceURL))
 	if err != nil {
 		metrics.DataServiceErrors.Inc()
 		services["data-ingestion"] = models.ServiceStatus{
 			Status:  "error",
 			Service: "data-ingestion",
-			Message: fmt.Sprintf("Error creating request: %s", err.Error()),
+			Message: err.Error(),
 		}
 	} else {
-		resp, err := client.Do(req)
-		if err != nil {
-			metrics.DataServiceErrors.Inc()
-			services["data-ingestion"] = models.ServiceStatus{
-				Status:  "error",
-				Service: "data-ingestion",
-				Message: err.Error(),
-			}
-		} else {
-			defer func() {
-				if err := resp.Body.Close(); err != nil {
-					log.Printf("Error closing response body: %v", err)
-				}
-			}()
-			if resp.StatusCode == http.StatusOK {
-				var status models.ServiceStatus
-				if err := json.NewDecoder(resp.Body).Decode(&status); err == nil {
-					services["data-ingestion"] = status
-				}
+		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			var status models.ServiceStatus
+			if err := json.NewDecoder(resp.Body).Decode(&status); err == nil {
+				services["data-ingestion"] = status
 			}
 		}
 	}
@@ -143,50 +123,32 @@ func ProxyDataIngestion(c *gin.Context) {
 	reader := bytes.NewReader(jsonData)
 	start := time.Now()
 	client := &http.Client{Timeout: 5 * time.Second}
-	
-	// Create a context with timeout
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Second)
-	defer cancel()
-	
+	resp, err := client.Post(
+		fmt.Sprintf("%s/api/data", dataServiceURL),
+		"application/json",
+		reader,
+	)
+
 	var result models.DataResponse
-	
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, 
-		fmt.Sprintf("%s/api/data", dataServiceURL), 
-		reader)
 	if err != nil {
 		metrics.DataServiceErrors.Inc()
 		result = models.DataResponse{
 			Status:  "partial_success",
-			Message: fmt.Sprintf("Data stored locally but request creation failed: %s", err.Error()),
+			Message: fmt.Sprintf("Data stored locally but not forwarded: %s", err.Error()),
 			Data:    data,
 		}
 	} else {
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := client.Do(req)
-		if err != nil {
-			metrics.DataServiceErrors.Inc()
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		metrics.DataServiceLatency.Observe(time.Since(start).Seconds())
+
+		// Parse the response
+		if err := json.Unmarshal(body, &result); err != nil {
+			log.Printf("Error parsing data service response: %v", err)
 			result = models.DataResponse{
 				Status:  "partial_success",
-				Message: fmt.Sprintf("Data stored locally but not forwarded: %s", err.Error()),
+				Message: "Data stored locally but service response invalid",
 				Data:    data,
-			}
-		} else {
-			defer func() {
-				if err := resp.Body.Close(); err != nil {
-					log.Printf("Error closing response body: %v", err)
-				}
-			}()
-			body, _ := io.ReadAll(resp.Body)
-			metrics.DataServiceLatency.Observe(time.Since(start).Seconds())
-
-			// Parse the response
-			if err := json.Unmarshal(body, &result); err != nil {
-				log.Printf("Error parsing data service response: %v", err)
-				result = models.DataResponse{
-					Status:  "partial_success",
-					Message: "Data stored locally but service response invalid",
-					Data:    data,
-				}
 			}
 		}
 	}

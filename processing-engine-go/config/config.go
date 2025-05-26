@@ -1,8 +1,15 @@
+// Package config provides configuration management for the processing engine service.
 package config
 
 import (
 	"os"
 	"strconv"
+)
+
+// Constants for configuration defaults
+const (
+	TrueValue  = "true"
+	FalseValue = "false"
 )
 
 // Config represents the application configuration
@@ -55,8 +62,8 @@ func GetConfig() *Config {
 		MetricsPort:       metricsPort,
 		StorageServiceURL: getEnv("STORAGE_SERVICE_URL", "http://storage-layer-go:5002"),
 		MaxReadings:       maxReadings,
-		KafkaEnabled:      getEnv("KAFKA_ENABLED", "true") == "true",
-		Debug:             getEnv("DEBUG", "false") == "true",
+		KafkaEnabled:      getEnv("KAFKA_ENABLED", TrueValue) == TrueValue,
+		Debug:             getEnv("DEBUG", FalseValue) == TrueValue,
 	}
 }
 
@@ -69,7 +76,7 @@ func getEnv(key, defaultValue string) string {
 }
 
 // GetTenantConfig returns the configuration for a specific tenant
-func GetTenantConfig(tenantID string) (float64, float64) {
+func GetTenantConfig(tenantID string) (anomalyThreshold float64, samplingRate float64) {
 	if config, exists := DefaultTenantConfigs[tenantID]; exists {
 		return config.AnomalyThreshold, config.SamplingRate
 	}

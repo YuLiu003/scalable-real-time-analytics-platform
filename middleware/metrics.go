@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"real-time-analytics-platform/metrics"
+	"github.com/YuLiu003/real-time-analytics-platform/metrics"
 
 	"github.com/gin-gonic/gin"
 )

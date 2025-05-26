@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: '1.21'
+  GO_VERSION: '1.24'
   DOCKER_BUILDKIT: 1
 
 jobs:
@@ -36,9 +36,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          # Install compatible version of golangci-lint
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.61.0
           go install honnef.co/go/tools/cmd/staticcheck@latest
           go install github.com/securego/gosec/v2/cmd/gosec@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
 
       - name: Check go.mod tidiness
         run: |
@@ -57,11 +59,43 @@ jobs:
 
       - name: Run golangci-lint
         run: |
+          export PATH=$PATH:$(go env GOPATH)/bin
           for dir in data-ingestion-go clean-ingestion-go processing-engine-go storage-layer-go visualization-go tenant-management-go; do
             if [ -d "$dir" ] && [ -f "$dir/go.mod" ]; then
               echo "Linting $dir..."
               cd "$dir"
-              golangci-lint run --timeout=5m --config=../.golangci.yml || true  # Allow to continue even with warnings
+              
+              # Try golangci-lint first, with fallback to basic validation
+              if golangci-lint run --timeout=10m --config=../.golangci.yml; then
+                echo "✅ golangci-lint passed for $dir"
+              else
+                echo "⚠️ golangci-lint failed for $dir, running fallback validation..."
+                
+                # Run basic Go validation
+                echo "Running go fmt..."
+                if ! go fmt ./...; then
+                  echo "❌ go fmt failed for $dir"
+                  exit 1
+                fi
+                
+                echo "Running go vet..."
+                if ! go vet ./...; then
+                  echo "❌ go vet failed for $dir"
+                  exit 1
+                fi
+                
+                echo "Running go build..."
+                if ! go build ./...; then
+                  echo "❌ go build failed for $dir"
+                  exit 1
+                fi
+                
+                # Run govulncheck for security
+                echo "Running govulncheck..."
+                govulncheck ./... || echo "⚠️ vulnerabilities found, but continuing..."
+                
+                echo "✅ Basic validation passed for $dir"
+              fi
               cd ..
             fi
           done
@@ -180,6 +214,18 @@ jobs:
         run: |
           chmod +x scripts/security-check.sh
           ./scripts/security-check.sh
+
+      - name: Run vulnerability scanning
+        run: |
+          export PATH=$PATH:$(go env GOPATH)/bin
+          for dir in data-ingestion-go clean-ingestion-go processing-engine-go storage-layer-go visualization-go tenant-management-go; do
+            if [ -d "$dir" ] && [ -f "$dir/go.mod" ]; then
+              echo "Scanning $dir for vulnerabilities..."
+              cd "$dir"
+              govulncheck ./... || echo "⚠️ Vulnerabilities found in $dir"
+              cd ..
+            fi
+          done
 
       - name: Run Gosec Security Scanner
         uses: securego/gosec@master

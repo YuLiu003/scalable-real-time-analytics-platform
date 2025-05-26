@@ -4,7 +4,7 @@ import (
 	"log"
 	"sync"
 
-	"real-time-analytics-platform/metrics"
+	"github.com/YuLiu003/real-time-analytics-platform/metrics"
 )
 
 // Hub maintains the set of active clients and broadcasts messages to them
