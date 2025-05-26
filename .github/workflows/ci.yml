@@ -69,6 +69,8 @@ jobs:
   security-scan:
     runs-on: ubuntu-latest
     needs: test
+    env:
+      RUN_K8S_CHECKS: false  # Skip Kubernetes checks in CI/CD environment
     steps:
       - uses: actions/checkout@v3
 
@@ -82,7 +84,7 @@ jobs:
 
       - name: Verify security score
         run: |
-          SCORE=$(./scripts/security-check.sh | grep "Security Score:" | awk '{print $1}' | cut -d'/' -f1)
+          SCORE=$(./scripts/security-check.sh | grep "Security Score:" | awk '{print $3}' | cut -d'/' -f1)
           if [ -z "$SCORE" ]; then
             echo "Could not determine security score"
             exit 1
