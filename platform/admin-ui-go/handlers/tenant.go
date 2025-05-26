@@ -30,7 +30,7 @@ func ListTenants(c *gin.Context) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
-	
+
 	response, err := client.Get(url)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
