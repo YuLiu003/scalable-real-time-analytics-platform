@@ -15,8 +15,8 @@ func ensureDataDir(dbPath string) {
 		return
 	}
 
-	// Create the directory if it doesn't exist
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
+	// Create the directory if it doesn't exist with restricted permissions
+	if err := os.MkdirAll(dataDir, 0750); err != nil {
 		log.Printf("Failed to create data directory '%s': %v", dataDir, err)
 	}
 }

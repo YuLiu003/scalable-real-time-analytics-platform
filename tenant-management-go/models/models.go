@@ -1,3 +1,4 @@
+// Package models defines the data structures for tenant management.
 package models
 
 import (
