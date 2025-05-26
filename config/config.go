@@ -1,3 +1,4 @@
+// Package config provides centralized configuration management for the real-time analytics platform.
 package config
 
 import (

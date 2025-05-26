@@ -1,3 +1,4 @@
+// Package handlers provides HTTP request handlers for the real-time analytics platform API endpoints.
 package handlers
 
 import (

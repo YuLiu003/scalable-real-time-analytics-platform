@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
@@ -25,7 +26,12 @@ func getTenantServiceURL() string {
 func ListTenants(c *gin.Context) {
 	url := fmt.Sprintf("%s/api/tenants", tenantServiceURL)
 
-	response, err := http.Get(url)
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	
+	response, err := client.Get(url)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status":  "error",
@@ -49,7 +55,9 @@ func ListTenants(c *gin.Context) {
 	c.Status(response.StatusCode)
 
 	// Write the response as-is
-	c.Writer.Write(body)
+	if _, err := c.Writer.Write(body); err != nil {
+		log.Printf("Error writing response body: %v", err)
+	}
 }
 
 // GetTenant proxies the GET request to get a single tenant
@@ -57,7 +65,12 @@ func GetTenant(c *gin.Context) {
 	tenantID := c.Param("id")
 	url := fmt.Sprintf("%s/api/tenants/%s", tenantServiceURL, tenantID)
 
-	response, err := http.Get(url)
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	response, err := client.Get(url)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"status":  "error",
@@ -81,7 +94,9 @@ func GetTenant(c *gin.Context) {
 	c.Status(response.StatusCode)
 
 	// Write the response as-is
-	c.Writer.Write(body)
+	if _, err := c.Writer.Write(body); err != nil {
+		log.Printf("Error writing response body: %v", err)
+	}
 }
 
 // CreateTenant proxies the POST request to create a new tenant
@@ -135,7 +150,9 @@ func CreateTenant(c *gin.Context) {
 
 	// Forward the response
 	c.Status(response.StatusCode)
-	c.Writer.Write(respBody)
+	if _, err := c.Writer.Write(respBody); err != nil {
+		log.Printf("Error writing response body: %v", err)
+	}
 }
 
 // DeleteTenant proxies the DELETE request to delete a tenant
@@ -177,5 +194,7 @@ func DeleteTenant(c *gin.Context) {
 
 	// Forward the response
 	c.Status(response.StatusCode)
-	c.Writer.Write(respBody)
+	if _, err := c.Writer.Write(respBody); err != nil {
+		log.Printf("Error writing response body: %v", err)
+	}
 }
