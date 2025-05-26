@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/YuLiu003/real-time-analytics-platform/tenant-management-go/models"
+	"tenant-management-go/models"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )

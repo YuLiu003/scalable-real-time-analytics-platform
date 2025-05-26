@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
-	"github.com/YuLiu003/real-time-analytics-platform/processing-engine-go-new/config"
-	"github.com/YuLiu003/real-time-analytics-platform/processing-engine-go-new/models"
+	"processing-engine-go/config"
+	"processing-engine-go/models"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
