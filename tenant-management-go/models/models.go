@@ -9,7 +9,7 @@ import (
 type Tenant struct {
 	ID            string    `json:"id" gorm:"primaryKey"`
 	Name          string    `json:"name"`
-	ApiKey        string    `json:"api_key"`
+	APIKey        string    `json:"api_key"`
 	Tier          string    `json:"tier"`
 	Active        bool      `json:"active"`
 	CreatedAt     time.Time `json:"created_at"`
@@ -22,7 +22,7 @@ type Tenant struct {
 // TenantConfig represents tenant configuration for other services
 type TenantConfig struct {
 	ID               string  `json:"id"`
-	ApiKey           string  `json:"api_key"`
+	APIKey           string  `json:"api_key"`
 	Tier             string  `json:"tier"`
 	SamplingRate     float64 `json:"sampling_rate"`
 	AnomalyThreshold float64 `json:"anomaly_threshold"`
@@ -55,7 +55,7 @@ type TenantStats struct {
 type TenantRequest struct {
 	Name          string  `json:"name" binding:"required"`
 	Tier          string  `json:"tier" binding:"required"`
-	ApiKey        string  `json:"api_key,omitempty"`
+	APIKey        string  `json:"api_key,omitempty"`
 	QuotaLimit    int     `json:"quota_limit"`
 	RateLimit     int     `json:"rate_limit"`
 	SamplingRate  float64 `json:"sampling_rate"`

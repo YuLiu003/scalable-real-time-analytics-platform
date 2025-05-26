@@ -1,5 +1,5 @@
 # Stage 1: Build the Go application
-FROM golang:1.21-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -29,7 +29,7 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 
 # Expose the port the application runs on
-EXPOSE 5000
+EXPOSE 5001
 
 # Command to run the application
 CMD ["./clean-ingestion"] 

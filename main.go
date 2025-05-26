@@ -7,10 +7,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"real-time-analytics-platform/config"
-	"real-time-analytics-platform/handlers"
-	"real-time-analytics-platform/middleware"
-	"real-time-analytics-platform/websocket"
+	"github.com/YuLiu003/real-time-analytics-platform/config"
+	"github.com/YuLiu003/real-time-analytics-platform/handlers"
+	"github.com/YuLiu003/real-time-analytics-platform/middleware"
+	"github.com/YuLiu003/real-time-analytics-platform/websocket"
 )
 
 func main() {

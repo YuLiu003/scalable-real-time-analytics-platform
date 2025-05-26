@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"tenant-management-go/models"
+	"github.com/YuLiu003/real-time-analytics-platform/tenant-management-go/models"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -16,7 +16,7 @@ import (
 type TenantStore interface {
 	GetTenants() ([]models.Tenant, error)
 	GetTenant(id string) (*models.Tenant, error)
-	GetTenantByApiKey(apiKey string) (*models.Tenant, error)
+	GetTenantByAPIKey(apiKey string) (*models.Tenant, error)
 	CreateTenant(tenant *models.Tenant) error
 	UpdateTenant(tenant *models.Tenant) error
 	DeleteTenant(id string) error
@@ -89,7 +89,7 @@ func (h *TenantHandler) CreateTenant(c *gin.Context) {
 
 	// Generate a unique tenant ID and API key if not provided
 	id := uuid.New().String()
-	apiKey := req.ApiKey
+	apiKey := req.APIKey
 	if apiKey == "" {
 		apiKey = generateAPIKey()
 	}
@@ -97,7 +97,7 @@ func (h *TenantHandler) CreateTenant(c *gin.Context) {
 	tenant := &models.Tenant{
 		ID:            id,
 		Name:          req.Name,
-		ApiKey:        apiKey,
+		APIKey:        apiKey,
 		Tier:          req.Tier,
 		Active:        req.Active,
 		CreatedAt:     time.Now(),
@@ -150,8 +150,8 @@ func (h *TenantHandler) UpdateTenant(c *gin.Context) {
 	// Update the tenant with new values
 	existingTenant.Name = req.Name
 	existingTenant.Tier = req.Tier
-	if req.ApiKey != "" {
-		existingTenant.ApiKey = req.ApiKey
+	if req.APIKey != "" {
+		existingTenant.APIKey = req.APIKey
 	}
 	existingTenant.Active = req.Active
 	existingTenant.QuotaLimit = req.QuotaLimit
@@ -204,11 +204,8 @@ func (h *TenantHandler) DeleteTenant(c *gin.Context) {
 	})
 }
 
-// GetTenantStats retrieves statistics for a tenant
-func (h *TenantHandler) GetTenantStats(c *gin.Context) {
-	id := c.Param("id")
-
-	// Check if tenant exists
+// validateTenantExists checks if a tenant exists and returns appropriate error response
+func (h *TenantHandler) validateTenantExists(c *gin.Context, id string) bool {
 	_, err := h.store.GetTenant(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
@@ -216,6 +213,16 @@ func (h *TenantHandler) GetTenantStats(c *gin.Context) {
 			"message": "Tenant not found",
 			"error":   err.Error(),
 		})
+		return false
+	}
+	return true
+}
+
+// GetTenantStats retrieves statistics for a tenant
+func (h *TenantHandler) GetTenantStats(c *gin.Context) {
+	id := c.Param("id")
+
+	if !h.validateTenantExists(c, id) {
 		return
 	}
 
@@ -239,14 +246,7 @@ func (h *TenantHandler) GetTenantStats(c *gin.Context) {
 func (h *TenantHandler) GetTenantQuota(c *gin.Context) {
 	id := c.Param("id")
 
-	// Check if tenant exists
-	_, err := h.store.GetTenant(id)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"status":  "error",
-			"message": "Tenant not found",
-			"error":   err.Error(),
-		})
+	if !h.validateTenantExists(c, id) {
 		return
 	}
 
@@ -281,7 +281,7 @@ func (h *TenantHandler) ValidateAPIKey(c *gin.Context) {
 		return
 	}
 
-	tenant, err := h.store.GetTenantByApiKey(apiKey)
+	tenant, err := h.store.GetTenantByAPIKey(apiKey)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"status":  "error",
@@ -302,7 +302,7 @@ func (h *TenantHandler) ValidateAPIKey(c *gin.Context) {
 		"status": "success",
 		"data": models.TenantConfig{
 			ID:               tenant.ID,
-			ApiKey:           tenant.ApiKey,
+			APIKey:           tenant.APIKey,
 			Tier:             tenant.Tier,
 			SamplingRate:     tenant.SamplingRate,
 			AnomalyThreshold: getAnomalyThresholdByTier(tenant.Tier),
