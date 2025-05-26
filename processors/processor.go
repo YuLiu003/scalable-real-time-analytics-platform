@@ -1,8 +1,10 @@
+// Package processors provides data processing capabilities for the real-time analytics platform.
 package processors
 
 import (
+	"crypto/rand"
 	"log"
-	"math/rand"
+	"math/big"
 	"time"
 
 	"github.com/YuLiu003/real-time-analytics-platform/models"
@@ -50,9 +52,16 @@ func ProcessMessage(sensorData models.SensorData) (*models.ProcessedData, error)
 	config := GetTenantConfig(sensorData.TenantID)
 
 	// Apply sampling rate (skip some messages for tenants with lower sampling)
-	if config.SamplingRate < 1.0 && rand.Float64() > config.SamplingRate {
-		log.Printf("Skipping message due to tenant %s sampling rate", sensorData.TenantID)
-		return nil, nil
+	if config.SamplingRate < 1.0 {
+		// Use crypto/rand for secure random sampling
+		randomInt, err := rand.Int(rand.Reader, big.NewInt(1000000))
+		if err == nil {
+			randomFloat := float64(randomInt.Int64()) / 1000000.0
+			if randomFloat > config.SamplingRate {
+				log.Printf("Skipping message due to tenant %s sampling rate", sensorData.TenantID)
+				return nil, nil
+			}
+		}
 	}
 
 	// Check required fields
