@@ -1,3 +1,4 @@
+// Package middleware provides HTTP middleware components for the real-time analytics platform.
 package middleware
 
 import (

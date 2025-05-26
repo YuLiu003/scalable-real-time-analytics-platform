@@ -1,3 +1,4 @@
+// Package main provides the entry point for the tenant management service.
 package main
 
 import (
@@ -176,7 +177,9 @@ func createDefaultTenants(store *MemoryTenantStore) {
 		SamplingRate:  0.5,
 		RetentionDays: 7,
 	}
-	store.CreateTenant(freeTenant)
+	if err := store.CreateTenant(freeTenant); err != nil {
+		log.Printf("Failed to create free tenant: %v", err)
+	}
 
 	// Create a standard tier tenant
 	standardTenant := &models.Tenant{
@@ -191,7 +194,9 @@ func createDefaultTenants(store *MemoryTenantStore) {
 		SamplingRate:  0.8,
 		RetentionDays: 30,
 	}
-	store.CreateTenant(standardTenant)
+	if err := store.CreateTenant(standardTenant); err != nil {
+		log.Printf("Failed to create standard tenant: %v", err)
+	}
 
 	// Create a premium tier tenant
 	premiumTenant := &models.Tenant{
@@ -206,7 +211,9 @@ func createDefaultTenants(store *MemoryTenantStore) {
 		SamplingRate:  1.0,
 		RetentionDays: 90,
 	}
-	store.CreateTenant(premiumTenant)
+	if err := store.CreateTenant(premiumTenant); err != nil {
+		log.Printf("Failed to create premium tenant: %v", err)
+	}
 
 	log.Println("Created default tenants for testing")
 }

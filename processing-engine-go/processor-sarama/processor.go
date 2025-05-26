@@ -2,11 +2,12 @@ package processor
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"log"
 	"math"
-	"math/rand"
+	"math/big"
 	"sync"
 	"time"
 
@@ -297,9 +298,16 @@ func (p *Processor) processData(data models.SensorData) (*models.ProcessedDataPa
 	anomalyThreshold, samplingRate := config.GetTenantConfig(tenantID)
 
 	// Apply sampling rate to skip some messages for lower-tier tenants
-	if samplingRate < 1.0 && rand.Float64() > samplingRate {
-		// Skip processing
-		return nil, fmt.Errorf("skipped due to sampling rate")
+	if samplingRate < 1.0 {
+		// Use crypto/rand for secure random sampling
+		randomInt, err := rand.Int(rand.Reader, big.NewInt(1000000))
+		if err == nil {
+			randomFloat := float64(randomInt.Int64()) / 1000000.0
+			if randomFloat > samplingRate {
+				// Skip processing
+				return nil, fmt.Errorf("skipped due to sampling rate")
+			}
+		}
 	}
 
 	// Calculate anomaly score
@@ -351,7 +359,7 @@ func (p *Processor) processData(data models.SensorData) (*models.ProcessedDataPa
 
 	// Update global statistics and device-specific tracking
 	p.mu.Lock()
-	
+
 	// Ensure device exists in the devices map
 	if p.processedData.Devices[data.DeviceID] == nil {
 		p.processedData.Devices[data.DeviceID] = &models.DeviceStats{}
@@ -365,9 +373,9 @@ func (p *Processor) processData(data models.SensorData) (*models.ProcessedDataPa
 			p.processedData.Devices[data.DeviceID].Humidity.Max = *data.Humidity
 		}
 	}
-	
+
 	deviceStats := p.processedData.Devices[data.DeviceID]
-	
+
 	if data.Temperature != nil {
 		// Update global temperature stats
 		p.processedData.Temperature.Count++
@@ -382,13 +390,13 @@ func (p *Processor) processData(data models.SensorData) (*models.ProcessedDataPa
 			p.processedData.Temperature.Max = math.Max(p.processedData.Temperature.Max, *data.Temperature)
 		}
 		p.processedData.Temperature.Avg = p.processedData.Temperature.Sum / float64(p.processedData.Temperature.Count)
-		
+
 		// Update device-specific temperature stats
 		deviceStats.Temperature.Readings = append(deviceStats.Temperature.Readings, *data.Temperature)
 		if len(deviceStats.Temperature.Readings) > 100 { // Keep only last 100 readings
 			deviceStats.Temperature.Readings = deviceStats.Temperature.Readings[1:]
 		}
-		
+
 		// Calculate device temperature statistics
 		sum := 0.0
 		min := deviceStats.Temperature.Readings[0]
@@ -421,13 +429,13 @@ func (p *Processor) processData(data models.SensorData) (*models.ProcessedDataPa
 			p.processedData.Humidity.Max = math.Max(p.processedData.Humidity.Max, *data.Humidity)
 		}
 		p.processedData.Humidity.Avg = p.processedData.Humidity.Sum / float64(p.processedData.Humidity.Count)
-		
+
 		// Update device-specific humidity stats
 		deviceStats.Humidity.Readings = append(deviceStats.Humidity.Readings, *data.Humidity)
 		if len(deviceStats.Humidity.Readings) > 100 { // Keep only last 100 readings
 			deviceStats.Humidity.Readings = deviceStats.Humidity.Readings[1:]
 		}
-		
+
 		// Calculate device humidity statistics
 		sum := 0.0
 		min := deviceStats.Humidity.Readings[0]
@@ -445,7 +453,7 @@ func (p *Processor) processData(data models.SensorData) (*models.ProcessedDataPa
 		deviceStats.Humidity.Min = min
 		deviceStats.Humidity.Max = max
 	}
-	
+
 	// Update last seen time for the device
 	if data.Timestamp != nil {
 		deviceStats.LastSeen = data.Timestamp
@@ -453,7 +461,7 @@ func (p *Processor) processData(data models.SensorData) (*models.ProcessedDataPa
 		now := time.Now()
 		deviceStats.LastSeen = &now
 	}
-	
+
 	p.mu.Unlock()
 
 	return result, nil

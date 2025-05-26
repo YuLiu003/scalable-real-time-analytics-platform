@@ -1,3 +1,4 @@
+// Package models provides data structures and models for the real-time analytics platform.
 package models
 
 import (
