@@ -52,11 +52,11 @@ func (c *Client) readPump() {
 		log.Printf("Error setting read deadline: %v", err)
 		return
 	}
-	c.conn.SetPongHandler(func(string) error { 
+	c.conn.SetPongHandler(func(string) error {
 		if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
 			log.Printf("Error setting read deadline in pong handler: %v", err)
 		}
-		return nil 
+		return nil
 	})
 	for {
 		_, message, err := c.conn.ReadMessage()
