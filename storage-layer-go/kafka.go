@@ -99,7 +99,9 @@ func (k *KafkaConsumer) Start() error {
 func (k *KafkaConsumer) Stop() {
 	close(k.done)
 	k.wg.Wait()
-	k.consumer.Close()
+	if err := k.consumer.Close(); err != nil {
+		log.Printf("[KafkaConsumer] Error closing consumer: %v", err)
+	}
 }
 
 // processMessage processes a single Kafka message
