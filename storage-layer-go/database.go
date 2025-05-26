@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -367,23 +368,23 @@ func (d *DB) ApplyRetentionPolicies(policies map[string]RetentionPolicy, default
 	// Apply default policy to other tenants
 	if len(tenantsList) > 0 {
 		// Prepare NOT IN query with placeholders
-		placeholders := ""
+		// Build placeholders safely using strings.Builder
+		var queryBuilder strings.Builder
 		args := make([]interface{}, 0, len(tenantsList)+1)
 
+		queryBuilder.WriteString("DELETE FROM sensor_data WHERE tenant_id NOT IN (")
 		for i, tenantID := range tenantsList {
 			if i > 0 {
-				placeholders += ","
+				queryBuilder.WriteString(",")
 			}
-			placeholders += "?"
+			queryBuilder.WriteString("?")
 			args = append(args, tenantID)
 		}
+		queryBuilder.WriteString(") AND created_at < ?")
 		args = append(args, defaultMaxAge)
 
-		// Execute query
-		result, err := tx.Exec(`
-			DELETE FROM sensor_data 
-			WHERE tenant_id NOT IN (`+placeholders+`) AND created_at < ?
-			`, args...)
+		// Execute query with safely built query string
+		result, err := tx.Exec(queryBuilder.String(), args...)
 		if err != nil {
 			storageCount.With(prometheus.Labels{"operation": "retention", "status": "error"}).Inc()
 			return err

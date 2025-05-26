@@ -104,7 +104,14 @@ func main() {
 	go func() {
 		addr := fmt.Sprintf(":%d", cfg.MetricsPort)
 		log.Printf("Starting HTTP server on %s", addr)
-		if err := http.ListenAndServe(addr, r); err != nil && err != http.ErrServerClosed {
+		server := &http.Server{
+			Addr:              addr,
+			Handler:           r,
+			ReadTimeout:       10 * time.Second,
+			WriteTimeout:      10 * time.Second,
+			ReadHeaderTimeout: 5 * time.Second,
+		}
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Failed to start server: %v", err)
 		}
 	}()
