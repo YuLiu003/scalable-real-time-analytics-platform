@@ -146,7 +146,9 @@ func (p *Processor) Start() error {
 	if producerErr != nil {
 		// Clean up consumer group if producer fails
 		if p.consumerGroup != nil {
-			p.consumerGroup.Close()
+			if err := p.consumerGroup.Close(); err != nil {
+				log.Printf("Error closing consumer group during cleanup: %v", err)
+			}
 		}
 		return fmt.Errorf("failed to create producer after %d attempts: %v", maxRetries, producerErr)
 	}
@@ -174,10 +176,14 @@ func (p *Processor) Stop() {
 	close(p.done)
 
 	if p.consumerGroup != nil {
-		p.consumerGroup.Close()
+		if err := p.consumerGroup.Close(); err != nil {
+			log.Printf("Error closing consumer group: %v", err)
+		}
 	}
 	if p.producer != nil {
-		p.producer.Close()
+		if err := p.producer.Close(); err != nil {
+			log.Printf("Error closing producer: %v", err)
+		}
 	}
 }
 
