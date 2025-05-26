@@ -104,7 +104,13 @@ func main() {
 		metricsAddr := fmt.Sprintf(":%d", metricsPort)
 		log.Printf("Starting metrics server on %s", metricsAddr)
 		http.Handle("/metrics", promhttp.Handler())
-		if err := http.ListenAndServe(metricsAddr, nil); err != nil {
+		metricsServer := &http.Server{
+			Addr:              metricsAddr,
+			ReadTimeout:       10 * time.Second,
+			WriteTimeout:      10 * time.Second,
+			ReadHeaderTimeout: 5 * time.Second,
+		}
+		if err := metricsServer.ListenAndServe(); err != nil {
 			log.Printf("Metrics server stopped: %v", err)
 		}
 	}()
@@ -128,8 +134,11 @@ func main() {
 	apiAddr := fmt.Sprintf(":%d", apiPort)
 	log.Printf("Starting API server on %s", apiAddr)
 	srv := &http.Server{
-		Addr:    apiAddr,
-		Handler: router,
+		Addr:              apiAddr,
+		Handler:           router,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

@@ -1,6 +1,9 @@
+// Package handlers provides HTTP handlers for tenant management operations.
 package handlers
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"net/http"
 	"time"
 
@@ -313,7 +316,14 @@ func (h *TenantHandler) ValidateAPIKey(c *gin.Context) {
 
 // generateAPIKey generates a random API key
 func generateAPIKey() string {
-	return "key-" + uuid.New().String()
+	// Generate 32 random bytes
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		// Fallback to UUID if crypto/rand fails
+		return "key-" + uuid.New().String()
+	}
+	// Encode to base64 and prefix with "key-"
+	return "key-" + base64.URLEncoding.EncodeToString(bytes)[:32]
 }
 
 // getAnomalyThresholdByTier returns the anomaly threshold for a tier

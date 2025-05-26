@@ -113,8 +113,13 @@ func countActiveTenants() int {
 	// For now, we'll return a mock value
 	url := fmt.Sprintf("%s/api/tenants", tenantServiceURL)
 
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
 	// Make a request to the tenant service
-	response, err := http.Get(url)
+	response, err := client.Get(url)
 	if err != nil {
 		// If the request fails, return a default value
 		return 0

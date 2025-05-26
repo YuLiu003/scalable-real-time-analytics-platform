@@ -1,3 +1,4 @@
+// Package metrics provides Prometheus metrics collection and instrumentation for the real-time analytics platform.
 package metrics
 
 import (
