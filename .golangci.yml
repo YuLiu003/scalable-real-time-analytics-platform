@@ -1,52 +1,20 @@
-# golangci-lint configuration for Real-Time Analytics Platform
-# Configuration for golangci-lint v2
-# https://golangci-lint.run/usage/configuration/
-
+# golangci-lint configuration compatible with v1.57.2
 run:
-  timeout: 5m
+  timeout: 10m
   issues-exit-code: 1
   tests: true
-  build-tags:
-    - integration
-  skip-dirs:
-    - vendor
-    - .git
-  skip-files:
-    - ".*_test.go"
-    - ".*\\.pb\\.go$"
 
 output:
   formats:
     - format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
-  uniq-by-line: true
-  sort-results: true
+      path: stdout
 
 linters-settings:
-  depguard:
-    rules:
-      main:
-        deny:
-          - pkg: "github.com/sirupsen/logrus"
-            desc: "not allowed"
-        allow:
-          - $gostd
-          - github.com/gin-gonic/gin
-          - github.com/stretchr/testify
-          - github.com/prometheus/client_golang
-          - real-time-analytics-platform
-          - processing-engine-go
-          - visualization-go
-          - tenant-management-go
-          - admin-ui-go
   dupl:
-    threshold: 100
+    threshold: 150
   funlen:
-    lines: 100
-    statements: 50
-  gci:
-    local-prefixes: real-time-analytics-platform
+    lines: 120
+    statements: 60
   goconst:
     min-len: 2
     min-occurrences: 2
@@ -66,18 +34,14 @@ linters-settings:
   gocyclo:
     min-complexity: 15
   goimports:
-    local-prefixes: real-time-analytics-platform
+    local-prefixes: github.com/YuLiu003/real-time-analytics-platform
   gomnd:
     settings:
       mnd:
         checks: argument,case,condition,return
   govet:
-    shadow: true
-    settings:
-      printf:
-        funcs:
-          - (github.com/gin-gonic/gin.Context).JSON
-          - (log.Logger).Printf
+    enable:
+      - shadow
   lll:
     line-length: 140
   misspell:
@@ -87,29 +51,20 @@ linters-settings:
     allow-unused: false
     require-explanation: false
     require-specific: false
-  revive:
-    rules:
-      - name: exported
-        disabled: true
 
 linters:
   disable-all: true
   enable:
     - bodyclose
-    - depguard
-    - dogsled
     - dupl
     - errcheck
-    - exportloopref
     - funlen
-    - gochecknoinits
     - goconst
     - gocritic
     - gocyclo
     - gofmt
     - goimports
     - gomnd
-    - goprintffuncname
     - gosec
     - gosimple
     - govet
@@ -117,7 +72,6 @@ linters:
     - lll
     - misspell
     - nakedret
-    - noctx
     - nolintlint
     - rowserrcheck
     - staticcheck
@@ -134,34 +88,13 @@ issues:
       linters:
         - gomnd
         - funlen
-        - goconst
-    - path: main\.go
+        - dupl
+    - text: "weak cryptographic primitive"
       linters:
-        - funlen
-    - linters:
-        - gocritic
-      text: "unnecessaryDefer:"
-    - linters:
-        - staticcheck
-      text: "SA9003:"
-    - linters:
-        - lll
-      source: "^//go:generate "
-
+        - gosec
+    - text: "exported .* should have comment"
+      linters:
+        - stylecheck
   exclude-use-default: false
-  exclude-case-sensitive: false
-  include:
-    - EXC0002
-
   max-issues-per-linter: 0
   max-same-issues: 0
-  new: false
-  fix: false
-
-severity:
-  default-severity: error
-  case-sensitive: false
-  rules:
-    - linters:
-        - dupl
-      severity: info

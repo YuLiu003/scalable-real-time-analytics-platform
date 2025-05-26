@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	"real-time-analytics-platform/models"
+	"github.com/YuLiu003/real-time-analytics-platform/models"
 
 	"github.com/gin-gonic/gin"
 )
