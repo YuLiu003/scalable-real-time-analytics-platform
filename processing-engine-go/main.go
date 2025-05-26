@@ -11,9 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	"processing-engine-go/config"
-	"processing-engine-go/models"
-	processor "processing-engine-go/processor-sarama"
+	"github.com/YuLiu003/real-time-analytics-platform/processing-engine-go-new/config"
+	"github.com/YuLiu003/real-time-analytics-platform/processing-engine-go-new/models"
+	processor "github.com/YuLiu003/real-time-analytics-platform/processing-engine-go-new/processor-sarama"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )

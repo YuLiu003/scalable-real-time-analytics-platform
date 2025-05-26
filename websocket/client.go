@@ -66,8 +66,7 @@ func (c *Client) readPump() {
 			}
 			break
 		}
-		// Trim message but don't reassign as we're not using it currently
-		bytes.TrimSpace(bytes.ReplaceAll(message, newline, space))
+		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
 		// Currently, we're not handling incoming client messages
 	}
 }

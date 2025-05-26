@@ -8,9 +8,9 @@ import (
 	"os"
 	"time"
 
-	"tenant-management-go/config"
-	"tenant-management-go/handlers"
-	"tenant-management-go/models"
+	"github.com/YuLiu003/real-time-analytics-platform/tenant-management-go/config"
+	"github.com/YuLiu003/real-time-analytics-platform/tenant-management-go/handlers"
+	"github.com/YuLiu003/real-time-analytics-platform/tenant-management-go/models"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -46,9 +46,9 @@ func (s *MemoryTenantStore) GetTenant(id string) (*models.Tenant, error) {
 	return t, nil
 }
 
-func (s *MemoryTenantStore) GetTenantByApiKey(apiKey string) (*models.Tenant, error) {
+func (s *MemoryTenantStore) GetTenantByAPIKey(apiKey string) (*models.Tenant, error) {
 	for _, t := range s.tenants {
-		if t.ApiKey == apiKey {
+		if t.APIKey == apiKey {
 			return t, nil
 		}
 	}
@@ -129,22 +129,18 @@ func main() {
 
 	// API routes
 	api := r.Group("/api")
-	{
-		// Tenant management endpoints
-		tenants := api.Group("/tenants")
-		{
-			tenants.GET("", tenantHandler.ListTenants)
-			tenants.GET("/:id", tenantHandler.GetTenant)
-			tenants.POST("", tenantHandler.CreateTenant)
-			tenants.PUT("/:id", tenantHandler.UpdateTenant)
-			tenants.DELETE("/:id", tenantHandler.DeleteTenant)
-			tenants.GET("/:id/stats", tenantHandler.GetTenantStats)
-			tenants.GET("/:id/quota", tenantHandler.GetTenantQuota)
-		}
+	// Tenant management endpoints
+	tenants := api.Group("/tenants")
+	tenants.GET("", tenantHandler.ListTenants)
+	tenants.GET("/:id", tenantHandler.GetTenant)
+	tenants.POST("", tenantHandler.CreateTenant)
+	tenants.PUT("/:id", tenantHandler.UpdateTenant)
+	tenants.DELETE("/:id", tenantHandler.DeleteTenant)
+	tenants.GET("/:id/stats", tenantHandler.GetTenantStats)
+	tenants.GET("/:id/quota", tenantHandler.GetTenantQuota)
 
-		// API key validation endpoint
-		api.GET("/validate", tenantHandler.ValidateAPIKey)
-	}
+	// API key validation endpoint
+	api.GET("/validate", tenantHandler.ValidateAPIKey)
 
 	// Prometheus metrics endpoint
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
@@ -168,7 +164,7 @@ func createDefaultTenants(store *MemoryTenantStore) {
 	freeTenant := &models.Tenant{
 		ID:            "tenant1",
 		Name:          "Free Tier Test",
-		ApiKey:        apiKey1,
+		APIKey:        apiKey1,
 		Tier:          "free",
 		Active:        true,
 		CreatedAt:     time.Now(),
@@ -185,7 +181,7 @@ func createDefaultTenants(store *MemoryTenantStore) {
 	standardTenant := &models.Tenant{
 		ID:            "tenant2",
 		Name:          "Standard Tier Test",
-		ApiKey:        apiKey2,
+		APIKey:        apiKey2,
 		Tier:          "standard",
 		Active:        true,
 		CreatedAt:     time.Now(),
@@ -202,7 +198,7 @@ func createDefaultTenants(store *MemoryTenantStore) {
 	premiumTenant := &models.Tenant{
 		ID:            "tenant3",
 		Name:          "Premium Tier Test",
-		ApiKey:        apiKey3,
+		APIKey:        apiKey3,
 		Tier:          "premium",
 		Active:        true,
 		CreatedAt:     time.Now(),

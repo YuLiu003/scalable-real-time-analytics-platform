@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"time"
 
-	"real-time-analytics-platform/models"
+	"github.com/YuLiu003/real-time-analytics-platform/models"
 )
 
 // Default configurations

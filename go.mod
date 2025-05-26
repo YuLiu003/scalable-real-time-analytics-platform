@@ -1,6 +1,6 @@
-module real-time-analytics-platform
+module github.com/YuLiu003/real-time-analytics-platform
 
-go 1.23
+go 1.24
 
 toolchain go1.24.2
 
