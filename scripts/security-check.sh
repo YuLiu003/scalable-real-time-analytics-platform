@@ -357,120 +357,154 @@ echo "✓ All containers run as non-root"
 echo ""
 echo "✅ Security check completed"
 
-# Set the namespace
-NAMESPACE="analytics-platform"
+# Check if we should run live Kubernetes checks
+RUN_K8S_CHECKS=${RUN_K8S_CHECKS:-"auto"}
 
-echo -e "${BLUE}Starting security check for Kubernetes resources in namespace: $NAMESPACE${NC}"
-echo "=============================================================="
+# Function to check if kubectl is available and cluster is accessible
+check_kubectl_available() {
+  if ! command -v kubectl >/dev/null 2>&1; then
+    return 1
+  fi
+  
+  # Try to access cluster (timeout after 5 seconds)
+  if timeout 5s kubectl cluster-info >/dev/null 2>&1; then
+    return 0
+  else
+    return 1
+  fi
+}
 
-# Check for privileged containers
-echo -e "\n${BLUE}Checking for privileged containers...${NC}"
-privileged_containers=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[].spec.containers[] | select(.securityContext.privileged==true) | .name')
-if [ -z "$privileged_containers" ]; then
-  echo -e "${GREEN}No privileged containers found.${NC}"
-else
-  echo -e "${RED}Found privileged containers:${NC}"
-  echo "$privileged_containers"
+# Determine if we should run Kubernetes checks
+SKIP_K8S_CHECKS=false
+if [ "$RUN_K8S_CHECKS" = "false" ]; then
+  SKIP_K8S_CHECKS=true
+  echo -e "${YELLOW}Skipping live Kubernetes checks (RUN_K8S_CHECKS=false)${NC}"
+elif [ "$RUN_K8S_CHECKS" = "auto" ]; then
+  if ! check_kubectl_available; then
+    SKIP_K8S_CHECKS=true
+    echo -e "${YELLOW}Skipping live Kubernetes checks (no accessible cluster found)${NC}"
+  fi
 fi
 
-# Check for containers running as root
-echo -e "\n${BLUE}Checking for containers running as root...${NC}"
-root_containers=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[] | select((.spec.securityContext.runAsNonRoot != true) and (.spec.containers[].securityContext.runAsNonRoot != true)) | .metadata.name' 2>/dev/null || true)
-if [ -z "$root_containers" ]; then
-  echo -e "${GREEN}All pods are configured to run as non-root.${NC}"
-else
-  echo -e "${YELLOW}Pods that may be running as root:${NC}"
-  echo "$root_containers"
-fi
+if [ "$SKIP_K8S_CHECKS" = false ]; then
+  # Set the namespace
+  NAMESPACE="analytics-platform"
 
-# Check for containers with privilege escalation enabled
-echo -e "\n${BLUE}Checking for containers with privilege escalation enabled...${NC}"
-priv_esc_containers=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[].spec.containers[] | select(.securityContext.allowPrivilegeEscalation==true) | .name')
-if [ -z "$priv_esc_containers" ]; then
-  echo -e "${GREEN}No containers with allowPrivilegeEscalation=true found.${NC}"
-else
-  echo -e "${RED}Found containers with allowPrivilegeEscalation enabled:${NC}"
-  echo "$priv_esc_containers"
-fi
+  echo -e "${BLUE}Starting security check for Kubernetes resources in namespace: $NAMESPACE${NC}"
+  echo "=============================================================="
 
-# Check for containers without resource limits
-echo -e "\n${BLUE}Checking for containers without resource limits...${NC}"
-no_limits_containers=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[].spec.containers[] | select(.resources.limits == null) | .name')
-if [ -z "$no_limits_containers" ]; then
-  echo -e "${GREEN}All containers have resource limits set.${NC}"
-else
-  echo -e "${YELLOW}Found containers without resource limits:${NC}"
-  echo "$no_limits_containers"
-fi
+  # Check for privileged containers
+  echo -e "\n${BLUE}Checking for privileged containers...${NC}"
+  privileged_containers=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[].spec.containers[] | select(.securityContext.privileged==true) | .name')
+  if [ -z "$privileged_containers" ]; then
+    echo -e "${GREEN}No privileged containers found.${NC}"
+  else
+    echo -e "${RED}Found privileged containers:${NC}"
+    echo "$privileged_containers"
+  fi
 
-# Check for containers without readiness probes
-echo -e "\n${BLUE}Checking for containers without readiness probes...${NC}"
-no_readiness_containers=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[].spec.containers[] | select(.readinessProbe == null) | .name')
-if [ -z "$no_readiness_containers" ]; then
-  echo -e "${GREEN}All containers have readiness probes.${NC}"
-else
-  echo -e "${YELLOW}Found containers without readiness probes:${NC}"
-  echo "$no_readiness_containers"
-fi
+  # Check for containers running as root
+  echo -e "\n${BLUE}Checking for containers running as root...${NC}"
+  root_containers=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[] | select((.spec.securityContext.runAsNonRoot != true) and (.spec.containers[].securityContext.runAsNonRoot != true)) | .metadata.name' 2>/dev/null || true)
+  if [ -z "$root_containers" ]; then
+    echo -e "${GREEN}All pods are configured to run as non-root.${NC}"
+  else
+    echo -e "${YELLOW}Pods that may be running as root:${NC}"
+    echo "$root_containers"
+  fi
 
-# Check for containers without liveness probes
-echo -e "\n${BLUE}Checking for containers without liveness probes...${NC}"
-no_liveness_containers=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[].spec.containers[] | select(.livenessProbe == null) | .name')
-if [ -z "$no_liveness_containers" ]; then
-  echo -e "${GREEN}All containers have liveness probes.${NC}"
-else
-  echo -e "${YELLOW}Found containers without liveness probes:${NC}"
-  echo "$no_liveness_containers"
-fi
+  # Check for containers with privilege escalation enabled
+  echo -e "\n${BLUE}Checking for containers with privilege escalation enabled...${NC}"
+  priv_esc_containers=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[].spec.containers[] | select(.securityContext.allowPrivilegeEscalation==true) | .name')
+  if [ -z "$priv_esc_containers" ]; then
+    echo -e "${GREEN}No containers with allowPrivilegeEscalation=true found.${NC}"
+  else
+    echo -e "${RED}Found containers with allowPrivilegeEscalation enabled:${NC}"
+    echo "$priv_esc_containers"
+  fi
 
-# Check for containers with hostPath volumes
-echo -e "\n${BLUE}Checking for containers with hostPath volumes...${NC}"
-host_path_pods=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[] | select(.spec.volumes[] | select(.hostPath != null)) | .metadata.name')
-if [ -z "$host_path_pods" ]; then
-  echo -e "${GREEN}No pods with hostPath volumes found.${NC}"
-else
-  echo -e "${YELLOW}Found pods with hostPath volumes:${NC}"
-  echo "$host_path_pods"
-fi
+  # Check for containers without resource limits
+  echo -e "\n${BLUE}Checking for containers without resource limits...${NC}"
+  no_limits_containers=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[].spec.containers[] | select(.resources.limits == null) | .name')
+  if [ -z "$no_limits_containers" ]; then
+    echo -e "${GREEN}All containers have resource limits set.${NC}"
+  else
+    echo -e "${YELLOW}Found containers without resource limits:${NC}"
+    echo "$no_limits_containers"
+  fi
 
-# Check for containers with capabilities
-echo -e "\n${BLUE}Checking for containers with added capabilities...${NC}"
-added_capabilities=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[].spec.containers[] | select(.securityContext.capabilities.add != null) | .name')
-if [ -z "$added_capabilities" ]; then
-  echo -e "${GREEN}No containers with added capabilities found.${NC}"
-else
-  echo -e "${YELLOW}Found containers with added capabilities:${NC}"
-  echo "$added_capabilities"
-fi
+  # Check for containers without readiness probes
+  echo -e "\n${BLUE}Checking for containers without readiness probes...${NC}"
+  no_readiness_containers=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[].spec.containers[] | select(.readinessProbe == null) | .name')
+  if [ -z "$no_readiness_containers" ]; then
+    echo -e "${GREEN}All containers have readiness probes.${NC}"
+  else
+    echo -e "${YELLOW}Found containers without readiness probes:${NC}"
+    echo "$no_readiness_containers"
+  fi
 
-# Check for pods without network policies
-echo -e "\n${BLUE}Checking for service communication security...${NC}"
-network_policies=$(kubectl get networkpolicies -n $NAMESPACE -o json | jq -r '.items[].metadata.name')
-if [ -z "$network_policies" ]; then
-  echo -e "${RED}No network policies found in the namespace.${NC}"
-else
-  echo -e "${GREEN}Network policies found:${NC}"
-  echo "$network_policies"
-fi
+  # Check for containers without liveness probes
+  echo -e "\n${BLUE}Checking for containers without liveness probes...${NC}"
+  no_liveness_containers=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[].spec.containers[] | select(.livenessProbe == null) | .name')
+  if [ -z "$no_liveness_containers" ]; then
+    echo -e "${GREEN}All containers have liveness probes.${NC}"
+  else
+    echo -e "${YELLOW}Found containers without liveness probes:${NC}"
+    echo "$no_liveness_containers"
+  fi
 
-# Check for pods without service accounts
-echo -e "\n${BLUE}Checking for pods without custom service accounts...${NC}"
-default_sa_pods=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[] | select(.spec.serviceAccountName == "default" or .spec.serviceAccountName == null) | .metadata.name')
-if [ -z "$default_sa_pods" ]; then
-  echo -e "${GREEN}All pods are using custom service accounts.${NC}"
-else
-  echo -e "${YELLOW}Found pods using the default service account:${NC}"
-  echo "$default_sa_pods"
-fi
+  # Check for containers with hostPath volumes
+  echo -e "\n${BLUE}Checking for containers with hostPath volumes...${NC}"
+  host_path_pods=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[] | select(.spec.volumes[] | select(.hostPath != null)) | .metadata.name')
+  if [ -z "$host_path_pods" ]; then
+    echo -e "${GREEN}No pods with hostPath volumes found.${NC}"
+  else
+    echo -e "${YELLOW}Found pods with hostPath volumes:${NC}"
+    echo "$host_path_pods"
+  fi
 
-# Check for hardcoded secrets in environment variables
-echo -e "\n${BLUE}Checking for potential hardcoded secrets in environment variables...${NC}"
-suspicious_env_vars=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[] | select(.spec.containers[].env != null) | .spec.containers[].env[]? | select(.valueFrom == null and (.name | contains("TOKEN") or contains("KEY") or contains("SECRET") or contains("PASS")) and (.name | contains("BYPASS_AUTH") or contains("ENABLE_API_AUTH") or contains("API_KEY_ENABLED") | not)) | "\(.name)"' 2>/dev/null || true)
-if [ -z "$suspicious_env_vars" ]; then
-  echo -e "${GREEN}No suspicious environment variables found.${NC}"
-else
-  echo -e "${YELLOW}Found potentially hardcoded secrets in environment variables:${NC}"
-  echo "$suspicious_env_vars"
-fi
+  # Check for containers with capabilities
+  echo -e "\n${BLUE}Checking for containers with added capabilities...${NC}"
+  added_capabilities=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[].spec.containers[] | select(.securityContext.capabilities.add != null) | .name')
+  if [ -z "$added_capabilities" ]; then
+    echo -e "${GREEN}No containers with added capabilities found.${NC}"
+  else
+    echo -e "${YELLOW}Found containers with added capabilities:${NC}"
+    echo "$added_capabilities"
+  fi
 
-echo -e "\n${BLUE}Security check completed.${NC}"
+  # Check for pods without network policies
+  echo -e "\n${BLUE}Checking for service communication security...${NC}"
+  network_policies=$(kubectl get networkpolicies -n $NAMESPACE -o json | jq -r '.items[].metadata.name')
+  if [ -z "$network_policies" ]; then
+    echo -e "${RED}No network policies found in the namespace.${NC}"
+  else
+    echo -e "${GREEN}Network policies found:${NC}"
+    echo "$network_policies"
+  fi
+
+  # Check for pods without service accounts
+  echo -e "\n${BLUE}Checking for pods without custom service accounts...${NC}"
+  default_sa_pods=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[] | select(.spec.serviceAccountName == "default" or .spec.serviceAccountName == null) | .metadata.name')
+  if [ -z "$default_sa_pods" ]; then
+    echo -e "${GREEN}All pods are using custom service accounts.${NC}"
+  else
+    echo -e "${YELLOW}Found pods using the default service account:${NC}"
+    echo "$default_sa_pods"
+  fi
+
+  # Check for hardcoded secrets in environment variables
+  echo -e "\n${BLUE}Checking for potential hardcoded secrets in environment variables...${NC}"
+  suspicious_env_vars=$(kubectl get pods -n $NAMESPACE -o json | jq -r '.items[] | select(.spec.containers[].env != null) | .spec.containers[].env[]? | select(.valueFrom == null and (.name | contains("TOKEN") or contains("KEY") or contains("SECRET") or contains("PASS")) and (.name | contains("BYPASS_AUTH") or contains("ENABLE_API_AUTH") or contains("API_KEY_ENABLED") | not)) | "\(.name)"' 2>/dev/null || true)
+  if [ -z "$suspicious_env_vars" ]; then
+    echo -e "${GREEN}No suspicious environment variables found.${NC}"
+  else
+    echo -e "${YELLOW}Found potentially hardcoded secrets in environment variables:${NC}"
+    echo "$suspicious_env_vars"
+  fi
+
+  echo -e "\n${BLUE}Security check completed.${NC}"
+else
+  echo -e "${BLUE}Live Kubernetes security checks skipped.${NC}"
+  echo -e "${YELLOW}To run live cluster checks, ensure kubectl is available and set RUN_K8S_CHECKS=true${NC}"
+fi
