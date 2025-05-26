@@ -8,9 +8,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/YuLiu003/real-time-analytics-platform/tenant-management-go/config"
-	"github.com/YuLiu003/real-time-analytics-platform/tenant-management-go/handlers"
-	"github.com/YuLiu003/real-time-analytics-platform/tenant-management-go/models"
+	"tenant-management-go/config"
+	"tenant-management-go/handlers"
+	"tenant-management-go/models"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
