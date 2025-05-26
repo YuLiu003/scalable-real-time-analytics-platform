@@ -8,8 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"admin-ui-go/handlers"
-	"admin-ui-go/middleware"
+	"github.com/YuLiu003/real-time-analytics-platform/platform/admin-ui-go/handlers"
+	"github.com/YuLiu003/real-time-analytics-platform/platform/admin-ui-go/middleware"
 )
 
 func main() {
