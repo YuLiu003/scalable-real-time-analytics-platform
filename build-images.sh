@@ -9,6 +9,40 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}Building Docker images for all services...${NC}"
 
+# Function to build with retries and network fallbacks
+build_with_fallback() {
+    local service=$1
+    local max_attempts=3
+    local attempt=1
+    
+    echo -e "${BLUE}Building $service image (attempt $attempt/$max_attempts)...${NC}"
+    
+    # First attempt - normal build
+    if docker build -t "$service:latest" "./$service" 2>/dev/null; then
+        echo -e "${GREEN}Successfully built $service image${NC}"
+        return 0
+    fi
+    
+    echo -e "${YELLOW}Normal build failed, trying with network optimizations...${NC}"
+    
+    # Second attempt - disable BuildKit for network issues
+    export DOCKER_BUILDKIT=0
+    if docker build -t "$service:latest" "./$service" 2>/dev/null; then
+        echo -e "${GREEN}Successfully built $service image (BuildKit disabled)${NC}"
+        return 0
+    fi
+    
+    # Third attempt - with no cache
+    echo -e "${YELLOW}Trying with --no-cache...${NC}"
+    if docker build --no-cache -t "$service:latest" "./$service" 2>/dev/null; then
+        echo -e "${GREEN}Successfully built $service image (no-cache)${NC}"
+        return 0
+    fi
+    
+    echo -e "${RED}Failed to build $service after all attempts${NC}"
+    return 1
+}
+
 # Connect to minikube's Docker daemon (if not already connected)
 eval $(minikube docker-env) || true
 
@@ -18,10 +52,8 @@ BUILT_IMAGES=()
 FAILED_IMAGES=()
 
 # Build data-ingestion-go
-echo -e "${BLUE}Building data-ingestion-go image...${NC}"
 if [ -d "./data-ingestion-go" ]; then
-  if docker build -t data-ingestion-go:latest ./data-ingestion-go; then
-    echo -e "${GREEN}Successfully built data-ingestion-go image${NC}"
+  if build_with_fallback "data-ingestion-go"; then
     BUILT_IMAGES+=("data-ingestion-go")
   else
     echo -e "${YELLOW}Warning: Failed to build data-ingestion-go image, but continuing...${NC}"
@@ -32,10 +64,8 @@ else
 fi
 
 # Build clean-ingestion-go
-echo -e "${BLUE}Building clean-ingestion-go image...${NC}"
 if [ -d "./clean-ingestion-go" ]; then
-  if docker build -t clean-ingestion-go:latest ./clean-ingestion-go; then
-    echo -e "${GREEN}Successfully built clean-ingestion-go image${NC}"
+  if build_with_fallback "clean-ingestion-go"; then
     BUILT_IMAGES+=("clean-ingestion-go")
   else
     echo -e "${YELLOW}Warning: Failed to build clean-ingestion-go image, but continuing...${NC}"
@@ -47,8 +77,7 @@ fi
 
 # Check for processing-engine-go
 if [ -d "./processing-engine-go" ]; then
-  echo -e "${BLUE}Building processing-engine-go image...${NC}"
-  if docker build -t processing-engine-go:latest ./processing-engine-go; then
+  if build_with_fallback "processing-engine-go"; then
     echo -e "${GREEN}Successfully built processing-engine-go image${NC}"
     BUILT_IMAGES+=("processing-engine-go")
   else

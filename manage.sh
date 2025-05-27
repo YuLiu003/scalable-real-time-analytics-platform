@@ -286,7 +286,7 @@ show_platform_status() {
     echo -e "\n${BLUE}Resource Usage:${NC}"
     kubectl top pods -n analytics-platform 2>/dev/null || echo "Metrics server not available"
 }
-# Add this function to your manage.sh script:
+# Enhanced build images function with resilient fallback support
 build_images() {
     # First check if minikube is operational
     if ! ensure_minikube_operational; then
@@ -295,32 +295,35 @@ build_images() {
         return 1
     fi
     
-    echo -e "${BLUE}Building platform images...${NC}"
+    echo -e "${BLUE}Building platform images with resilient fallbacks...${NC}"
     
     # Connect to minikube's Docker daemon
     echo -e "${BLUE}Connecting to minikube's Docker daemon...${NC}"
     eval $(minikube docker-env)
     
-    # Check if build-images.sh exists and is executable
-    if [ ! -f "./build-images.sh" ]; then
-        echo -e "${RED}Error: build-images.sh script not found${NC}"
+    # Prefer resilient build script if available, fallback to standard script
+    if [ -f "./build-images-resilient.sh" ] && [ -x "./build-images-resilient.sh" ]; then
+        echo -e "${BLUE}Using resilient build script with fallback strategies...${NC}"
+        ./build-images-resilient.sh
+        BUILD_RESULT=$?
+    elif [ -f "./build-images.sh" ]; then
+        echo -e "${YELLOW}Resilient build script not found, using standard build script...${NC}"
+        if [ ! -x "./build-images.sh" ]; then
+            chmod +x ./build-images.sh
+        fi
+        ./build-images.sh
+        BUILD_RESULT=$?
+    else
+        echo -e "${RED}Error: No build script found (neither build-images-resilient.sh nor build-images.sh)${NC}"
         return 1
     fi
     
-    if [ ! -x "./build-images.sh" ]; then
-        echo -e "${YELLOW}Making build-images.sh executable...${NC}"
-        chmod +x ./build-images.sh
-    fi
-    
-    # Run the build-images.sh script
-    echo -e "${BLUE}Running build-images.sh...${NC}"
-    ./build-images.sh
-    
-    if [ $? -eq 0 ]; then
+    if [ $BUILD_RESULT -eq 0 ]; then
         echo -e "${GREEN}All images built successfully!${NC}"
         echo -e "${YELLOW}You can now run './manage.sh deploy' to deploy the platform.${NC}"
     else
         echo -e "${RED}Image building failed. Please check the error messages above.${NC}"
+        echo -e "${YELLOW}Try running './scripts/docker-network-fix.sh' if you encounter network issues.${NC}"
         return 1
     fi
 }
