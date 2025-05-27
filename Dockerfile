@@ -17,7 +17,7 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -o visualization-go .
+RUN CGO_ENABLED=0 GOOS=linux go build -o analytics-platform .
 
 # Final stage
 FROM alpine:latest
@@ -29,7 +29,7 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 WORKDIR /app
 
 # Copy binary from build stage
-COPY --from=build /app/visualization-go .
+COPY --from=build /app/analytics-platform .
 
 # Copy static files and templates
 COPY --from=build /app/templates ./templates
@@ -52,4 +52,4 @@ ENV GIN_MODE=release
 EXPOSE 5003
 
 # Run the binary
-CMD ["./visualization-go"] 
+CMD ["./analytics-platform"] 
