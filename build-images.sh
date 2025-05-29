@@ -18,25 +18,34 @@ build_with_fallback() {
     echo -e "${BLUE}Building $service image (attempt $attempt/$max_attempts)...${NC}"
     
     # First attempt - normal build
-    if docker build -t "$service:latest" "./$service" 2>/dev/null; then
+    if docker build -t "$service:latest" "./$service" 2>error.log; then
         echo -e "${GREEN}Successfully built $service image${NC}"
         return 0
+    else
+        echo -e "${RED}Build failed. Errors:${NC}"
+        cat error.log
     fi
     
     echo -e "${YELLOW}Normal build failed, trying with network optimizations...${NC}"
     
     # Second attempt - disable BuildKit for network issues
     export DOCKER_BUILDKIT=0
-    if docker build -t "$service:latest" "./$service" 2>/dev/null; then
+    if docker build -t "$service:latest" "./$service" 2>error.log; then
         echo -e "${GREEN}Successfully built $service image (BuildKit disabled)${NC}"
         return 0
+    else
+        echo -e "${RED}BuildKit disabled build failed. Errors:${NC}"
+        cat error.log
     fi
     
     # Third attempt - with no cache
     echo -e "${YELLOW}Trying with --no-cache...${NC}"
-    if docker build --no-cache -t "$service:latest" "./$service" 2>/dev/null; then
+    if docker build --no-cache -t "$service:latest" "./$service" 2>error.log; then
         echo -e "${GREEN}Successfully built $service image (no-cache)${NC}"
         return 0
+    else
+        echo -e "${RED}No-cache build failed. Errors:${NC}"
+        cat error.log
     fi
     
     echo -e "${RED}Failed to build $service after all attempts${NC}"
