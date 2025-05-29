@@ -29,7 +29,7 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 
 # Expose the port the application runs on
-EXPOSE 5001
+EXPOSE 5000
 
 # Command to run the application
 CMD ["./clean-ingestion"] 
