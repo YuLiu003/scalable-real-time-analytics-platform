@@ -14,7 +14,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o clean-ingestion .
 
 # Stage 2: Create a minimal runtime image
-FROM alpine:latest
+FROM alpine:3.18
 
 WORKDIR /app
 
