@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -90,13 +91,24 @@ func ingestData(c *gin.Context) {
 		return
 	}
 
-	// Just log the data for now
-	log.Printf("Data: %+v", data)
+	// Validate required fields
+	if err := validateRequiredFields(data); err != nil {
+		log.Printf("Validation failed: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"status":  "error",
+			"message": err.Error(),
+		})
+		return
+	}
+
+	// Clean the data
+	cleanedData := cleanData(data)
+	log.Printf("Data cleaned: %+v", cleanedData)
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
-		"message": "Data logged successfully",
-		"data":    data,
+		"message": "Data cleaned and logged successfully",
+		"data":    cleanedData,
 	})
 }
 
@@ -235,17 +247,137 @@ func (h *CleanConsumerHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 	}
 }
 
+// validateRequiredFields checks for mandatory fields in the data
+func validateRequiredFields(data map[string]interface{}) error {
+	// Check for device_id or sensor_id
+	deviceID, hasDeviceID := data["device_id"]
+	sensorID, hasSensorID := data["sensor_id"]
+
+	if !hasDeviceID && !hasSensorID {
+		return errors.New("missing required field: device_id or sensor_id")
+	}
+
+	if hasDeviceID {
+		if deviceIDStr, ok := deviceID.(string); !ok || deviceIDStr == "" {
+			return errors.New("device_id must be a non-empty string")
+		}
+	}
+
+	if hasSensorID {
+		if sensorIDStr, ok := sensorID.(string); !ok || sensorIDStr == "" {
+			return errors.New("sensor_id must be a non-empty string")
+		}
+	}
+
+	// Optional: Check for timestamp format if provided
+	if timestamp, hasTimestamp := data["timestamp"]; hasTimestamp {
+		if timestampStr, ok := timestamp.(string); ok {
+			if _, err := time.Parse(time.RFC3339, timestampStr); err != nil {
+				// Try Unix timestamp as number
+				if _, ok := timestamp.(float64); !ok {
+					return errors.New("timestamp must be RFC3339 string or Unix timestamp number")
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // cleanData applies data cleaning and validation rules
 func cleanData(data map[string]interface{}) map[string]interface{} {
-	// Add your data cleaning logic here
-	// For now, we'll just pass through the data with a timestamp
 	cleanedData := make(map[string]interface{})
+
+	// Copy all fields, applying cleaning rules
 	for k, v := range data {
-		cleanedData[k] = v
+		switch k {
+		case "timestamp":
+			// Ensure timestamp is in RFC3339 format
+			cleanedData[k] = normalizeTimestamp(v)
+		case "temperature", "humidity":
+			// Validate numeric sensor values
+			if numVal, ok := v.(float64); ok {
+				cleanedData[k] = validateSensorValue(k, numVal)
+			} else {
+				cleanedData[k] = v // Keep original if not numeric
+			}
+		default:
+			cleanedData[k] = v
+		}
 	}
 
 	// Add processing timestamp
 	cleanedData["processed_at"] = time.Now().UTC().Format(time.RFC3339)
 
+	// Add data quality score (basic implementation)
+	cleanedData["quality_score"] = calculateQualityScore(cleanedData)
+
 	return cleanedData
+}
+
+// normalizeTimestamp ensures timestamp is in RFC3339 format
+func normalizeTimestamp(timestamp interface{}) string {
+	switch v := timestamp.(type) {
+	case string:
+		// Try to parse as RFC3339
+		if _, err := time.Parse(time.RFC3339, v); err == nil {
+			return v
+		}
+		// If parse fails, return current time
+		return time.Now().UTC().Format(time.RFC3339)
+	case float64:
+		// Unix timestamp
+		return time.Unix(int64(v), 0).UTC().Format(time.RFC3339)
+	default:
+		return time.Now().UTC().Format(time.RFC3339)
+	}
+}
+
+// validateSensorValue applies basic validation to sensor readings
+func validateSensorValue(sensorType string, value float64) float64 {
+	switch sensorType {
+	case "temperature":
+		// Temperature should be reasonable (-50 to 60 Celsius)
+		if value < -50 || value > 60 {
+			log.Printf("Warning: Unusual temperature value: %f", value)
+		}
+	case "humidity":
+		// Humidity should be 0-100%
+		if value < 0 || value > 100 {
+			log.Printf("Warning: Invalid humidity value: %f, clamping to valid range", value)
+			if value < 0 {
+				return 0
+			}
+			if value > 100 {
+				return 100
+			}
+		}
+	}
+	return value
+}
+
+// calculateQualityScore provides a basic data quality assessment
+func calculateQualityScore(data map[string]interface{}) float64 {
+	score := 1.0
+
+	// Reduce score for missing common fields
+	commonFields := []string{"device_id", "sensor_id", "timestamp"}
+	for _, field := range commonFields {
+		if _, exists := data[field]; !exists {
+			score -= 0.1
+		}
+	}
+
+	// Reduce score for unusual values (already logged in validateSensorValue)
+	if temp, exists := data["temperature"]; exists {
+		if tempVal, ok := temp.(float64); ok && (tempVal < -50 || tempVal > 60) {
+			score -= 0.2
+		}
+	}
+
+	if score < 0 {
+		score = 0
+	}
+
+	return score
 }
