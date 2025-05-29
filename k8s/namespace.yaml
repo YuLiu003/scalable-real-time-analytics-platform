@@ -2,3 +2,6 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: analytics-platform
+  labels:
+    name: analytics-platform
+    environment: production

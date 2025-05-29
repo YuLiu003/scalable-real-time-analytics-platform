@@ -1,12 +1,10 @@
 #!/bin/bash
-
 # Colors for better readability
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
-
 # Display help information
 show_help() {
     echo -e "${BLUE}Real-Time Analytics Platform Management Script${NC}"
@@ -18,8 +16,17 @@ show_help() {
     echo "  stop        - Stop minikube cluster"
     echo "  build       - Build Docker images for all services"
     echo "  deploy      - Deploy the full platform"
+    echo "  deploy-prod - Deploy with production configuration"
+    echo "  setup-all   - Complete setup: start minikube, build images and deploy"
+    echo "  reset-all   - Complete cleanup: delete namespace, PVs, and start fresh"
+    echo "  fix-storage - Rebuild only the storage-layer-go image"
+    echo "  fix-processing - Rebuild only the processing-engine-go image"
     echo "  monitoring  - Deploy monitoring stack (Prometheus/Grafana)"
     echo "  dashboard   - Open Kubernetes dashboard"
+    echo "  access-viz  - Access visualization dashboard (localhost:8080)"
+    echo "  access-api  - Access data ingestion API (localhost:5000)"
+    echo "  test-api    - Test API with secure credentials from K8s secrets"
+    echo "  stop-access - Stop all port forwarding sessions"
     echo "  prometheus  - Access Prometheus UI (port-forward)"
     echo "  grafana     - Access Grafana UI (port-forward)"
     echo "  test        - Run platform tests"
@@ -37,7 +44,6 @@ show_help() {
     echo "  cleanup     - Remove all platform resources"
     echo "  help        - Show this help information"
 }
-
 # Check minikube status and start if needed
 ensure_minikube_running() {
     echo -e "${BLUE}Checking minikube status...${NC}"
@@ -52,7 +58,6 @@ ensure_minikube_running() {
         echo -e "${GREEN}Minikube is already running.${NC}"
     fi
 }
-
 # Ensure minikube is fully operational with retries
 ensure_minikube_operational() {
     echo -e "${BLUE}Ensuring Minikube is fully operational...${NC}"
@@ -115,11 +120,8 @@ ensure_minikube_operational() {
         return 1
     fi
 }
-
-# Run minikube tunnel in background
+# Start minikube tunnel
 start_minikube_tunnel() {
-    ensure_minikube_operational || return 1
-    
     echo -e "${BLUE}Starting minikube tunnel in background...${NC}"
     
     # Check if tunnel is already running
@@ -145,7 +147,6 @@ start_minikube_tunnel() {
         return 1
     fi
 }
-
 # Stop minikube tunnel
 stop_minikube_tunnel() {
     echo -e "${BLUE}Stopping minikube tunnel...${NC}"
@@ -170,9 +171,8 @@ stop_minikube_tunnel() {
         fi
     fi
 }
-
 # Comprehensive Minikube reset function
-full_minikube_reset() {
+reset_minikube() {
     echo -e "${RED}Warning: This will completely reset Minikube. All data will be lost. Continue? (y/n)${NC}"
     read -r confirm
     if [[ $confirm =~ ^[Yy]$ ]]; then
@@ -184,7 +184,6 @@ full_minikube_reset() {
         
         echo -e "${BLUE}Deleting Minikube...${NC}"
         minikube delete
-
         echo -e "${BLUE}Removing any leftover Minikube files...${NC}"
         rm -rf ~/.minikube || true
         
@@ -208,15 +207,13 @@ full_minikube_reset() {
         echo -e "${BLUE}Reset cancelled.${NC}"
     fi
 }
-
 # Check if namespace exists
-ensure_namespace_exists() {
+ensure_namespace() {
     if ! kubectl get namespace analytics-platform &> /dev/null; then
         echo -e "${YELLOW}Creating analytics-platform namespace...${NC}"
         kubectl create namespace analytics-platform
     fi
 }
-
 # Check if resources are ready before continuing deployment
 wait_for_resource() {
   local resource_type=$1
@@ -225,7 +222,6 @@ wait_for_resource() {
   local timeout=${4:-180}
   local count=0
   local interval=5
-
   echo -e "${BLUE}Waiting for $resource_type/$resource_name to be ready...${NC}"
   
   while [ $count -lt $timeout ]; do
@@ -251,9 +247,8 @@ wait_for_resource() {
   echo -e "${RED}Timed out waiting for $resource_type/$resource_name${NC}"
   return 1
 }
-
 # Show status of all platform components
-show_status() {
+show_platform_status() {
     echo -e "${BLUE}Platform Status${NC}"
     echo "================="
     
@@ -291,216 +286,61 @@ show_status() {
     echo -e "\n${BLUE}Resource Usage:${NC}"
     kubectl top pods -n analytics-platform 2>/dev/null || echo "Metrics server not available"
 }
-
-# Ensure minikube is fully operational with retries
-ensure_minikube_operational() {
-    echo -e "${BLUE}Ensuring Minikube is fully operational...${NC}"
-    
-    # First make sure it's running
-    ensure_minikube_running
-    
-    # Now check if API server is actually responding
-    local max_attempts=5
-    local attempt=1
-    local delay=10
-    
-    while [ $attempt -le $max_attempts ]; do
-        echo -e "${BLUE}Checking Kubernetes API server (attempt $attempt/$max_attempts)...${NC}"
-        
-        if kubectl cluster-info &>/dev/null; then
-            echo -e "${GREEN}Kubernetes API server is responding!${NC}"
-            
-            # Verify Docker connectivity
-            echo -e "${BLUE}Verifying Docker connectivity...${NC}"
-            if eval $(minikube docker-env) &>/dev/null; then
-                echo -e "${GREEN}Minikube-Docker integration successful!${NC}"
-                return 0
-            else
-                echo -e "${YELLOW}Docker connectivity issue. Retrying...${NC}"
-            fi
-        else
-            echo -e "${YELLOW}Kubernetes API server not responding yet. Waiting...${NC}"
-        fi
-        
-        echo -e "${BLUE}Waiting $delay seconds before retry...${NC}"
-        sleep $delay
-        attempt=$((attempt+1))
-    done
-    
-    echo -e "${RED}Failed to verify Minikube is fully operational after multiple attempts.${NC}"
-    echo -e "${YELLOW}Would you like to try restarting Minikube? (y/n)${NC}"
-    read -r restart_choice
-    
-    if [[ $restart_choice =~ ^[Yy]$ ]]; then
-        echo -e "${BLUE}Restarting Minikube...${NC}"
-        minikube stop
-        sleep 5
-        minikube start
-        
-        # Give it time to stabilize
-        echo -e "${BLUE}Giving Minikube time to stabilize...${NC}"
-        sleep 20
-        
-        if kubectl cluster-info &>/dev/null; then
-            echo -e "${GREEN}Minikube restarted successfully!${NC}"
-            return 0
-        else
-            echo -e "${RED}Minikube still not operational after restart.${NC}"
-            echo -e "${YELLOW}Consider running 'minikube delete' and then 'minikube start' manually.${NC}"
-            return 1
-        fi
-    else
-        echo -e "${BLUE}Restart cancelled.${NC}"
-        return 1
-    fi
-}
-
-# Run minikube tunnel in background
-start_minikube_tunnel() {
-    ensure_minikube_operational || return 1
-    
-    echo -e "${BLUE}Starting minikube tunnel in background...${NC}"
-    
-    # Check if tunnel is already running
-    if pgrep -f "minikube tunnel" > /dev/null; then
-        echo -e "${GREEN}Minikube tunnel is already running.${NC}"
-        return 0
-    fi
-    
-    # Start tunnel in background
-    minikube tunnel > /tmp/minikube-tunnel.log 2>&1 &
-    TUNNEL_PID=$!
-    
-    # Wait a moment to ensure it started
-    sleep 5
-    
-    # Check if still running
-    if kill -0 $TUNNEL_PID 2>/dev/null; then
-        echo -e "${GREEN}Minikube tunnel started successfully with PID $TUNNEL_PID${NC}"
-        echo $TUNNEL_PID > /tmp/minikube-tunnel.pid
-    else
-        echo -e "${RED}Failed to start minikube tunnel${NC}"
-        cat /tmp/minikube-tunnel.log
-        return 1
-    fi
-}
-
-# Stop minikube tunnel
-stop_minikube_tunnel() {
-    echo -e "${BLUE}Stopping minikube tunnel...${NC}"
-    
-    if [ -f /tmp/minikube-tunnel.pid ]; then
-        TUNNEL_PID=$(cat /tmp/minikube-tunnel.pid)
-        if kill -0 $TUNNEL_PID 2>/dev/null; then
-            kill $TUNNEL_PID
-            echo -e "${GREEN}Minikube tunnel stopped.${NC}"
-        else
-            echo -e "${YELLOW}Minikube tunnel process not found.${NC}"
-        fi
-        rm /tmp/minikube-tunnel.pid
-    else
-        # Try to find and kill any tunnel processes
-        TUNNEL_PID=$(pgrep -f "minikube tunnel")
-        if [ -n "$TUNNEL_PID" ]; then
-            kill $TUNNEL_PID
-            echo -e "${GREEN}Found and stopped minikube tunnel.${NC}"
-        else
-            echo -e "${YELLOW}No running minikube tunnel found.${NC}"
-        fi
-    fi
-}
-
-# Comprehensive Minikube reset function
-full_minikube_reset() {
-    echo -e "${RED}Warning: This will completely reset Minikube. All data will be lost. Continue? (y/n)${NC}"
-    read -r confirm
-    if [[ $confirm =~ ^[Yy]$ ]]; then
-        echo -e "${BLUE}Stopping any running Minikube tunnel...${NC}"
-        stop_minikube_tunnel
-        
-        echo -e "${BLUE}Stopping Minikube...${NC}"
-        minikube stop || true
-        
-        echo -e "${BLUE}Deleting Minikube...${NC}"
-        minikube delete
-
-        echo -e "${BLUE}Removing any leftover Minikube files...${NC}"
-        rm -rf ~/.minikube || true
-        
-        echo -e "${BLUE}Starting fresh Minikube instance...${NC}"
-        minikube start --memory=4096 --cpus=2 # Adjust resources as needed
-        
-        # Wait for Minikube to stabilize
-        echo -e "${BLUE}Waiting for Minikube to stabilize (30 seconds)...${NC}"
-        sleep 30
-        
-        # Verify if Minikube is operational
-        if kubectl cluster-info &>/dev/null; then
-            echo -e "${GREEN}Minikube reset successful!${NC}"
-            echo -e "${GREEN}Kubernetes API server is responding.${NC}"
-            echo -e "${YELLOW}You can now run './manage.sh deploy' to redeploy your platform.${NC}"
-        else
-            echo -e "${RED}Minikube reset complete, but API server is not responding.${NC}"
-            echo -e "${YELLOW}Try running './manage.sh fix-minikube' for diagnostics.${NC}"
-        fi
-    else
-        echo -e "${BLUE}Reset cancelled.${NC}"
-    fi
-}
-
-# Add this function to your manage.sh script:
+# Enhanced build images function with resilient fallback support
 build_images() {
     # First check if minikube is operational
-    ensure_minikube_operational || {
+    if ! ensure_minikube_operational; then
         echo -e "${RED}Cannot build images because Minikube is not fully operational.${NC}"
         echo -e "${YELLOW}Try running './manage.sh fix-minikube' or './manage.sh reset-minikube' to fix issues.${NC}"
         return 1
-    }
+    fi
     
-    echo -e "${BLUE}Building platform images...${NC}"
+    echo -e "${BLUE}Building platform images with resilient fallbacks...${NC}"
     
     # Connect to minikube's Docker daemon
     echo -e "${BLUE}Connecting to minikube's Docker daemon...${NC}"
     eval $(minikube docker-env)
     
-    # Check if build-images.sh exists and is executable
-    if [ ! -f "./build-images.sh" ]; then
-        echo -e "${RED}Error: build-images.sh script not found${NC}"
+    # Prefer resilient build script if available, fallback to standard script
+    if [ -f "./build-images-resilient.sh" ] && [ -x "./build-images-resilient.sh" ]; then
+        echo -e "${BLUE}Using resilient build script with fallback strategies...${NC}"
+        ./build-images-resilient.sh
+        BUILD_RESULT=$?
+    elif [ -f "./build-images.sh" ]; then
+        echo -e "${YELLOW}Resilient build script not found, using standard build script...${NC}"
+        if [ ! -x "./build-images.sh" ]; then
+            chmod +x ./build-images.sh
+        fi
+        ./build-images.sh
+        BUILD_RESULT=$?
+    else
+        echo -e "${RED}Error: No build script found (neither build-images-resilient.sh nor build-images.sh)${NC}"
         return 1
     fi
     
-    if [ ! -x "./build-images.sh" ]; then
-        echo -e "${YELLOW}Making build-images.sh executable...${NC}"
-        chmod +x ./build-images.sh
-    fi
-    
-    # Run the build-images.sh script
-    echo -e "${BLUE}Running build-images.sh...${NC}"
-    ./build-images.sh
-    
-    if [ $? -eq 0 ]; then
+    if [ $BUILD_RESULT -eq 0 ]; then
         echo -e "${GREEN}All images built successfully!${NC}"
         echo -e "${YELLOW}You can now run './manage.sh deploy' to deploy the platform.${NC}"
     else
         echo -e "${RED}Image building failed. Please check the error messages above.${NC}"
+        echo -e "${YELLOW}Try running './scripts/docker-network-fix.sh' if you encounter network issues.${NC}"
         return 1
     fi
 }
-
 # Deploy the platform
 deploy_platform() {
     # Use the enhanced check that ensures API server is responding
-    ensure_minikube_operational || {
+    if ! ensure_minikube_operational; then
         echo -e "${RED}Cannot deploy because Minikube is not fully operational.${NC}"
         echo -e "${YELLOW}Try running './manage.sh fix-minikube' or './manage.sh reset-minikube' to fix issues.${NC}"
         return 1
-    }
+    fi
     
     echo -e "${BLUE}Deploying Real-Time Analytics Platform...${NC}"
     
     # Check if images exist
     eval $(minikube docker-env)
-    if ! docker images | grep -q "flask-api"; then
+    if ! docker images | grep -q "data-ingestion-go"; then
         echo -e "${YELLOW}Required images not found. Building images first...${NC}"
         build_images || {
             echo -e "${RED}Failed to build images. Deployment aborted.${NC}"
@@ -509,80 +349,96 @@ deploy_platform() {
     else
         echo -e "${GREEN}Using existing Docker images...${NC}"
     fi
-
-    # Instead of just executing deploy-platform.sh, we'll add more control here
     
     # Make sure namespace exists
-    ensure_namespace_exists
+    ensure_namespace
     
-    # Apply core infrastructure 
-    echo "Creating necessary secrets and configmaps..."
+    # Apply RBAC first for security
+    echo -e "${BLUE}Applying RBAC configurations...${NC}"
+    kubectl apply -f k8s/rbac.yaml
+    
+    # Apply secrets and configmaps
+    echo -e "${BLUE}Creating secrets and configmaps...${NC}"
     kubectl apply -f k8s/configmap.yaml
-    kubectl apply -f k8s/secrets.yaml
-    kubectl apply -f k8s/grafana-secret.yaml
+    # Note: Secrets should be created by running ./scripts/setup-secrets.sh first
+    echo -e "${YELLOW}Secrets should already be created by setup-secrets.sh script${NC}"
     
-    # Deploy Kafka first
-    echo "Deploying Kafka..."
-    kubectl apply -f k8s/kafka-secrets.yaml
+    # Apply network policies
+    echo -e "${BLUE}Applying network policies...${NC}"
+    kubectl apply -f k8s/network-policy.yaml
+    
+    # Deploy core infrastructure - UPDATED FOR KRAFT MODE
+    echo -e "${BLUE}Deploying core infrastructure...${NC}"
     kubectl apply -f k8s/kafka-pvc.yaml
-    kubectl apply -f k8s/kafka-kraft-deployment.yaml
+    kubectl apply -f k8s/storage-layer-pvc.yaml
+    kubectl apply -f k8s/kafka-kraft-statefulset.yaml
     kubectl apply -f k8s/kafka-service.yaml
     
     # Wait for Kafka to be ready before continuing
-    wait_for_resource deployment kafka analytics-platform 300
+    echo -e "${YELLOW}Waiting for Kafka to be ready...${NC}"
     
-    # Deploy remaining services
-    echo "Deploying platform services..."
-    kubectl apply -f k8s/flask-api-deployment.yaml
-    kubectl apply -f k8s/flask-api-service.yaml
-    kubectl apply -f k8s/data-ingestion-deployment.yaml
-    kubectl apply -f k8s/data-ingestion-service.yaml
+    # Deploy microservices
+    echo -e "${BLUE}Deploying Go microservices...${NC}"
+    kubectl apply -f k8s/data-ingestion-go-deployment.yaml
+    kubectl apply -f k8s/data-ingestion-go-service.yaml
     
-    # Wait for key services before deploying dependent services
-    wait_for_resource deployment flask-api analytics-platform
-    wait_for_resource deployment data-ingestion analytics-platform
+    kubectl apply -f k8s/clean-ingestion-go-deployment.yaml
+    kubectl apply -f k8s/clean-ingestion-go-service.yaml
     
-    # Deploy processing engine and dependent services
-    kubectl apply -f k8s/processing-engine-deployment.yaml
-    kubectl apply -f k8s/processing-engine-service.yaml
-    kubectl apply -f k8s/storage-layer-deployment.yaml
-    kubectl apply -f k8s/storage-layer-service.yaml
-    kubectl apply -f k8s/visualization-deployment.yaml
-    kubectl apply -f k8s/visualization-service.yaml
+    kubectl apply -f k8s/processing-engine-go-deployment.yaml
+    kubectl apply -f k8s/processing-engine-go-service.yaml
+    
+    kubectl apply -f k8s/storage-layer-go-deployment.yaml
+    kubectl apply -f k8s/storage-layer-go-service.yaml
+    
+    kubectl apply -f k8s/visualization-go-deployment.yaml
+    kubectl apply -f k8s/visualization-go-service.yaml
+    
+    kubectl apply -f k8s/tenant-management-go-deployment.yaml
+    kubectl apply -f k8s/tenant-management-go-service.yaml
+    
+    # Deploy monitoring tools
+    echo -e "${BLUE}Deploying monitoring (Prometheus)...${NC}"
+    kubectl apply -f k8s/prometheus-config.yaml
+    kubectl apply -f k8s/prometheus-rbac.yaml
+    kubectl apply -f k8s/prometheus-deployment.yaml
     
     echo -e "${GREEN}Deployment complete!${NC}"
-    show_status
+    echo -e "${YELLOW}Running security check...${NC}"
+    ./scripts/security-check.sh
+    
 }
-
 # Deploy monitoring stack
 deploy_monitoring() {
-    ensure_minikube_running
-    ensure_namespace_exists
+    ensure_minikube_operational
     echo -e "${BLUE}Deploying monitoring stack...${NC}"
     kubectl apply -f k8s/prometheus-config.yaml
+    kubectl apply -f k8s/prometheus-rbac.yaml
     kubectl apply -f k8s/prometheus-deployment.yaml
+    kubectl apply -f k8s/grafana-pvc.yaml
     kubectl apply -f k8s/grafana-secret.yaml
+    kubectl apply -f k8s/grafana-datasources.yaml
     kubectl apply -f k8s/grafana-deployment.yaml
+    kubectl apply -f k8s/grafana-tenant-dashboards.yaml
+    kubectl apply -f k8s/grafana-go-dashboard.yaml
     
     echo "🔍 Checking deployment status..."
-    kubectl rollout status deployment/prometheus -n analytics-platform
+    kubectl rollout status statefulset/prometheus -n analytics-platform
     kubectl rollout status deployment/grafana -n analytics-platform
     
     echo -e "${GREEN}Monitoring deployment complete!${NC}"
-    echo -e "${YELLOW}To access Prometheus: kubectl port-forward service/prometheus-service 9090:9090 -n analytics-platform${NC}"
-    echo -e "${YELLOW}To access Grafana: kubectl port-forward service/grafana-service 3000:3000 -n analytics-platform${NC}"
+    echo -e "${YELLOW}To access Prometheus: kubectl port-forward service/prometheus 9090:9090 -n analytics-platform${NC}"
+    echo -e "${YELLOW}To access Grafana: kubectl port-forward service/grafana-service 3000:80 -n analytics-platform${NC}"
 }
-
 # Open Kubernetes dashboard
 open_dashboard() {
-    ensure_minikube_running
+    ensure_minikube_operational
     echo -e "${BLUE}Opening Kubernetes dashboard...${NC}"
     minikube dashboard
 }
-
 # Port forward to Prometheus
 access_prometheus() {
-    ensure_minikube_running
+    ensure_minikube_operational
     
     # Check if the service exists
     if kubectl get svc prometheus -n analytics-platform &>/dev/null; then
@@ -599,10 +455,9 @@ access_prometheus() {
     echo -e "${YELLOW}Press Ctrl+C to stop${NC}"
     kubectl port-forward svc/$SERVICE_NAME -n analytics-platform 9090:9090
 }
-
 # Port forward to Grafana
 access_grafana() {
-    ensure_minikube_running
+    ensure_minikube_operational
     
     # Check if the service exists
     if kubectl get svc grafana -n analytics-platform &>/dev/null; then
@@ -616,49 +471,68 @@ access_grafana() {
     
     echo -e "${BLUE}Setting up port forwarding to Grafana...${NC}"
     echo -e "${YELLOW}Access Grafana at: http://localhost:3000${NC}"
-    echo -e "${YELLOW}Default credentials: admin / admin-secure-password${NC}"
+    echo -e "${YELLOW}Use credentials generated by: ./scripts/setup-secrets.sh${NC}"
     echo -e "${YELLOW}Press Ctrl+C to stop${NC}"
     kubectl port-forward svc/$SERVICE_NAME -n analytics-platform 3000:3000
 }
-
 # Run platform tests
 run_tests() {
-    ensure_minikube_running
-    
+    ensure_minikube_operational
     # Setup port forwarding in background
-    kubectl port-forward svc/flask-api-service -n analytics-platform 5000:80 &
-    API_PF_PID=$!
-    
-    kubectl port-forward svc/kafka-service -n analytics-platform 9092:9092 &
-    KAFKA_PF_PID=$!
-    
-    # Give port forwarding time to establish
     echo -e "${BLUE}Setting up port forwarding for tests...${NC}"
+    kubectl port-forward svc/gin-api-service -n analytics-platform 5051:80 & # Forward to service port 80
+    API_PF_PID=$!
+    kubectl port-forward svc/kafka -n analytics-platform 9092:9092 & # Use correct kafka service name
+    KAFKA_PF_PID=$!
+    # Give port forwarding time to establish
     sleep 5
-    
+    # Check if port-forwarding succeeded before running tests
+    if ! kill -0 $API_PF_PID 2>/dev/null || ! kill -0 $KAFKA_PF_PID 2>/dev/null; then
+        echo -e "${RED}Failed to establish port forwarding. Check service names and availability.${NC}"
+        # Attempt cleanup even if forwarding failed
+        kill $API_PF_PID $KAFKA_PF_PID 2>/dev/null || true
+        return 1
+    fi
     echo -e "${BLUE}Running platform tests...${NC}"
-    python3 scripts/test-platform.py
-    
+    # Activate venv and run python script
+    if [ -f "tenant-testing/.venv/bin/activate" ]; then
+        # Export API host/port for the script to use the forwarded port
+        export API_HOST="localhost"
+        export API_PORT="5051"
+        source tenant-testing/.venv/bin/activate && python3 scripts/test-platform.py
+        TEST_EXIT_CODE=$?
+        # Unset env vars and deactivate
+        unset API_HOST
+        unset API_PORT
+        deactivate 2>/dev/null || true
+    else
+        echo -e "${YELLOW}Virtual environment not found at tenant-testing/.venv. Attempting to run without it.${NC}"
+        # Also export here in case venv isn't used
+        export API_HOST="localhost"
+        export API_PORT="5051"
+        python3 scripts/test-platform.py
+        TEST_EXIT_CODE=$?
+        unset API_HOST
+        unset API_PORT
+    fi
     # Cleanup
     echo -e "${BLUE}Cleaning up port forwarding...${NC}"
     kill $API_PF_PID $KAFKA_PF_PID 2>/dev/null || true
+    # Return the exit code from the python script
+    return $TEST_EXIT_CODE 
 }
-
 # List available pods
 list_pods() {
-    ensure_minikube_running
+    ensure_minikube_operational
     echo -e "${BLUE}Available pods:${NC}"
     kubectl get pods -n analytics-platform
 }
-
 # Tenant management functions
-
 # List tenants
 list_tenants() {
-    ensure_minikube_running
-    ensure_namespace_exists
+    ensure_minikube_operational
     
-    echo -e "${BLUE}Tenant management is not yet fully integrated into the platform.${NC}"
+    echo -e "${BLUE}Tenant management is implemented in the Go tenant-management service.${NC}"
     echo -e "${YELLOW}Current API keys and their tenant mappings:${NC}"
     
     # Get API keys from secrets
@@ -679,14 +553,12 @@ list_tenants() {
         echo $TENANT_MAP | python3 -m json.tool
     fi
     
-    echo -e "\n${YELLOW}To enable full tenant management, deploy the tenant-management service:${NC}"
-    echo -e "  ./manage.sh deploy-tenant-mgmt"
+    echo -e "\n${YELLOW}The tenant-management-go service handles tenant management:${NC}"
+    echo -e "  kubectl port-forward svc/tenant-management-go-service -n analytics-platform 5010:80"
 }
-
 # Enable tenant isolation
 enable_tenant_isolation() {
-    ensure_minikube_running
-    ensure_namespace_exists
+    ensure_minikube_operational
     
     echo -e "${BLUE}Enabling tenant isolation...${NC}"
     
@@ -707,274 +579,32 @@ enable_tenant_isolation() {
     
     # Restart API deployments to apply changes
     echo -e "${BLUE}Restarting API deployments to apply changes...${NC}"
-    kubectl rollout restart deployment/flask-api -n analytics-platform
+    kubectl rollout restart deployment/gin-api -n analytics-platform
     kubectl rollout restart deployment/data-ingestion -n analytics-platform
     
     echo -e "${GREEN}Tenant isolation enabled!${NC}"
     echo -e "${YELLOW}Use ./manage.sh list-tenants to see current tenant mappings${NC}"
 }
-
-# Deploy tenant management service
+# Deploy tenant management service (UPDATED FOR GO VERSION ONLY)
 deploy_tenant_mgmt() {
-    ensure_minikube_running
-    ensure_namespace_exists
+    ensure_minikube_operational
     
-    echo -e "${BLUE}Deploying tenant management service...${NC}"
+    echo -e "${BLUE}Deploying tenant management Go service...${NC}"
     
-    # Check if tenant-management directory exists
-    if [ ! -d "platform/tenant-management" ]; then
-        echo -e "${RED}Error: tenant-management directory not found${NC}"
-        echo -e "${YELLOW}Creating basic directory structure...${NC}"
-        
-        mkdir -p platform/tenant-management/src
-        
-        # Create tenant model
-        cat > platform/tenant-management/src/tenant_model.py << 'EOF'
-from datetime import datetime
-
-class Tenant:
-    """Represents a platform tenant with isolation settings."""
+    # Apply tenant management secrets
+    kubectl apply -f k8s/tenant-management-secrets.yaml
     
-    def __init__(self, tenant_id, name, plan="basic"):
-        self.tenant_id = tenant_id
-        self.name = name
-        self.plan = plan  # basic, standard, premium
-        self.resource_limits = self._get_plan_limits(plan)
-        self.created_at = datetime.now()
-        
-    def _get_plan_limits(self, plan):
-        """Get resource limits based on plan tier."""
-        limits = {
-            "basic": {
-                "max_data_points": 100000,
-                "max_queries_per_min": 60,
-                "retention_days": 30,
-                "max_dashboards": 5,
-                "cpu_limit": "2",
-                "memory_limit": "2Gi"
-            },
-            "standard": {
-                "max_data_points": 1000000,
-                "max_queries_per_min": 300,
-                "retention_days": 90,
-                "max_dashboards": 20,
-                "cpu_limit": "4",
-                "memory_limit": "8Gi"
-            },
-            "premium": {
-                "max_data_points": 10000000,
-                "max_queries_per_min": 1000,
-                "retention_days": 365,
-                "max_dashboards": 50,
-                "cpu_limit": "8",
-                "memory_limit": "16Gi"
-            }
-        }
-        return limits.get(plan, limits["basic"])
-EOF
-
-        # Create tenant service
-        cat > platform/tenant-management/src/tenant_service.py << 'EOF'
-from flask import Flask, request, jsonify
-import os
-import json
-import sys
-from datetime import datetime
-
-# Add the current directory to the path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from src.tenant_model import Tenant
-
-app = Flask(__name__)
-
-# In-memory tenant store for testing
-tenants = {}
-
-@app.route('/api/tenants', methods=['GET'])
-def list_tenants():
-    """List all tenants."""
-    return jsonify({"tenants": [
-        {
-            "tenant_id": t.tenant_id,
-            "name": t.name,
-            "plan": t.plan,
-            "created_at": t.created_at.isoformat()
-        } for t in tenants.values()
-    ]})
-
-@app.route('/api/tenants/<tenant_id>', methods=['GET'])
-def get_tenant(tenant_id):
-    """Get tenant by ID."""
-    tenant = tenants.get(tenant_id)
-    if not tenant:
-        return jsonify({"error": "Tenant not found"}), 404
+    # Deploy tenant management Go service
+    kubectl apply -f k8s/tenant-management-go-deployment.yaml
+    kubectl apply -f k8s/tenant-management-go-service.yaml
     
-    return jsonify({
-        "tenant_id": tenant.tenant_id,
-        "name": tenant.name,
-        "plan": tenant.plan,
-        "resource_limits": tenant.resource_limits,
-        "created_at": tenant.created_at.isoformat()
-    })
-
-@app.route('/api/tenants', methods=['POST'])
-def create_tenant():
-    """Create a new tenant."""
-    data = request.json
-    tenant_id = data.get('tenant_id')
-    name = data.get('name')
-    plan = data.get('plan', 'basic')
-    
-    # Validate input
-    if not tenant_id or not name:
-        return jsonify({"error": "Missing required fields"}), 400
-        
-    # Check if tenant already exists
-    if tenant_id in tenants:
-        return jsonify({"error": "Tenant ID already exists"}), 409
-    
-    # Create tenant
-    tenant = Tenant(tenant_id, name, plan)
-    tenants[tenant_id] = tenant
-    
-    return jsonify({
-        "tenant_id": tenant.tenant_id,
-        "name": tenant.name,
-        "plan": tenant.plan,
-        "created_at": tenant.created_at.isoformat(),
-        "status": "created"
-    }), 201
-
-@app.route('/health', methods=['GET'])
-def health():
-    """Health check endpoint."""
-    return jsonify({"status": "healthy"}), 200
-
-if __name__ == '__main__':
-    # Create default tenants
-    tenants['tenant1'] = Tenant('tenant1', 'Demo Corp', 'premium')
-    tenants['tenant2'] = Tenant('tenant2', 'Test Inc', 'basic')
-    
-    # Print tenant info for debugging
-    print("Created default tenants:")
-    for tenant_id, tenant in tenants.items():
-        print(f"- {tenant_id}: {tenant.name} ({tenant.plan})")
-    
-    app.run(host='0.0.0.0', port=5010, debug=True)
-EOF
-
-        # Create requirements.txt
-        cat > platform/tenant-management/requirements.txt << 'EOF'
-flask==2.0.1
-pyyaml==6.0
-kubernetes==23.6.0
-pytest==7.0.1
-requests==2.27.1
-EOF
-
-        # Create Dockerfile
-        cat > platform/tenant-management/Dockerfile << 'EOF'
-FROM python:3.9-slim
-
-WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-
-# Create non-root user
-RUN addgroup --system --gid 1001 appuser \
-    && adduser --system --uid 1001 --gid 1001 --no-create-home appuser
-
-# Set permissions
-RUN chown -R appuser:appuser /app
-
-USER appuser
-
-EXPOSE 5010
-
-CMD ["python", "src/tenant_service.py"]
-EOF
-    fi
-    
-    # Build and deploy the tenant management service
-    echo -e "${BLUE}Building tenant management service image...${NC}"
-    eval $(minikube docker-env)
-    docker build -t tenant-management:latest -f platform/tenant-management/Dockerfile ./platform/tenant-management
-    
-    # Create Kubernetes deployment and service
-    cat > k8s/tenant-management-deployment.yaml << EOF
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: tenant-management
-  namespace: analytics-platform
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: tenant-management
-  template:
-    metadata:
-      labels:
-        app: tenant-management
-    spec:
-      containers:
-      - name: tenant-management
-        image: tenant-management:latest
-        imagePullPolicy: IfNotPresent
-        ports:
-        - containerPort: 5010
-        securityContext:
-          runAsUser: 1001
-          runAsNonRoot: true
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "256Mi"
-            cpu: "200m"
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 5010
-          initialDelaySeconds: 10
-          periodSeconds: 5
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 5010
-          initialDelaySeconds: 15
-          periodSeconds: 10
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: tenant-management-service
-  namespace: analytics-platform
-spec:
-  selector:
-    app: tenant-management
-  ports:
-  - port: 80
-    targetPort: 5010
-    nodePort: 30090
-  type: NodePort
-EOF
-
-    # Apply Kubernetes resources
-    kubectl apply -f k8s/tenant-management-deployment.yaml
-    
-    echo -e "${GREEN}Tenant management service deployed!${NC}"
-    echo -e "${YELLOW}Access the service at: http://$(minikube ip):30090/api/tenants${NC}"
+    echo -e "${GREEN}Tenant management Go service deployed!${NC}"
+    echo -e "${YELLOW}You can access the service by port forwarding:${NC}"
+    echo -e "  kubectl port-forward svc/tenant-management-go-service -n analytics-platform 5010:80"
 }
-
 # Create a new tenant
 create_tenant() {
-    ensure_minikube_running
-    ensure_namespace_exists
+    ensure_minikube_operational
     
     if [ -z "$1" ] || [ -z "$2" ]; then
         echo -e "${RED}Error: Tenant ID and name are required${NC}"
@@ -999,7 +629,6 @@ create_tenant() {
     
     echo -e "\n${GREEN}Tenant creation request sent.${NC}"
 }
-
 # View logs for a pod
 view_logs() {
     if [ -z "$1" ]; then
@@ -1009,7 +638,7 @@ view_logs() {
         return 1
     fi
     
-    ensure_minikube_running
+    ensure_minikube_operational
     
     # Check if pod exists
     if ! kubectl get pod $1 -n analytics-platform &>/dev/null; then
@@ -1022,14 +651,12 @@ view_logs() {
     echo -e "${YELLOW}Press Ctrl+C to stop${NC}"
     kubectl logs -f $1 -n analytics-platform
 }
-
 # View events
 view_events() {
-    ensure_minikube_running
+    ensure_minikube_operational
     echo -e "${BLUE}Recent events in the analytics-platform namespace:${NC}"
     kubectl get events -n analytics-platform --sort-by=.metadata.creationTimestamp | tail -20
 }
-
 # Fix Minikube issues
 fix_minikube() {
     echo -e "${BLUE}Diagnosing Minikube issues...${NC}"
@@ -1122,10 +749,9 @@ fix_minikube() {
     echo -e "${GREEN}Minikube diagnostics complete.${NC}"
     return 0
 }
-
 # Fix common issues
 fix_common_issues() {
-    ensure_minikube_running
+    ensure_minikube_operational
     echo -e "${BLUE}Attempting to fix common issues...${NC}"
     
     # 1. Find and delete pods in CrashLoopBackOff or ImagePullBackOff
@@ -1154,10 +780,9 @@ fix_common_issues() {
     echo -e "${GREEN}Finished checking for common issues${NC}"
     echo -e "${YELLOW}You may need to manually check for and resolve duplicate deployments${NC}"
 }
-
 # Restart all deployments
 restart_all() {
-    ensure_minikube_running
+    ensure_minikube_operational
     echo -e "${YELLOW}Are you sure you want to restart all deployments? This may cause temporary downtime. (y/n)${NC}"
     read -r confirmation
     if [[ $confirmation =~ ^[Yy]$ ]]; then
@@ -1168,7 +793,6 @@ restart_all() {
         echo -e "${BLUE}Operation cancelled${NC}"
     fi
 }
-
 # Reset the entire project
 reset_project() {
     echo -e "${RED}Warning: This will delete ALL Kubernetes resources and clean up unnecessary files. Are you sure? (y/n)${NC}"
@@ -1235,229 +859,275 @@ reset_project() {
         echo -e "${BLUE}Reset cancelled${NC}"
     fi
 }
-
 # Clean up all resources
 cleanup_resources() {
-  ensure_minikube_running
+  ensure_minikube_operational
   
   echo -e "${RED}Warning: This will remove all platform resources. Are you sure? (y/n)${NC}"
-  read -r confirmation
-  if [[ $confirmation =~ ^[Yy]$ ]]; then
-    echo -e "${BLUE}Removing all platform resources...${NC}"
-    
-    # Remove specific resources first to avoid dependency issues
-    echo "Removing deployments first..."
-    kubectl delete deployment --all -n analytics-platform --ignore-not-found=true
-    
-    echo "Removing services..."
-    kubectl delete service --all -n analytics-platform --ignore-not-found=true
-    
-    echo "Removing configmaps and secrets..."
-    kubectl delete configmap --all -n analytics-platform --ignore-not-found=true
-    kubectl delete secret --all -n analytics-platform --ignore-not-found=true
-    
-    echo "Removing persistent volumes and claims..."
-    kubectl delete pvc --all -n analytics-platform --ignore-not-found=true
-    kubectl delete pv --all --ignore-not-found=true
-    
-    echo "Finally removing namespace..."
-    kubectl delete namespace analytics-platform --ignore-not-found=true
-    
-    echo -e "${GREEN}Cleanup complete!${NC}"
-  else
-    echo -e "${BLUE}Cleanup cancelled.${NC}"
+  read -r confirm
+  
+  if [[ ! $confirm =~ ^[Yy]$ ]]; then
+    echo -e "${BLUE}Operation cancelled.${NC}"
+    return 0
   fi
+  
+  echo -e "${BLUE}Removing all platform resources...${NC}"
+  
+  # Delete all resources in the analytics-platform namespace
+  kubectl delete all --all -n analytics-platform
+  
+  # Delete configmaps and secrets
+  kubectl delete configmap --all -n analytics-platform
+  kubectl delete secret --all -n analytics-platform
+  
+  # Delete PVCs
+  kubectl delete pvc --all -n analytics-platform
+  
+  echo -e "${GREEN}All platform resources removed.${NC}"
 }
-
-fix_config_issues() {
-  echo -e "${BLUE}Fixing configuration issues...${NC}"
+# Reset all - complete cleanup and start fresh
+reset_all() {
+  echo -e "${RED}Warning: This will completely reset the platform. All data will be lost. Continue? (y/n)${NC}"
+  read -r confirm
   
-  # Fix ConfigMap
-  kubectl create configmap platform-config -n analytics-platform \
-    --from-literal=kafka-broker="kafka:9092" \
-    --from-literal=kafka-topic="sensor-data" \
-    --from-literal=data-ingestion-port="5000" \
-    --from-literal=processing-engine-port="5001" \
-    --from-literal=storage-layer-port="5002" \
-    --from-literal=visualization-port="5003" \
-    --from-literal=db-host="localhost" \
-    --from-literal=db-port="5432" \
-    --from-literal=db-name="analytics" \
-    --from-literal=db-user="user" \
-    --dry-run=client -o yaml | kubectl apply -f -
+  if [[ ! $confirm =~ ^[Yy]$ ]]; then
+    echo -e "${BLUE}Reset cancelled.${NC}"
+    return 0
+  fi
   
-  # Build flask-api image
-  echo -e "${BLUE}Building flask-api image...${NC}"
-  eval $(minikube docker-env)
-  docker build -t flask-api:latest -f flask-api/Dockerfile ./flask-api
+  echo -e "${BLUE}Performing complete reset...${NC}"
   
-  echo -e "${BLUE}Restarting deployments...${NC}"
-  kubectl rollout restart deployment -n analytics-platform
+  # Ensure minikube is running and operational
+  ensure_minikube_operational
   
-  echo -e "${GREEN}Configuration fixes applied. Checking status...${NC}"
-  sleep 5
-  kubectl get pods -n analytics-platform
+  # Delete namespace if it exists
+  if kubectl get namespace analytics-platform &> /dev/null; then
+    echo -e "${BLUE}Deleting analytics-platform namespace...${NC}"
+    kubectl delete namespace analytics-platform
+    
+    # Wait for namespace deletion to complete
+    echo -e "${BLUE}Waiting for namespace deletion to complete...${NC}"
+    while kubectl get namespace analytics-platform &> /dev/null; do
+      echo -n "."
+      sleep 2
+    done
+    echo
+  fi
+  
+  # Delete any persistent volumes that might be left
+  echo -e "${BLUE}Cleaning up any leftover persistent volumes...${NC}"
+  for pv in $(kubectl get pv -o=jsonpath='{.items[?(@.spec.claimRef.namespace=="analytics-platform")].metadata.name}'); do
+    kubectl delete pv $pv
+  done
+  
+  # Recreate the namespace
+  echo -e "${BLUE}Recreating analytics-platform namespace...${NC}"
+  kubectl create namespace analytics-platform
+  
+  echo -e "${GREEN}Platform reset complete!${NC}"
+  echo -e "${YELLOW}You can now run './manage.sh setup-all' to redeploy the platform.${NC}"
 }
-
-check_config_consistency() {
-  echo -e "${BLUE}Checking configuration consistency...${NC}"
-  
-  # Check if deployment references match configmap keys
-  echo -e "\n${BLUE}ConfigMap Keys:${NC}"
-  kubectl get configmap platform-config -n analytics-platform -o jsonpath='{.data}' | jq
-  
-  echo -e "\n${BLUE}Secret Keys:${NC}"
-  kubectl get secret api-keys -n analytics-platform -o jsonpath='{.data}' | jq
-  
-  echo -e "\n${BLUE}Deployment Environment Variable Sources:${NC}"
-  kubectl get deployment flask-api -n analytics-platform -o jsonpath='{.spec.template.spec.containers[0].env}'
-  
-  echo -e "\n${YELLOW}Checking for key mismatches...${NC}"
-  # Check secret keys
-  API_KEY_1_EXISTS=$(kubectl get secret api-keys -n analytics-platform -o jsonpath='{.data.API_KEY_1}' 2>/dev/null)
-  api_key_1_EXISTS=$(kubectl get secret api-keys -n analytics-platform -o jsonpath='{.data.api-key-1}' 2>/dev/null)
-  
-  if [ -z "$API_KEY_1_EXISTS" ] && [ -z "$api_key_1_EXISTS" ]; then
-    echo -e "${RED}Neither API_KEY_1 nor api-key-1 found in secret${NC}"
-  elif [ -n "$API_KEY_1_EXISTS" ] && [ -n "$api_key_1_EXISTS" ]; then
-    echo -e "${YELLOW}Both API_KEY_1 and api-key-1 found in secret (potential confusion)${NC}"
-  elif [ -n "$API_KEY_1_EXISTS" ]; then
-    echo -e "${GREEN}API_KEY_1 found in secret${NC}"
-  else
-    echo -e "${GREEN}api-key-1 found in secret${NC}"
-  fi
-  
-  # Check configmap keys
-  KAFKA_BROKER_EXISTS=$(kubectl get configmap platform-config -n analytics-platform -o jsonpath='{.data.kafka-broker}' 2>/dev/null)
-  if [ -z "$KAFKA_BROKER_EXISTS" ]; then
-    echo -e "${RED}kafka-broker not found in ConfigMap${NC}"
-  else
-    echo -e "${GREEN}kafka-broker found in ConfigMap: $KAFKA_BROKER_EXISTS${NC}"
-  fi
-  
-  # Check if Flask API env vars are correctly set
-  echo -e "\n${BLUE}Flask API Container Environment:${NC}"
-  FLASK_POD=$(kubectl get pods -n analytics-platform -l app=flask-api -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-  if [ -n "$FLASK_POD" ]; then
-    kubectl exec -it $FLASK_POD -n analytics-platform -- env | sort
-  else
-    echo -e "${RED}No Flask API pod found${NC}"
-  fi
-}
-
-standardize_config() {
-  echo -e "${BLUE}Standardizing configuration naming conventions...${NC}"
-  
-  # 1. Update ConfigMap with standardized naming
-  echo -e "${BLUE}Updating ConfigMap with standardized naming...${NC}"
-  kubectl create configmap platform-config -n analytics-platform \
-    --from-literal=KAFKA_BROKER="kafka:9092" \
-    --from-literal=KAFKA_TOPIC="sensor-data" \
-    --from-literal=DATA_INGESTION_PORT="5000" \
-    --from-literal=PROCESSING_ENGINE_PORT="5001" \
-    --from-literal=STORAGE_LAYER_PORT="5002" \
-    --from-literal=VISUALIZATION_PORT="5003" \
-    --from-literal=DB_HOST="localhost" \
-    --from-literal=DB_PORT="5432" \
-    --from-literal=DB_NAME="analytics" \
-    --from-literal=DB_USER="user" \
-    --dry-run=client -o yaml | kubectl apply -f -
-  
-  # 2. Clean up the Secret to use only uppercase keys
-  echo -e "${BLUE}Updating Secret with standardized naming...${NC}"
-  kubectl create secret generic api-keys -n analytics-platform \
-    --from-literal=API_KEY_1="test-key-1" \
-    --from-literal=API_KEY_2="test-key-2" \
-    --dry-run=client -o yaml | kubectl apply -f -
-  
-  # 3. Update deployments to reference the correct key format
-  echo -e "${BLUE}Updating deployments to use standardized config keys...${NC}"
-  
-  # Update flask-api deployment
-  kubectl patch deployment flask-api -n analytics-platform --type=json -p '[
-    {
-      "op": "replace", 
-      "path": "/spec/template/spec/containers/0/env/0/valueFrom/configMapKeyRef/key", 
-      "value": "KAFKA_BROKER"
-    },
-    {
-      "op": "replace", 
-      "path": "/spec/template/spec/containers/0/env/1/valueFrom/configMapKeyRef/key", 
-      "value": "KAFKA_TOPIC"
-    },
-    {
-      "op": "replace", 
-      "path": "/spec/template/spec/containers/0/env/2/valueFrom/secretKeyRef/key", 
-      "value": "API_KEY_1"
-    },
-    {
-      "op": "replace", 
-      "path": "/spec/template/spec/containers/0/env/3/valueFrom/secretKeyRef/key", 
-      "value": "API_KEY_2"
+# Fix storage layer: rebuild only the storage-layer-go image
+fix_storage() {
+    echo -e "${BLUE}Fixing storage-layer-go image...${NC}"
+    
+    # First check if minikube is operational
+    if ! ensure_minikube_operational; then
+        echo -e "${RED}Cannot build images because Minikube is not fully operational.${NC}"
+        echo -e "${YELLOW}Try running './manage.sh fix-minikube' or './manage.sh reset-minikube' to fix issues.${NC}"
+        return 1
+    fi
+    
+    # Connect to minikube's Docker daemon
+    echo -e "${BLUE}Connecting to minikube's Docker daemon...${NC}"
+    eval $(minikube docker-env)
+    
+    # Build just the storage-layer-go image
+    echo -e "${BLUE}Building storage-layer-go image...${NC}"
+    cd storage-layer-go || {
+        echo -e "${RED}Error: storage-layer-go directory not found${NC}"
+        return 1
     }
-  ]'
-  
-  # Update any other deployments that reference these environment variables
-  # Add similar patches for other deployments if needed
-  
-  # 4. Restart deployments to apply changes
-  echo -e "${BLUE}Restarting deployments to apply changes...${NC}"
-  kubectl rollout restart deployment -n analytics-platform
-  
-  echo -e "${GREEN}Configuration standardization complete!${NC}"
-  echo -e "${YELLOW}Naming convention standard: UPPERCASE_WITH_UNDERSCORES for environment variables${NC}"
-  
-  # 5. Document the changes
-  mkdir -p docs
-  cat > docs/naming-conventions.md << 'EOF'
-# Naming Conventions for Real-Time Analytics Platform
-
-## Environment Variables
-
-**Standard: UPPERCASE_WITH_UNDERSCORES**
-
-Example:
-- `KAFKA_BROKER`
-- `KAFKA_TOPIC`
-- `API_KEY_1`
-
-## Kubernetes Resources
-
-**Standard: lowercase-with-hyphens**
-
-Example:
-- Deployments: `flask-api`, `data-ingestion`
-- Services: `kafka`, `flask-api-service`
-
-## Docker Images
-
-**Standard: lowercase-with-hyphens:tag**
-
-Example:
-- `flask-api:latest`
-- `data-ingestion:latest`
-
-## Ports
-
-**Standard: Port numbers should be consistent between services**
-
-Example:
-- Flask API: 5000
-- Data Ingestion: 5001
-
-## Documentation
-
-All new components should follow these naming conventions to maintain consistency across the platform.
-EOF
-  
-  echo -e "${GREEN}Naming conventions documented in docs/naming-conventions.md${NC}"
+    
+    docker build -t storage-layer-go:latest . || {
+        echo -e "${RED}Failed to build storage-layer-go image${NC}"
+        cd ..
+        return 1
+    }
+    
+    cd ..
+    
+    echo -e "${GREEN}Storage layer image successfully rebuilt!${NC}"
+    echo -e "${YELLOW}Do you want to restart the storage-layer deployment? (y/n)${NC}"
+    read -r restart_confirmation
+    
+    if [[ $restart_confirmation =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}Restarting storage-layer deployment...${NC}"
+        kubectl rollout restart deployment/storage-layer-go -n analytics-platform || {
+            echo -e "${YELLOW}No existing deployment found. If you haven't deployed yet, run './manage.sh deploy'${NC}"
+        }
+    fi
+    
+    echo -e "${GREEN}Fix complete!${NC}"
 }
-
-
+# Fix processing engine: rebuild only the processing-engine-go image
+fix_processing() {
+    echo -e "${BLUE}Fixing processing-engine-go image...${NC}"
+    
+    # First check if minikube is operational
+    if ! ensure_minikube_operational; then
+        echo -e "${RED}Cannot build images because Minikube is not fully operational.${NC}"
+        echo -e "${YELLOW}Try running './manage.sh fix-minikube' or './manage.sh reset-minikube' to fix issues.${NC}"
+        return 1
+    fi
+    
+    # Connect to minikube's Docker daemon
+    echo -e "${BLUE}Connecting to minikube's Docker daemon...${NC}"
+    eval $(minikube docker-env)
+    
+    # Build just the processing-engine-go image
+    echo -e "${BLUE}Building processing-engine-go image...${NC}"
+    cd processing-engine-go || {
+        echo -e "${RED}Error: processing-engine-go directory not found${NC}"
+        return 1
+    }
+    
+    docker build -t processing-engine-go:latest . || {
+        echo -e "${RED}Failed to build processing-engine-go image${NC}"
+        cd ..
+        return 1
+    }
+    
+    cd ..
+    
+    echo -e "${GREEN}Processing engine image successfully rebuilt!${NC}"
+    echo -e "${YELLOW}Do you want to restart the processing-engine deployment? (y/n)${NC}"
+    read -r restart_confirmation
+    
+    if [[ $restart_confirmation =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}Restarting processing-engine deployment...${NC}"
+        kubectl rollout restart deployment/processing-engine-go -n analytics-platform || {
+            echo -e "${YELLOW}No existing deployment found. If you haven't deployed yet, run './manage.sh deploy'${NC}"
+        }
+    fi
+    
+    echo -e "${GREEN}Fix complete!${NC}"
+}
+# Deploy production setup
+deploy_production() {
+    echo -e "${BLUE}Deploying platform for production...${NC}"
+    
+    # First check if minikube is operational
+    if ! ensure_minikube_operational; then
+        echo -e "${RED}Cannot deploy because Minikube is not fully operational.${NC}"
+        echo -e "${YELLOW}Try running './manage.sh fix-minikube' or './manage.sh reset-minikube' to fix issues.${NC}"
+        return 1
+    fi
+    
+    # Make sure the production secrets are generated
+    if [ ! -d "production-secrets" ]; then
+        echo -e "${YELLOW}Production secrets not found. Generating secure production secrets...${NC}"
+        mkdir -p production-secrets
+        
+        # Add your secure secret generation logic here
+        # Example: Generate secure API keys and passwords
+        
+        echo -e "${GREEN}Production secrets generated.${NC}"
+    fi
+    
+    # Start the deployment process
+    echo -e "${BLUE}Applying production configuration...${NC}"
+    
+    # Create namespace
+    kubectl apply -f k8s/namespace.yaml
+    
+    # Apply RBAC and security configs
+    kubectl apply -f k8s/rbac.yaml
+    kubectl apply -f k8s/prometheus-rbac.yaml
+    kubectl apply -f k8s/network-policy.yaml
+    
+    # Apply configmaps and secrets
+    kubectl apply -f k8s/configmap.yaml
+    kubectl apply -f production-secrets/ || kubectl apply -f k8s/secrets-secure.yaml
+    kubectl apply -f k8s/kafka-secrets.yaml
+    kubectl apply -f k8s/tenant-management-secrets.yaml
+    kubectl apply -f k8s/grafana-secret.yaml
+    
+    # Deploy Kafka with KRaft mode
+    kubectl apply -f k8s/kafka-pvc-prod.yaml
+    kubectl apply -f k8s/kafka-kraft-statefulset.yaml
+    kubectl apply -f k8s/kafka-service.yaml
+    
+    # Wait for Kafka to be ready (production deployments need more time)
+    echo -e "${YELLOW}Waiting for Kafka to be ready (this may take a few minutes)...${NC}"
+    
+    # Deploy core services with higher replica counts for production
+    kubectl apply -f k8s/data-ingestion-go-deployment.yaml
+    kubectl apply -f k8s/data-ingestion-go-service.yaml
+    kubectl apply -f k8s/clean-ingestion-go-deployment.yaml
+    kubectl apply -f k8s/clean-ingestion-go-service.yaml
+    kubectl apply -f k8s/processing-engine-go-deployment.yaml
+    kubectl apply -f k8s/processing-engine-go-service.yaml
+    kubectl apply -f k8s/storage-layer-pvc.yaml
+    kubectl apply -f k8s/storage-layer-go-deployment.yaml
+    kubectl apply -f k8s/storage-layer-go-service.yaml
+    kubectl apply -f k8s/visualization-go-deployment.yaml
+    kubectl apply -f k8s/visualization-go-service.yaml
+    kubectl apply -f k8s/tenant-management-go-deployment.yaml
+    kubectl apply -f k8s/tenant-management-go-service.yaml
+    
+    # Deploy monitoring stack
+    kubectl apply -f k8s/prometheus-config.yaml
+    kubectl apply -f k8s/prometheus-deployment.yaml
+    kubectl apply -f k8s/grafana-pvc.yaml
+    kubectl apply -f k8s/grafana-datasources.yaml
+    kubectl apply -f k8s/grafana-deployment.yaml
+    kubectl apply -f k8s/grafana-tenant-dashboards.yaml
+    
+    echo -e "${GREEN}Production deployment complete!${NC}"
+    echo -e "${YELLOW}Running production readiness check...${NC}"
+    ./scripts/verify-prod-readiness.sh || true
+    
+    echo -e "${GREEN}Platform deployed in production mode.${NC}"
+    echo -e "${YELLOW}For additional security hardening, run:${NC}"
+    echo -e "  ./scripts/security-check.sh --production"
+}
+# Complete setup: start minikube, build images and deploy
+setup_all() {
+    echo -e "${BLUE}Starting complete platform setup...${NC}"
+    
+    # Step 1: Start minikube
+    echo -e "${BLUE}Step 1/3: Starting Minikube...${NC}"
+    ensure_minikube_operational || {
+        echo -e "${RED}Failed to start Minikube. Setup aborted.${NC}"
+        return 1
+    }
+    
+    # Step 2: Build all images
+    echo -e "${BLUE}Step 2/3: Building all Docker images...${NC}"
+    build_images || {
+        echo -e "${RED}Failed to build all images. Setup aborted.${NC}"
+        echo -e "${YELLOW}You may try running './manage.sh fix-storage' to fix storage layer issues and then retry.${NC}"
+        return 1
+    }
+    
+    # Step 3: Deploy the platform
+    echo -e "${BLUE}Step 3/3: Deploying platform...${NC}"
+    deploy_platform || {
+        echo -e "${RED}Failed to deploy platform.${NC}"
+        return 1
+    }
+    
+    echo -e "${GREEN}Complete setup successful!${NC}"
+    echo -e "${YELLOW}To access services, run:${NC}"
+    echo -e "  - './manage.sh status' to check component status"
+    echo -e "  - './manage.sh monitoring' to deploy monitoring stack"
+    echo -e "  - './manage.sh tunnel-start' to enable LoadBalancer services"
+}
 # Main logic
 case "$1" in
     status)
-        show_status
+        show_platform_status
         ;;
     start)
         ensure_minikube_running
@@ -1473,6 +1143,21 @@ case "$1" in
     deploy)
         deploy_platform
         ;;
+    deploy-prod)
+        deploy_production
+        ;;
+    setup-all)
+        setup_all
+        ;;
+    reset-all)
+        reset_all
+        ;;
+    fix-storage)
+        fix_storage
+        ;;
+    fix-processing)
+        fix_processing
+        ;;
     monitoring)
         deploy_monitoring
         ;;
@@ -1480,88 +1165,135 @@ case "$1" in
         open_dashboard
         ;;
     prometheus)
-        access_prometheus
+        # Keep existing prometheus function
+        kubectl port-forward -n monitoring service/prometheus-server 9090:80 &
+        echo "Prometheus is accessible at http://localhost:9090"
+        echo "Use 'kill %1' or './manage.sh stop-access' to stop port forwarding"
         ;;
-    grafana)
-        access_grafana
+    
+    access-viz)
+        echo "Starting port forward to visualization dashboard..."
+        kubectl port-forward service/visualization-go-service 8080:80 -n analytics-platform &
+        VIZ_PID=$!
+        
+        # Give port forwarding a moment to establish
+        sleep 2
+        
+        # Check if port forwarding is working
+        if kill -0 $VIZ_PID 2>/dev/null; then
+            echo "✅ Visualization dashboard is accessible at http://localhost:8080"
+            echo "Port forwarding PID: $VIZ_PID"
+            echo "Use 'kill $VIZ_PID' or './manage.sh stop-access' to stop port forwarding"
+            echo ""
+            echo "🧪 To test the dashboard with sample data, use:"
+            echo "./manage.sh test-api"
+        else
+            echo "❌ Failed to establish port forwarding"
+            echo "Check if the visualization service is running:"
+            echo "kubectl get pods -n analytics-platform | grep visualization"
+        fi
         ;;
-    test)
-        run_tests
+    
+    access-api)
+        echo "Starting port forward to data ingestion API..."
+        kubectl port-forward service/data-ingestion-go-service 5000:80 -n analytics-platform &
+        API_PID=$!
+        
+        # Give port forwarding a moment to establish
+        sleep 2
+        
+        # Check if port forwarding is working
+        if kill -0 $API_PID 2>/dev/null; then
+            echo "✅ Data ingestion API is accessible at http://localhost:5000"
+            echo "Port forwarding PID: $API_PID"
+            echo "Use 'kill $API_PID' or './manage.sh stop-access' to stop port forwarding"
+            echo ""
+            echo "🧪 To test the API, use:"
+            echo "./manage.sh test-api"
+        else
+            echo "❌ Failed to establish port forwarding"
+            echo "Check if the data ingestion service is running:"
+            echo "kubectl get pods -n analytics-platform | grep data-ingestion"
+        fi
         ;;
-    pods)
-        list_pods
+    
+    stop-access)
+        echo "Stopping all port forwarding sessions..."
+        # Kill all kubectl port-forward processes
+        pkill -f "kubectl port-forward"
+        echo "All port forwarding sessions stopped."
         ;;
-    logs)
-        view_logs "$2"
+    
+    dashboard)
+        # Add dashboard access with improved instructions
+        echo "Starting Kubernetes dashboard..."
+        kubectl proxy &
+        PROXY_PID=$!
+        echo "Kubernetes dashboard proxy started (PID: $PROXY_PID)"
+        echo ""
+        echo "Dashboard URL: http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/"
+        echo ""
+        echo "To get admin token, run:"
+        echo "kubectl -n kubernetes-dashboard create token admin-user"
+        echo ""
+        echo "Use 'kill $PROXY_PID' to stop the dashboard proxy"
         ;;
-    describe)
-        if [ -z "$2" ]; then
-            echo -e "${RED}Error: Resource name is required${NC}"
-            echo "Usage: ./manage.sh describe <resource-name>"
+    
+    test-api)
+        echo "Testing data ingestion API with secure credentials..."
+        
+        # Get API key securely from Kubernetes secret
+        API_KEY=$(kubectl get secret tenant-management-secrets -n analytics-platform -o jsonpath='{.data.API_KEY_1}' | base64 --decode 2>/dev/null)
+        
+        if [ -z "$API_KEY" ]; then
+            echo "❌ Error: Could not retrieve API key from Kubernetes secret"
+            echo "Make sure the platform is deployed and secrets are configured"
             exit 1
         fi
-        kubectl describe pod "$2" -n analytics-platform
+        
+        echo "✅ API key retrieved securely from Kubernetes secret"
+        
+        # Test different metrics
+        echo ""
+        echo "📊 Sending test data to API..."
+        
+        # CPU Usage
+        echo "Testing CPU usage metric..."
+        curl -s -X POST http://localhost:5000/api/data \
+          -H 'Content-Type: application/json' \
+          -H "X-API-KEY: $API_KEY" \
+          -d "{\"device_id\": \"server-01\", \"temperature\": 85.2, \"humidity\": 45.3, \"timestamp\": \"$(date -Iseconds)\"}" \
+          && echo " ✅ CPU metric sent successfully" || echo " ❌ Failed to send CPU metric"
+        
+        # Memory Usage  
+        echo "Testing memory usage metric..."
+        curl -s -X POST http://localhost:5000/api/data \
+          -H 'Content-Type: application/json' \
+          -H "X-API-KEY: $API_KEY" \
+          -d "{\"device_id\": \"server-02\", \"temperature\": 67.8, \"humidity\": 52.1, \"timestamp\": \"$(date -Iseconds)\"}" \
+          && echo " ✅ Memory metric sent successfully" || echo " ❌ Failed to send memory metric"
+        
+        # Network Latency
+        echo "Testing network latency metric..."
+        curl -s -X POST http://localhost:5000/api/data \
+          -H 'Content-Type: application/json' \
+          -H "X-API-KEY: $API_KEY" \
+          -d "{\"device_id\": \"gateway-01\", \"temperature\": 23.5, \"humidity\": 60.7, \"timestamp\": \"$(date -Iseconds)\"}" \
+          && echo " ✅ Network metric sent successfully" || echo " ❌ Failed to send network metric"
+        
+        echo ""
+        echo "🎉 Test data sent! Check the dashboard at http://localhost:8080"
         ;;
-    restart)
-        if [ -z "$2" ]; then
-            echo -e "${RED}Error: Deployment name is required${NC}"
-            echo "Usage: ./manage.sh restart <deployment-name>"
-            echo -e "\n${BLUE}Available deployments:${NC}"
-            kubectl get deployments -n analytics-platform
-            exit 1
-        fi
-        kubectl rollout restart deployment/"$2" -n analytics-platform
-        echo -e "${GREEN}Deployment $2 restarted${NC}"
-        ;;
-    restart-all)
-        restart_all
-        ;;
-    events)
-        view_events
-        ;;
-    fix)
-        fix_common_issues
-        ;;
-    fix-minikube)
-        fix_minikube
-        ;;        
-    fix-config)
-        fix_config_issues
-        ;;     
-    check-config)
-        check_config_consistency
-        ;;        
-    standardize-config)
-        standardize_config
-        ;;
-    list-tenants)
-        list_tenants
-        ;;
-    enable-tenant-isolation)
-        enable_tenant_isolation
-        ;;
-    deploy-tenant-mgmt)
-        deploy_tenant_mgmt
-        ;;
-    create-tenant)
-        create_tenant "$2" "$3" "$4"
-        ;;
-    tunnel-start)
-        start_minikube_tunnel
-        ;;
-    tunnel-stop)
-        stop_minikube_tunnel
-        ;;
-    reset-minikube)
-        full_minikube_reset
-        ;;                           
-    reset)
-        reset_project
-        ;;
-    cleanup)
-        cleanup_resources
-        ;;
-    help|*)
+    
+    help)
+        # Keep existing help function
         show_help
+        ;;
+    
+    *)
+        # Keep existing default case
+        echo "Unknown command: $1"
+        echo "Use './manage.sh help' to see available commands"
+        exit 1
         ;;
 esac

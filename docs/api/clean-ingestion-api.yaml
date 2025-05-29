@@ -1,0 +1,351 @@
+openapi: 3.0.3
+info:
+  title: Real-Time Analytics Platform - Clean Ingestion API
+  description: |
+    Clean Ingestion Service API for the Real-Time Analytics Platform.
+    This service handles data validation, cleaning, and quality assurance
+    before passing data to the processing engine.
+  version: 1.0.0
+  contact:
+    name: Platform Team
+    email: platform-team@company.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8081
+    description: Development server
+  - url: https://clean-api.analytics-platform.dev
+    description: Development environment
+  - url: https://clean-api.analytics-platform.com
+    description: Production environment
+
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      description: Returns the health status of the clean ingestion service
+      operationId: healthCheck
+      tags:
+        - Health
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  timestamp:
+                    type: string
+                    format: date-time
+                  data_quality_score:
+                    type: number
+                    format: float
+                    description: Overall data quality score (0-1)
+                    example: 0.95
+                required:
+                  - status
+
+  /api/data:
+    post:
+      summary: Process and clean data
+      description: |
+        Accepts raw data, applies cleaning rules, validates quality,
+        and forwards cleaned data to the processing engine.
+      operationId: cleanData
+      tags:
+        - Data Cleaning
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RawDataPayload'
+            examples:
+              sensor_data:
+                summary: Raw IoT sensor data
+                value:
+                  device_id: "sensor-001"
+                  timestamp: 1640995200
+                  temperature: 23.5
+                  humidity: 65.2
+                  raw_reading: "temp:23.5°C,hum:65.2%"
+      responses:
+        '200':
+          description: Data cleaned and processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CleanDataResponse'
+        '400':
+          description: Data validation failed or uncorrectable quality issues
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '422':
+          description: Data quality too poor to process
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QualityErrorResponse'
+
+  /api/validate:
+    post:
+      summary: Validate data quality
+      description: |
+        Validates data quality without processing. 
+        Returns quality metrics and potential issues.
+      operationId: validateData
+      tags:
+        - Data Validation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RawDataPayload'
+      responses:
+        '200':
+          description: Data quality assessment completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QualityAssessmentResponse'
+
+  /api/rules:
+    get:
+      summary: Get cleaning rules
+      description: Returns the current data cleaning and validation rules
+      operationId: getCleaningRules
+      tags:
+        - Configuration
+      responses:
+        '200':
+          description: Current cleaning rules
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CleaningRulesResponse'
+
+components:
+  schemas:
+    RawDataPayload:
+      type: object
+      required:
+        - device_id
+      properties:
+        device_id:
+          type: string
+          description: Unique identifier for the data source
+          example: "sensor-001"
+        timestamp:
+          type: integer
+          format: int64
+          description: Unix timestamp when the data was generated
+          example: 1640995200
+        temperature:
+          type: number
+          format: float
+          description: Raw temperature reading
+          example: 23.5
+        humidity:
+          type: number
+          format: float
+          description: Raw humidity reading
+          example: 65.2
+        raw_reading:
+          type: string
+          description: Original raw sensor reading
+          example: "temp:23.5°C,hum:65.2%"
+        metadata:
+          type: object
+          additionalProperties: true
+
+    CleanDataResponse:
+      type: object
+      required:
+        - status
+        - cleaned_data
+        - quality_score
+      properties:
+        status:
+          type: string
+          example: success
+        cleaned_data:
+          type: object
+          description: Cleaned and validated data
+          properties:
+            device_id:
+              type: string
+              example: "sensor-001"
+            timestamp:
+              type: integer
+              format: int64
+              example: 1640995200
+            temperature:
+              type: number
+              format: float
+              example: 23.5
+            humidity:
+              type: number
+              format: float
+              example: 65.2
+        quality_score:
+          type: number
+          format: float
+          description: Data quality score (0-1)
+          example: 0.95
+        applied_rules:
+          type: array
+          description: List of cleaning rules that were applied
+          items:
+            type: string
+          example: ["outlier_detection", "range_validation", "null_handling"]
+        flags:
+          type: array
+          description: Quality flags or warnings
+          items:
+            type: string
+          example: ["minor_outlier_corrected"]
+
+    ValidationErrorResponse:
+      type: object
+      required:
+        - status
+        - message
+        - validation_errors
+      properties:
+        status:
+          type: string
+          example: error
+        message:
+          type: string
+          example: "Data validation failed"
+        validation_errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: "temperature"
+              error:
+                type: string
+                example: "Value out of valid range"
+              value:
+                type: string
+                example: "150.0"
+
+    QualityErrorResponse:
+      type: object
+      required:
+        - status
+        - message
+        - quality_score
+      properties:
+        status:
+          type: string
+          example: rejected
+        message:
+          type: string
+          example: "Data quality too poor to process"
+        quality_score:
+          type: number
+          format: float
+          example: 0.2
+        quality_issues:
+          type: array
+          items:
+            type: string
+          example: ["multiple_outliers", "missing_critical_fields", "timestamp_anomaly"]
+
+    QualityAssessmentResponse:
+      type: object
+      required:
+        - quality_score
+        - assessment
+      properties:
+        quality_score:
+          type: number
+          format: float
+          description: Overall quality score (0-1)
+          example: 0.85
+        assessment:
+          type: object
+          properties:
+            completeness:
+              type: number
+              format: float
+              example: 0.9
+            accuracy:
+              type: number
+              format: float
+              example: 0.8
+            consistency:
+              type: number
+              format: float
+              example: 0.85
+        issues:
+          type: array
+          items:
+            type: object
+            properties:
+              severity:
+                type: string
+                enum: [low, medium, high, critical]
+                example: medium
+              description:
+                type: string
+                example: "Temperature reading slightly outside normal range"
+              field:
+                type: string
+                example: "temperature"
+        recommendations:
+          type: array
+          items:
+            type: string
+          example: ["Consider recalibrating sensor", "Check timestamp synchronization"]
+
+    CleaningRulesResponse:
+      type: object
+      properties:
+        rules:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+                example: "temperature_range_validation"
+              description:
+                type: string
+                example: "Validates temperature readings are within realistic range"
+              enabled:
+                type: boolean
+                example: true
+              parameters:
+                type: object
+                additionalProperties: true
+        last_updated:
+          type: string
+          format: date-time
+        version:
+          type: string
+          example: "1.2.0"
+
+tags:
+  - name: Health
+    description: Service health and status endpoints
+  - name: Data Cleaning
+    description: Data cleaning and processing operations
+  - name: Data Validation
+    description: Data quality validation operations
+  - name: Configuration
+    description: Service configuration endpoints

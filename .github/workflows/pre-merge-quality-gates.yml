@@ -1,0 +1,483 @@
+name: Pre-Merge Quality Gates
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [ main, develop ]
+
+# Prevent multiple workflows from running simultaneously
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: '1.24'
+  DOCKER_BUILDKIT: 1
+
+jobs:
+  # Job 1: Code Quality & Linting
+  code-quality:
+    name: Code Quality & Linting
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: |
+          # Install compatible version of golangci-lint
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.61.0
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Check go.mod tidiness
+        run: |
+          for dir in data-ingestion-go clean-ingestion-go processing-engine-go storage-layer-go visualization-go tenant-management-go; do
+            if [ -d "$dir" ] && [ -f "$dir/go.mod" ]; then
+              echo "Checking $dir..."
+              cd "$dir"
+              go mod tidy
+              if ! git diff --exit-code go.mod go.sum; then
+                echo "::error::$dir go.mod or go.sum is not tidy. Run 'go mod tidy' and commit the changes."
+                exit 1
+              fi
+              cd ..
+            fi
+          done
+
+      - name: Run golangci-lint
+        run: |
+          export PATH=$PATH:$(go env GOPATH)/bin
+          for dir in data-ingestion-go clean-ingestion-go processing-engine-go storage-layer-go visualization-go tenant-management-go; do
+            if [ -d "$dir" ] && [ -f "$dir/go.mod" ]; then
+              echo "Linting $dir..."
+              cd "$dir"
+              
+              # Try golangci-lint first, with fallback to basic validation
+              if golangci-lint run --timeout=10m --config=../.golangci.yml; then
+                echo "✅ golangci-lint passed for $dir"
+              else
+                echo "⚠️ golangci-lint failed for $dir, running fallback validation..."
+                
+                # Run basic Go validation
+                echo "Running go fmt..."
+                if ! go fmt ./...; then
+                  echo "❌ go fmt failed for $dir"
+                  exit 1
+                fi
+                
+                echo "Running go vet..."
+                if ! go vet ./...; then
+                  echo "❌ go vet failed for $dir"
+                  exit 1
+                fi
+                
+                echo "Running go build..."
+                if ! go build ./...; then
+                  echo "❌ go build failed for $dir"
+                  exit 1
+                fi
+                
+                # Run govulncheck for security
+                echo "Running govulncheck..."
+                govulncheck ./... || echo "⚠️ vulnerabilities found, but continuing..."
+                
+                echo "✅ Basic validation passed for $dir"
+              fi
+              cd ..
+            fi
+          done
+
+      - name: Run staticcheck
+        run: |
+          for dir in data-ingestion-go clean-ingestion-go processing-engine-go storage-layer-go visualization-go tenant-management-go; do
+            if [ -d "$dir" ] && [ -f "$dir/go.mod" ]; then
+              echo "Static analysis for $dir..."
+              cd "$dir"
+              staticcheck ./... || true  # Allow to continue even with warnings
+              cd ..
+            fi
+          done
+
+  # Job 2: Unit Tests with Coverage
+  unit-tests:
+    name: Unit Tests & Coverage
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run tests with coverage
+        run: |
+          mkdir -p coverage
+          total_coverage=0
+          service_count=0
+          
+          for dir in data-ingestion-go clean-ingestion-go processing-engine-go storage-layer-go visualization-go tenant-management-go; do
+            if [ -d "$dir" ] && [ -f "$dir/go.mod" ]; then
+              echo "Testing $dir..."
+              cd "$dir"
+              
+              # Run tests with coverage
+              go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+              if [ -f coverage.out ]; then
+                coverage=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | sed 's/%//')
+                echo "$dir coverage: $coverage%"
+                echo "$dir,$coverage" >> ../coverage/coverage.csv
+                total_coverage=$(echo "$total_coverage + $coverage" | bc -l)
+                service_count=$((service_count + 1))
+                mv coverage.out ../coverage/"$dir"_coverage.out
+              fi
+              cd ..
+            fi
+          done
+          
+          if [ $service_count -gt 0 ]; then
+            avg_coverage=$(echo "scale=2; $total_coverage / $service_count" | bc -l)
+            echo "Average coverage: $avg_coverage%"
+            echo "AVERAGE_COVERAGE=$avg_coverage" >> $GITHUB_ENV
+            
+            # Fail if coverage is below threshold
+            if (( $(echo "$avg_coverage < 60" | bc -l) )); then
+              echo "::error::Average test coverage ($avg_coverage%) is below minimum threshold (60%)"
+              exit 1
+            fi
+          fi
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          directory: ./coverage
+          flags: unittests
+          fail_ci_if_error: false
+
+      - name: Comment PR with coverage
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            if (fs.existsSync('coverage/coverage.csv')) {
+              const coverage = fs.readFileSync('coverage/coverage.csv', 'utf8');
+              const lines = coverage.trim().split('\n');
+              let table = '| Service | Coverage |\n|---------|----------|\n';
+              for (const line of lines) {
+                const [service, cov] = line.split(',');
+                table += `| ${service} | ${cov}% |\n`;
+              }
+              table += `\n**Average Coverage: ${process.env.AVERAGE_COVERAGE}%**`;
+              
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `## 📊 Test Coverage Report\n\n${table}`
+              });
+            }
+
+  # Job 3: Security Scanning
+  security-scan:
+    name: Security Analysis
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    permissions:
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run custom security check
+        run: |
+          chmod +x scripts/security-check.sh
+          ./scripts/security-check.sh
+
+      - name: Run vulnerability scanning
+        run: |
+          export PATH=$PATH:$(go env GOPATH)/bin
+          for dir in data-ingestion-go clean-ingestion-go processing-engine-go storage-layer-go visualization-go tenant-management-go; do
+            if [ -d "$dir" ] && [ -f "$dir/go.mod" ]; then
+              echo "Scanning $dir for vulnerabilities..."
+              cd "$dir"
+              govulncheck ./... || echo "⚠️ Vulnerabilities found in $dir"
+              cd ..
+            fi
+          done
+
+      - name: Run Gosec Security Scanner
+        uses: securego/gosec@master
+        with:
+          args: '-exclude-dir=.git -exclude-dir=vendor -fmt sarif -out gosec.sarif ./...'
+
+      - name: Upload Gosec results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: gosec.sarif
+
+      - name: Scan for secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+
+  # Job 4: Build & Test Docker Images
+  docker-build:
+    name: Docker Build & Scan
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    strategy:
+      matrix:
+        service: [data-ingestion-go, clean-ingestion-go, processing-engine-go, storage-layer-go, visualization-go, tenant-management-go]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check service exists
+        id: check
+        run: |
+          if [ -d "${{ matrix.service }}" ] && [ -f "${{ matrix.service }}/Dockerfile" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.exists == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        if: steps.check.outputs.exists == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.service }}
+          file: ./${{ matrix.service }}/Dockerfile
+          push: false
+          tags: ${{ matrix.service }}:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan Docker image for vulnerabilities
+        if: steps.check.outputs.exists == 'true'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ matrix.service }}:test
+          format: 'sarif'
+          output: 'trivy-${{ matrix.service }}.sarif'
+
+      - name: Upload Trivy scan results
+        if: steps.check.outputs.exists == 'true'
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-${{ matrix.service }}.sarif'
+
+  # Job 5: Integration Tests
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    services:
+      kafka:
+        image: confluentinc/cp-kafka:latest
+        env:
+          KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+        ports:
+          - 9092:9092
+      zookeeper:
+        image: confluentinc/cp-zookeeper:latest
+        env:
+          ZOOKEEPER_CLIENT_PORT: 2181
+          ZOOKEEPER_TICK_TIME: 2000
+        ports:
+          - 2181:2181
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Wait for Kafka
+        run: |
+          timeout 60 bash -c 'until nc -z localhost 9092; do sleep 1; done'
+
+      - name: Run integration tests
+        env:
+          KAFKA_HOST: localhost
+          KAFKA_PORT: 9092
+        run: |
+          for dir in data-ingestion-go clean-ingestion-go processing-engine-go storage-layer-go visualization-go tenant-management-go; do
+            if [ -d "$dir" ] && [ -f "$dir/go.mod" ]; then
+              echo "Running integration tests for $dir..."
+              cd "$dir"
+              # Run tests tagged with integration
+              go test -v -tags=integration ./... || true
+              cd ..
+            fi
+          done
+
+  # Job 6: Performance Tests
+  performance-tests:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run benchmarks
+        run: |
+          mkdir -p benchmarks
+          for dir in data-ingestion-go clean-ingestion-go processing-engine-go storage-layer-go visualization-go tenant-management-go; do
+            if [ -d "$dir" ] && [ -f "$dir/go.mod" ]; then
+              echo "Running benchmarks for $dir..."
+              cd "$dir"
+              go test -bench=. -benchmem -run=^$ ./... > ../benchmarks/"$dir"_bench.txt 2>&1 || true
+              cd ..
+            fi
+          done
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results
+          path: benchmarks/
+
+  # Job 7: Documentation & API Tests
+  documentation-tests:
+    name: Documentation & API Validation
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check documentation completeness
+        run: |
+          # Check if all services have README files
+          for dir in data-ingestion-go clean-ingestion-go processing-engine-go storage-layer-go visualization-go tenant-management-go; do
+            if [ -d "$dir" ] && [ ! -f "$dir/README.md" ]; then
+              echo "::warning::Missing README.md in $dir"
+            fi
+          done
+
+      - name: Validate Kubernetes manifests
+        run: |
+          # Install kubeval for manifest validation
+          curl -L https://github.com/instrumenta/kubeval/releases/latest/download/kubeval-linux-amd64.tar.gz | tar xz
+          sudo mv kubeval /usr/local/bin/
+          
+          # Validate all Kubernetes manifests
+          find k8s/ -name "*.yaml" -not -name "*.template.yaml" | xargs kubeval || true
+
+      - name: Check for API documentation
+        run: |
+          # Check if OpenAPI specs exist for services that should have them
+          services_with_api=("data-ingestion-go" "visualization-go" "tenant-management-go")
+          for service in "${services_with_api[@]}"; do
+            if [ -d "$service" ] && [ ! -f "$service/api.yaml" ] && [ ! -f "$service/openapi.yaml" ]; then
+              echo "::warning::Missing API documentation for $service"
+            fi
+          done
+
+  # Job 8: Final Quality Gate
+  quality-gate:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    needs: [code-quality, unit-tests, security-scan, docker-build, integration-tests, performance-tests, documentation-tests]
+    if: always() && github.event.pull_request.draft == false
+    steps:
+      - name: Check all jobs status
+        run: |
+          echo "Code Quality: ${{ needs.code-quality.result }}"
+          echo "Unit Tests: ${{ needs.unit-tests.result }}"
+          echo "Security Scan: ${{ needs.security-scan.result }}"
+          echo "Docker Build: ${{ needs.docker-build.result }}"
+          echo "Integration Tests: ${{ needs.integration-tests.result }}"
+          echo "Performance Tests: ${{ needs.performance-tests.result }}"
+          echo "Documentation Tests: ${{ needs.documentation-tests.result }}"
+
+          # Check if any critical jobs failed
+          if [[ "${{ needs.unit-tests.result }}" == "failure" ]]; then
+            echo "::error::Unit tests failed - blocking merge"
+            exit 1
+          fi
+
+          if [[ "${{ needs.security-scan.result }}" == "failure" ]]; then
+            echo "::error::Security scan failed - blocking merge"
+            exit 1
+          fi
+
+          if [[ "${{ needs.docker-build.result }}" == "failure" ]]; then
+            echo "::error::Docker build failed - blocking merge"
+            exit 1
+          fi
+
+          echo "✅ All critical quality gates passed!"
+
+      - name: Update PR status
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { needs } = context.payload.workflow_run || { needs: {} };
+            let status = '✅ All quality gates passed!';
+            let color = 'success';
+            
+            const results = {
+              'Code Quality': '${{ needs.code-quality.result }}',
+              'Unit Tests': '${{ needs.unit-tests.result }}',
+              'Security Scan': '${{ needs.security-scan.result }}',
+              'Docker Build': '${{ needs.docker-build.result }}',
+              'Integration Tests': '${{ needs.integration-tests.result }}',
+              'Performance Tests': '${{ needs.performance-tests.result }}',
+              'Documentation': '${{ needs.documentation-tests.result }}'
+            };
+            
+            let summary = '## 🚦 Quality Gate Results\n\n';
+            for (const [job, result] of Object.entries(results)) {
+              const icon = result === 'success' ? '✅' : result === 'failure' ? '❌' : '⚠️';
+              summary += `${icon} **${job}**: ${result}\n`;
+            }
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });

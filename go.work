@@ -1,0 +1,12 @@
+go 1.24
+
+use (
+	.
+	./data-ingestion-go
+	./processing-engine-go
+	./tenant-management-go
+	./clean-ingestion-go
+	./platform/admin-ui-go
+	./storage-layer-go
+	./visualization-go
+)

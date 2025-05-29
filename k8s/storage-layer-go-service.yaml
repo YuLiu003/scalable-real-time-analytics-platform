@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: storage-layer-go-service
+  namespace: analytics-platform
+spec:
+  selector:
+    app: storage-layer-go
+  ports:
+  - port: 5002
+    targetPort: 5002
+  type: ClusterIP 
