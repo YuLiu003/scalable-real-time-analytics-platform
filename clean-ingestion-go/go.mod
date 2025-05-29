@@ -1,4 +1,4 @@
-module github.com/YuLiu003/real-time-analytics-platform/clean-ingestion
+module github.com/YuLiu003/real-time-analytics-platform/clean-ingestion-go
 
 go 1.23
 
