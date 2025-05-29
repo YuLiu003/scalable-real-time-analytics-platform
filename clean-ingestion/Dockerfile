@@ -10,3 +10,6 @@ COPY src/ .
 EXPOSE 5000
 
 CMD ["python", "app.py"]
+
+# Run as non-root user
+USER 1000
