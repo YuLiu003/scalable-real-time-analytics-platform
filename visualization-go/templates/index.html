@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ .title }}</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.js"></script>
+</head>
+<body>
+    <div class="header">
+        <h1>Real-Time Analytics Platform</h1>
+        <div class="tenant-selector">
+            <label for="tenant-select">Tenant:</label>
+            <select id="tenant-select">
+                <option value="tenant1">Tenant 1</option>
+                <option value="tenant2">Tenant 2</option>
+                <option value="tenant3">Tenant 3</option>
+                <option value="default">Default</option>
+            </select>
+            <button id="changeTenantBtn">Switch Tenant</button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="dashboard-header">
+            <h2>Sensor Data Dashboard</h2>
+            <div class="dashboard-controls">
+                <button id="refreshBtn">Refresh Data</button>
+                <div class="toggle-wrapper">
+                    <label for="real-time-toggle">Real-time Updates:</label>
+                    <label class="switch">
+                        <input type="checkbox" id="real-time-toggle" checked>
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+        <div class="dashboard">
+            <div class="card">
+                <div class="card-header">Temperature (°C)</div>
+                <div class="chart-container">
+                    <canvas id="temperatureChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">Humidity (%)</div>
+                <div class="chart-container">
+                    <canvas id="humidityChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">Device Statistics</div>
+            <div class="device-stats">
+                <div class="stat-card">
+                    <div class="stat-label">Average Temperature</div>
+                    <div id="avgTemp" class="stat-value">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Average Humidity</div>
+                    <div id="avgHumidity" class="stat-value">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Total Readings</div>
+                    <div id="totalReadings" class="stat-value">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Last Reading</div>
+                    <div id="lastReading" class="stat-value">--</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mt-20">
+            <div class="card-header">Device Activity Timeline</div>
+            <div class="timeline-container">
+                <div id="activity-timeline" class="timeline">
+                    <!-- Timeline items will be inserted here by JavaScript -->
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-6">
+                <div class="data-form">
+                    <div class="card-header">Send Test Data</div>
+                    <div class="form-group">
+                        <label for="deviceId">Device ID:</label>
+                        <input type="text" id="deviceId" value="device-001">
+                    </div>
+                    <div class="form-group">
+                        <label for="temperature">Temperature (°C):</label>
+                        <input type="number" id="temperature" step="0.1" value="24.5">
+                    </div>
+                    <div class="form-group">
+                        <label for="humidity">Humidity (%):</label>
+                        <input type="number" id="humidity" step="0.1" value="50.0">
+                    </div>
+                    <div class="form-group">
+                        <label for="api-key">API Key:</label>
+                        <input type="text" id="api-key" value="test-api-key-123456">
+                    </div>
+                    <button id="sendDataBtn" class="primary-btn">Send Data</button>
+                    <div id="response" style="margin-top: 15px;"></div>
+                </div>
+            </div>
+            
+            <div class="col-6">
+                <div class="card">
+                    <div class="card-header">Services Status</div>
+                    <button id="checkStatusBtn" class="secondary-btn">Check System Status</button>
+                    <div id="statusResults" style="margin-top: 15px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="footer">
+        <div class="footer-content">
+            <div>Real-Time Analytics Platform | Go Implementation</div>
+            <div class="connection-status">
+                WebSocket: <span id="ws-status" class="status-offline">Offline</span>
+            </div>
+        </div>
+    </div>
+    
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html> 

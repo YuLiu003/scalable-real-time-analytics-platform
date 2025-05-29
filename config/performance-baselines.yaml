@@ -1,0 +1,235 @@
+# Performance Baseline Configuration
+# This file defines performance baselines and benchmarks for the Real-Time Analytics Platform
+
+# Global Performance Settings
+global:
+  # Timeout settings for CI/CD benchmarks (in seconds)
+  benchmark_timeout: 300
+  
+  # Baseline comparison tolerance (percentage)
+  performance_tolerance: 10
+  
+  # Number of benchmark runs to average
+  benchmark_runs: 5
+
+# Service-specific performance baselines
+services:
+  data-ingestion-go:
+    # Request handling benchmarks
+    endpoints:
+      "/api/data":
+        # Requests per second baseline (conservative for CI environment)
+        rps_baseline: 100
+        # 95th percentile response time (milliseconds)
+        p95_latency_ms: 100
+        # 99th percentile response time (milliseconds)  
+        p99_latency_ms: 200
+        # Memory usage per request (KB)
+        memory_per_request_kb: 50
+      
+      "/health":
+        rps_baseline: 500
+        p95_latency_ms: 10
+        p99_latency_ms: 25
+        memory_per_request_kb: 5
+
+    # Resource usage baselines
+    resources:
+      # CPU usage under normal load (percentage)
+      cpu_usage_normal: 50
+      # CPU usage under peak load (percentage)
+      cpu_usage_peak: 90
+      # Memory usage baseline (MB) - more realistic for test env
+      memory_usage_mb: 64
+      # Goroutine count under normal load
+      goroutine_count_normal: 20
+
+    # Throughput baselines
+    throughput:
+      # Messages processed per second (conservative)
+      messages_per_second: 100
+      # Kafka producer throughput (messages/sec)
+      kafka_producer_throughput: 80
+      # Data processing latency (milliseconds)
+      processing_latency_ms: 50
+
+  clean-ingestion-go:
+    endpoints:
+      "/api/data":
+        rps_baseline: 80
+        p95_latency_ms: 150
+        p99_latency_ms: 300
+        memory_per_request_kb: 75
+      
+      "/api/validate":
+        rps_baseline: 120
+        p95_latency_ms: 50
+        p99_latency_ms: 100
+        memory_per_request_kb: 25
+
+    resources:
+      cpu_usage_normal: 60
+      cpu_usage_peak: 95
+      memory_usage_mb: 128
+      goroutine_count_normal: 30
+
+    throughput:
+      messages_per_second: 80
+      data_quality_checks_per_second: 100
+      cleaning_operations_per_second: 60
+
+  processing-engine-go:
+    endpoints:
+      "/health":
+        rps_baseline: 3000
+        p95_latency_ms: 10
+        p99_latency_ms: 20
+        memory_per_request_kb: 2
+
+    resources:
+      cpu_usage_normal: 50
+      cpu_usage_peak: 90
+      memory_usage_mb: 512
+      goroutine_count_normal: 100
+
+    throughput:
+      events_processed_per_second: 2000
+      aggregations_per_second: 500
+      output_events_per_second: 800
+
+  storage-layer-go:
+    endpoints:
+      "/api/data":
+        rps_baseline: 2000
+        p95_latency_ms: 25
+        p99_latency_ms: 50
+        memory_per_request_kb: 8
+
+    resources:
+      cpu_usage_normal: 35
+      cpu_usage_peak: 75
+      memory_usage_mb: 1024
+      goroutine_count_normal: 80
+
+    throughput:
+      writes_per_second: 1500
+      reads_per_second: 3000
+      storage_operations_per_second: 2000
+
+  visualization-go:
+    endpoints:
+      "/api/dashboard":
+        rps_baseline: 500
+        p95_latency_ms: 200
+        p99_latency_ms: 500
+        memory_per_request_kb: 100
+      
+      "/api/metrics":
+        rps_baseline: 1000
+        p95_latency_ms: 50
+        p99_latency_ms: 100
+        memory_per_request_kb: 25
+
+    resources:
+      cpu_usage_normal: 25
+      cpu_usage_peak: 60
+      memory_usage_mb: 256
+      goroutine_count_normal: 40
+
+    throughput:
+      dashboard_renders_per_second: 100
+      chart_generations_per_second: 200
+      data_queries_per_second: 300
+
+  tenant-management-go:
+    endpoints:
+      "/api/tenants":
+        rps_baseline: 300
+        p95_latency_ms: 100
+        p99_latency_ms: 200
+        memory_per_request_kb: 50
+
+    resources:
+      cpu_usage_normal: 20
+      cpu_usage_peak: 50
+      memory_usage_mb: 128
+      goroutine_count_normal: 30
+
+    throughput:
+      tenant_operations_per_second: 200
+      auth_checks_per_second: 1000
+
+# Integration benchmark baselines
+integration:
+  end_to_end_latency_ms: 500
+  data_pipeline_throughput: 1000
+  system_availability_percent: 99.9
+  error_rate_percent: 0.1
+
+# Load testing configurations
+load_testing:
+  # Duration for load tests (seconds)
+  duration: 60
+  
+  # Ramp-up time (seconds)
+  ramp_up: 10
+  
+  # Virtual users for different test scenarios
+  scenarios:
+    normal_load:
+      virtual_users: 50
+      duration: 300
+    
+    peak_load:
+      virtual_users: 200
+      duration: 180
+    
+    stress_test:
+      virtual_users: 500
+      duration: 120
+    
+    spike_test:
+      virtual_users: 1000
+      duration: 60
+
+# Memory leak detection
+memory:
+  # Maximum memory growth per hour (MB)
+  max_growth_per_hour_mb: 10
+  
+  # Garbage collection frequency baseline
+  gc_frequency_per_minute: 5
+  
+  # Heap size growth threshold (percentage)
+  heap_growth_threshold_percent: 20
+
+# Alerting thresholds
+alerts:
+  # Performance degradation threshold (percentage)
+  performance_degradation_threshold: 20
+  
+  # Memory usage alert threshold (percentage of baseline)
+  memory_alert_threshold: 150
+  
+  # CPU usage alert threshold (percentage of baseline)
+  cpu_alert_threshold: 150
+  
+  # Error rate threshold (percentage)
+  error_rate_threshold: 1.0
+
+# Benchmark storage and reporting
+reporting:
+  # Store benchmark results for trend analysis
+  store_results: true
+  
+  # Number of historical benchmarks to keep
+  history_retention_count: 100
+  
+  # Generate performance reports
+  generate_reports: true
+  
+  # Report formats
+  report_formats: ["json", "html", "markdown"]
+  
+  # Performance trend analysis
+  trend_analysis: true

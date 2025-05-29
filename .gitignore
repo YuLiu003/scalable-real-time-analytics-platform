@@ -1,5 +1,89 @@
-# Secrets and environment variables
+# Kubernetes secrets and configs
+*secrets.yaml
+*sensitive*.yaml
+k8s/dev-*.yaml
+
+# Production and development credentials
+production-secrets/
+dev-secrets/
+*.credentials
+credentials.*
+secure_credentials.*
+*-secure.*
+
+# API keys and tokens
+*.apikey
+*.token
+*.key.json
+auth-keys.*
+oauth.*
+
+# Backup files containing sensitive data
+*.backup
+*.bak
+*.old
+
+# Environment files
 .env
+.env.*
+*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Dependencies
+node_modules/
+vendor/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Build files
+dist/
+build/
+target/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Certificates
+*.pem
+*.key
+*.crt
+*.cer
+*.ca-bundle
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+*.tmp
+*.bak
+
+# Python files
 *.env
 *.pem
 *.key
@@ -64,10 +148,6 @@ k8s/generated/
 ehthumbs.db
 Thumbs.db
 
-# Logs
-logs/
-*.log
-
 # Docker
 .docker/
 docker-compose.override.yml
@@ -115,3 +195,65 @@ k8s/kafka-secrets.yaml
 k8s/api-keys.yaml
 k8s/grafana-secret.yaml
 secure_credentials.txt
+
+# Python virtual environments
+**/.*venv*/
+**/venv/
+**/.venv/
+
+venv/
+
+# Archived Python components
+archive/python-components/
+# Archived files from Go migration
+archive/redundant-files/
+
+# Go compiled binaries and build artifacts (specific binaries, not directories)
+data-ingestion-go/data-ingestion
+clean-ingestion-go/clean-ingestion
+processing-engine-go/processing-engine-go
+processing-engine-go/processing-engine-go-new
+visualization-go/visualization-go
+admin-ui-go/admin-ui-go
+storage-layer-go/storage-layer
+tenant-management-go/tenant-management-go
+
+# Go build outputs
+*.test
+*.out
+**/build_output.txt
+
+# Test data files
+large_payload*.json
+*payload*.json
+test-data.json
+recent_logs.txt
+
+# CRITICAL SECURITY ITEMS REMOVED (May 25, 2025)
+
+# ❌ IMMEDIATE SECURITY FIXES APPLIED:
+k8s/secrets-secure.yaml
+
+# Additional security patterns
+*secrets-secure*
+*production-secrets*
+*.env.production
+*.env.prod
+*prod-secrets*
+*staging-secrets*
+
+# Private key patterns
+*private*key*
+*id_rsa*
+*id_ed25519*
+*.p12
+*.pfx
+
+# Database dumps and sensitive data
+*.sql.gz
+*.dump
+*backup*.sql
+
+# Configuration with secrets
+*config.prod*
+*settings.production*

@@ -12,5 +12,4 @@ spec:
     targetPort: 9092
   - name: controller
     port: 9093
-    targetPort: 9093
-  type: ClusterIP
+    targetPort: 9093 

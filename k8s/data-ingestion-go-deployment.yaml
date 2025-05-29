@@ -1,0 +1,158 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: data-ingestion-go
+  namespace: analytics-platform
+  labels:
+    app: data-ingestion-go
+    tier: frontend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: data-ingestion-go
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: data-ingestion-go
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: data-ingestion-sa
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - data-ingestion-go
+              topologyKey: kubernetes.io/hostname
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 1000
+      containers:
+      - name: data-ingestion-go
+        image: data-ingestion-go:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5000
+          name: http
+        env:
+        - name: KAFKA_BROKER
+          valueFrom:
+            configMapKeyRef:
+              name: platform-config
+              key: KAFKA_BROKER
+        - name: KAFKA_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: platform-config
+              key: KAFKA_TOPIC
+        - name: KAFKA_ERROR_TOPIC
+          valueFrom:
+            configMapKeyRef:
+              name: platform-config
+              key: KAFKA_ERROR_TOPIC
+        - name: BYPASS_AUTH
+          value: "false"
+        - name: API_KEY_1
+          valueFrom:
+            secretKeyRef:
+              name: tenant-management-secrets
+              key: API_KEY_1
+        - name: API_KEY_2
+          valueFrom:
+            secretKeyRef:
+              name: tenant-management-secrets
+              key: API_KEY_2
+        - name: ADMIN_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: tenant-management-secrets
+              key: API_KEY_3
+        - name: ENABLE_API_AUTH
+          value: "true"
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: platform-config
+              key: LOG_LEVEL
+        - name: LOG_FORMAT
+          valueFrom:
+            configMapKeyRef:
+              name: platform-config
+              key: LOG_FORMAT
+        - name: MAX_CONNECTIONS
+          valueFrom:
+            configMapKeyRef:
+              name: platform-config
+              key: MAX_CONNECTIONS
+        - name: CONNECTION_TIMEOUT
+          valueFrom:
+            configMapKeyRef:
+              name: platform-config
+              key: CONNECTION_TIMEOUT
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "200m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 2
+          successThreshold: 1
+          failureThreshold: 3
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 2
+          failureThreshold: 30
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+      volumes:
+      - name: tmp-volume
+        emptyDir: {}
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: data-ingestion-go
