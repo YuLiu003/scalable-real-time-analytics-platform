@@ -213,10 +213,24 @@ data-ingestion-go/data-ingestion
 clean-ingestion-go/clean-ingestion
 processing-engine-go/processing-engine-go
 processing-engine-go/processing-engine-go-new
+processing-engine-go/processing-engine
 visualization-go/visualization-go
+visualization-go/visualization
 admin-ui-go/admin-ui-go
 storage-layer-go/storage-layer
 tenant-management-go/tenant-management-go
+
+# Coverage files
+*coverage.html
+*-coverage.html
+*.coverage.html
+
+# Backup files
+*.bak
+*.bak2
+*.bak3
+*.backup
+*~
 
 # Go build outputs
 *.test
