@@ -150,7 +150,7 @@ func (d *DB) GetTenantData(tenantID string, limit, offset int) ([]SensorData, er
 	defer rows.Close()
 
 	// Parse results
-	var results []SensorData
+	results := make([]SensorData, 0) // Initialize as empty slice instead of nil
 	for rows.Next() {
 		var data SensorData
 		var timestamp, createdAt float64
@@ -222,7 +222,7 @@ func (d *DB) GetTenantDeviceData(tenantID, deviceID string, limit int) ([]Sensor
 	defer rows.Close()
 
 	// Parse results
-	var results []SensorData
+	results := make([]SensorData, 0) // Initialize as empty slice instead of nil
 	for rows.Next() {
 		var data SensorData
 		var timestamp, createdAt float64
