@@ -58,12 +58,28 @@ Set these GitHub Secrets in your repository:
 - `API_KEY_1`, `API_KEY_2` - If you want specific API keys instead of random ones
 - `JWT_SECRET` - If you want a specific JWT secret instead of a generated one
 
-**How to set KUBE_CONFIG:**
-1. Go to your repository on GitHub
-2. Settings → Secrets and variables → Actions  
-3. Click "New repository secret"
-4. Name: `KUBE_CONFIG`
-5. Value: Your base64-encoded kubeconfig file
+**How to set KUBE_CONFIG (Secure Methods):**
+
+**RECOMMENDED: Create a dedicated service account**
+1. Run the script: `./scripts/create-github-kubeconfig.sh`
+2. Copy the base64 output from the script
+3. Go to your repository on GitHub
+4. Settings → Secrets and variables → Actions  
+5. Click "New repository secret"
+6. Name: `KUBE_CONFIG`
+7. Value: Paste the base64-encoded kubeconfig from step 2
+
+**Alternative: Use local development cluster**
+```bash
+# For local clusters (minikube, kind, Docker Desktop)
+kubectl config view --raw | base64
+```
+
+**Security Benefits:**
+- ✅ Limited namespace access (analytics-platform only)
+- ✅ Minimal RBAC permissions (deployment actions only)
+- ✅ Revocable and auditable
+- ✅ Safe for public repositories
 
 ## 🚨 Security Best Practices
 
