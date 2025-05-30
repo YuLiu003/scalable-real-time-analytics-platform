@@ -2,6 +2,8 @@
 *secrets.yaml
 *sensitive*.yaml
 k8s/dev-*.yaml
+!k8s/SECURITY_SECRETS.md
+!k8s/*SECURITY*.md
 
 # Production and development credentials
 production-secrets/

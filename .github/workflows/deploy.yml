@@ -218,32 +218,68 @@ jobs:
         run: |
           kubectl create namespace analytics-platform --dry-run=client -o yaml | kubectl apply -f -
           
-          # Apply base secrets from k8s/staging-defaults.yaml
-          if [ -f "k8s/staging-defaults.yaml" ]; then
-            echo "Applying base staging secrets..."
-            kubectl apply -f k8s/staging-defaults.yaml
-          fi
+          echo "Generating secure random secrets for staging environment..."
+          
+          # Generate random secrets
+          KAFKA_CLUSTER_ID=$(uuidgen | tr -d '-' | tr '[:upper:]' '[:lower:]')
+          GRAFANA_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-16)
+          API_KEY=$(openssl rand -hex 32)
+          DB_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-20)
+          REDIS_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-20)
+          JWT_SECRET=$(openssl rand -hex 64)
+          
+          # Create Kafka secrets
+          kubectl create secret generic kafka-secrets \
+            --from-literal=kraft-cluster-id="$KAFKA_CLUSTER_ID" \
+            -n analytics-platform \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Create Grafana credentials
+          kubectl create secret generic grafana-admin-credentials \
+            --from-literal=admin-user="admin" \
+            --from-literal=admin-password="$GRAFANA_PASSWORD" \
+            -n analytics-platform \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Create platform secrets
+          kubectl create secret generic analytics-platform-secrets \
+            --from-literal=API_KEY="$API_KEY" \
+            --from-literal=DB_PASSWORD="$DB_PASSWORD" \
+            --from-literal=REDIS_PASSWORD="$REDIS_PASSWORD" \
+            --from-literal=JWT_SECRET="$JWT_SECRET" \
+            -n analytics-platform \
+            --dry-run=client -o yaml | kubectl apply -f -
           
           # Create or update tenant management secrets for staging
           if [ -n "${{ secrets.API_KEY_1 }}" ] && [ -n "${{ secrets.API_KEY_2 }}" ]; then
             echo "Creating tenant management secrets from GitHub secrets..."
+            TENANT_JWT="${{ secrets.JWT_SECRET }}"
+            if [ -z "$TENANT_JWT" ]; then
+              TENANT_JWT="$JWT_SECRET"
+            fi
             kubectl create secret generic tenant-management-secrets \
               --from-literal=API_KEY_1=${{ secrets.API_KEY_1 }} \
               --from-literal=API_KEY_2=${{ secrets.API_KEY_2 }} \
-              --from-literal=API_KEY_3=${{ secrets.API_KEY_3 || 'staging-key-3' }} \
-              --from-literal=JWT_SECRET=${{ secrets.JWT_SECRET || 'staging-jwt-secret' }} \
+              --from-literal=API_KEY_3=${{ secrets.API_KEY_3 }} \
+              --from-literal=JWT_SECRET="$TENANT_JWT" \
               -n analytics-platform \
               --dry-run=client -o yaml | kubectl apply -f -
           else
-            echo "::warning::GitHub secrets for API keys not found. Using default staging secrets."
+            echo "GitHub secrets for API keys not found. Generating random tenant secrets..."
+            TENANT_KEY_1=$(openssl rand -hex 32)
+            TENANT_KEY_2=$(openssl rand -hex 32)
+            TENANT_KEY_3=$(openssl rand -hex 32)
             kubectl create secret generic tenant-management-secrets \
-              --from-literal=API_KEY_1=staging-api-key-1 \
-              --from-literal=API_KEY_2=staging-api-key-2 \
-              --from-literal=API_KEY_3=staging-api-key-3 \
-              --from-literal=JWT_SECRET=staging-jwt-secret \
+              --from-literal=API_KEY_1="$TENANT_KEY_1" \
+              --from-literal=API_KEY_2="$TENANT_KEY_2" \
+              --from-literal=API_KEY_3="$TENANT_KEY_3" \
+              --from-literal=JWT_SECRET="$JWT_SECRET" \
               -n analytics-platform \
               --dry-run=client -o yaml | kubectl apply -f -
           fi
+          
+          echo "✅ All staging secrets created with randomly generated values"
+          echo "🔐 Grafana admin password: $GRAFANA_PASSWORD (save this for staging access)"
 
       - name: Check Helm charts
         id: check_charts
