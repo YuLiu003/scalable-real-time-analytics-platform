@@ -50,6 +50,21 @@ Set these GitHub Secrets in your repository:
 - `DB_PASSWORD_PROD_B64`
 - `REDIS_PASSWORD_PROD_B64`
 
+### **Staging Setup (FIXED):**
+**Required Secret:**
+- `KUBE_CONFIG` - Base64-encoded kubeconfig for your Kubernetes cluster
+
+**Optional Secrets (will use generated values if missing):**
+- `API_KEY_1`, `API_KEY_2` - If you want specific API keys instead of random ones
+- `JWT_SECRET` - If you want a specific JWT secret instead of a generated one
+
+**How to set KUBE_CONFIG:**
+1. Go to your repository on GitHub
+2. Settings → Secrets and variables → Actions  
+3. Click "New repository secret"
+4. Name: `KUBE_CONFIG`
+5. Value: Your base64-encoded kubeconfig file
+
 ## 🚨 Security Best Practices
 
 1. **Never commit real secrets to git**
