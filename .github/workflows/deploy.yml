@@ -55,11 +55,14 @@ jobs:
               echo "::warning::Some required production secrets are missing. Production deployment will be skipped."
             fi
           else
-            if [ -n "${{ secrets.KUBE_CONFIG }}" ] && [ -n "${{ secrets.API_KEY_1 }}" ] && [ -n "${{ secrets.API_KEY_2 }}" ]; then
+            # For staging, we only require KUBE_CONFIG - all other secrets are generated dynamically
+            if [ -n "${{ secrets.KUBE_CONFIG }}" ]; then
               echo "all_secrets_present=true" >> $GITHUB_OUTPUT
+              echo "::notice::Staging deployment ready. KUBE_CONFIG found. Other secrets will be generated dynamically."
             else
               echo "all_secrets_present=false" >> $GITHUB_OUTPUT
-              echo "::warning::Some required staging secrets are missing. Running in limited mode."
+              echo "::error::KUBE_CONFIG secret is required for staging deployment. Please add it to GitHub repository secrets."
+              echo "::notice::To add: Go to Settings → Secrets and variables → Actions → New repository secret"
             fi
           fi
 
@@ -216,11 +219,15 @@ jobs:
       - name: Setup Staging Secrets
         if: needs.prepare-deployment.outputs.environment == 'staging'
         run: |
+          echo "🔐 Setting up staging environment with dynamic secret generation..."
+          
+          # Ensure namespace exists
           kubectl create namespace analytics-platform --dry-run=client -o yaml | kubectl apply -f -
+          echo "✅ Namespace 'analytics-platform' ready"
           
-          echo "Generating secure random secrets for staging environment..."
+          echo "🎲 Generating secure random secrets for staging environment..."
           
-          # Generate random secrets
+          # Generate random secrets with validation
           KAFKA_CLUSTER_ID=$(uuidgen | tr -d '-' | tr '[:upper:]' '[:lower:]')
           GRAFANA_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-16)
           API_KEY=$(openssl rand -hex 32)
@@ -228,20 +235,39 @@ jobs:
           REDIS_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-20)
           JWT_SECRET=$(openssl rand -hex 64)
           
+          # Validate secrets were generated
+          if [ -z "$KAFKA_CLUSTER_ID" ] || [ -z "$GRAFANA_PASSWORD" ] || [ -z "$API_KEY" ] || [ -z "$DB_PASSWORD" ] || [ -z "$REDIS_PASSWORD" ] || [ -z "$JWT_SECRET" ]; then
+            echo "::error::Failed to generate one or more secrets"
+            exit 1
+          fi
+          
+          echo "✅ Generated secrets:"
+          echo "   - Kafka Cluster ID: ${KAFKA_CLUSTER_ID:0:8}..."
+          echo "   - Grafana Password: ${GRAFANA_PASSWORD:0:4}... (length: ${#GRAFANA_PASSWORD})"
+          echo "   - API Key: ${API_KEY:0:8}... (length: ${#API_KEY})"
+          echo "   - DB Password: ${DB_PASSWORD:0:4}... (length: ${#DB_PASSWORD})"
+          echo "   - Redis Password: ${REDIS_PASSWORD:0:4}... (length: ${#REDIS_PASSWORD})"
+          echo "   - JWT Secret: ${JWT_SECRET:0:8}... (length: ${#JWT_SECRET})"
+          
           # Create Kafka secrets
+          echo "🔧 Creating Kafka secrets..."
           kubectl create secret generic kafka-secrets \
             --from-literal=kraft-cluster-id="$KAFKA_CLUSTER_ID" \
             -n analytics-platform \
             --dry-run=client -o yaml | kubectl apply -f -
+          echo "✅ Kafka secrets created"
           
           # Create Grafana credentials
+          echo "🔧 Creating Grafana admin credentials..."
           kubectl create secret generic grafana-admin-credentials \
             --from-literal=admin-user="admin" \
             --from-literal=admin-password="$GRAFANA_PASSWORD" \
             -n analytics-platform \
             --dry-run=client -o yaml | kubectl apply -f -
+          echo "✅ Grafana credentials created (admin / $GRAFANA_PASSWORD)"
           
           # Create platform secrets
+          echo "🔧 Creating analytics platform secrets..."
           kubectl create secret generic analytics-platform-secrets \
             --from-literal=API_KEY="$API_KEY" \
             --from-literal=DB_PASSWORD="$DB_PASSWORD" \
@@ -249,13 +275,18 @@ jobs:
             --from-literal=JWT_SECRET="$JWT_SECRET" \
             -n analytics-platform \
             --dry-run=client -o yaml | kubectl apply -f -
+          echo "✅ Analytics platform secrets created"
           
-          # Create or update tenant management secrets for staging
+          # Create tenant management secrets (prefer GitHub secrets if available, otherwise use generated)
+          echo "🔧 Creating tenant management secrets..."
           if [ -n "${{ secrets.API_KEY_1 }}" ] && [ -n "${{ secrets.API_KEY_2 }}" ]; then
-            echo "Creating tenant management secrets from GitHub secrets..."
+            echo "📋 Using tenant API keys from GitHub secrets..."
             TENANT_JWT="${{ secrets.JWT_SECRET }}"
             if [ -z "$TENANT_JWT" ]; then
               TENANT_JWT="$JWT_SECRET"
+              echo "📋 Using generated JWT secret for tenant management"
+            else
+              echo "📋 Using JWT secret from GitHub secrets"
             fi
             kubectl create secret generic tenant-management-secrets \
               --from-literal=API_KEY_1=${{ secrets.API_KEY_1 }} \
