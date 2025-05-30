@@ -18,6 +18,10 @@ on:
           - staging
           - production
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   prepare-deployment:
     runs-on: ubuntu-latest
@@ -80,25 +84,48 @@ jobs:
         uses: azure/setup-helm@v3
         with:
           version: 'latest'
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure kubectl for environment
         run: |
           ENV="${{ needs.prepare-deployment.outputs.environment }}"
+          echo "Configuring kubectl for environment: $ENV"
+          
           if [[ "$ENV" == "production" ]]; then
+            if [ -z "${{ secrets.KUBE_CONFIG_PROD }}" ]; then
+              echo "::error::KUBE_CONFIG_PROD secret is not set for production deployment"
+              exit 1
+            fi
             echo "${{ secrets.KUBE_CONFIG_PROD }}" > kubeconfig
           else
+            if [ -z "${{ secrets.KUBE_CONFIG }}" ]; then
+              echo "::error::KUBE_CONFIG secret is not set for staging deployment"
+              echo "::notice::Please set the KUBE_CONFIG secret in GitHub repository settings"
+              exit 1
+            fi
             echo "${{ secrets.KUBE_CONFIG }}" > kubeconfig
           fi
           chmod 600 kubeconfig
-          export KUBECONFIG=$(pwd)/kubeconfig
+          echo "KUBECONFIG=$(pwd)/kubeconfig" >> $GITHUB_ENV
+          echo "Kubeconfig file created successfully"
 
       - name: Check kubectl configuration
         run: |
+          echo "Checking kubectl configuration..."
           if ! kubectl get nodes &>/dev/null; then
+            echo "::error::kubectl is not configured correctly. Checking configuration..."
+            kubectl config view --minify
+            echo "Current context:"
+            kubectl config current-context || echo "No current context"
+            echo "Available contexts:"
+            kubectl config get-contexts || echo "No contexts available"
             echo "::error::kubectl is not configured correctly. Exiting."
             exit 1
           fi
           echo "Kubernetes connection successful."
+          kubectl version --client
+          echo "Cluster info:"
+          kubectl cluster-info
 
       - name: Setup Production Secrets
         if: needs.prepare-deployment.outputs.environment == 'production'
@@ -191,14 +218,32 @@ jobs:
         run: |
           kubectl create namespace analytics-platform --dry-run=client -o yaml | kubectl apply -f -
           
-          # Create tenant management secrets for staging
-          kubectl create secret generic tenant-management-secrets \
-            --from-literal=API_KEY_1=${{ secrets.API_KEY_1 }} \
-            --from-literal=API_KEY_2=${{ secrets.API_KEY_2 }} \
-            --from-literal=API_KEY_3=${{ secrets.API_KEY_3 || 'staging-key-3' }} \
-            --from-literal=JWT_SECRET=${{ secrets.JWT_SECRET || 'staging-jwt-secret' }} \
-            -n analytics-platform \
-            --dry-run=client -o yaml | kubectl apply -f -
+          # Apply base secrets from k8s/staging-defaults.yaml
+          if [ -f "k8s/staging-defaults.yaml" ]; then
+            echo "Applying base staging secrets..."
+            kubectl apply -f k8s/staging-defaults.yaml
+          fi
+          
+          # Create or update tenant management secrets for staging
+          if [ -n "${{ secrets.API_KEY_1 }}" ] && [ -n "${{ secrets.API_KEY_2 }}" ]; then
+            echo "Creating tenant management secrets from GitHub secrets..."
+            kubectl create secret generic tenant-management-secrets \
+              --from-literal=API_KEY_1=${{ secrets.API_KEY_1 }} \
+              --from-literal=API_KEY_2=${{ secrets.API_KEY_2 }} \
+              --from-literal=API_KEY_3=${{ secrets.API_KEY_3 || 'staging-key-3' }} \
+              --from-literal=JWT_SECRET=${{ secrets.JWT_SECRET || 'staging-jwt-secret' }} \
+              -n analytics-platform \
+              --dry-run=client -o yaml | kubectl apply -f -
+          else
+            echo "::warning::GitHub secrets for API keys not found. Using default staging secrets."
+            kubectl create secret generic tenant-management-secrets \
+              --from-literal=API_KEY_1=staging-api-key-1 \
+              --from-literal=API_KEY_2=staging-api-key-2 \
+              --from-literal=API_KEY_3=staging-api-key-3 \
+              --from-literal=JWT_SECRET=staging-jwt-secret \
+              -n analytics-platform \
+              --dry-run=client -o yaml | kubectl apply -f -
+          fi
 
       - name: Check Helm charts
         id: check_charts
@@ -242,41 +287,40 @@ jobs:
         run: |
           ENV="${{ needs.prepare-deployment.outputs.environment }}"
           if [ -d "k8s" ]; then
-            # Apply base Kubernetes resources
-            kubectl apply -f k8s/namespace.yaml
+            echo "Deploying with kubectl for environment: $ENV"
             
-            # Apply secrets first
-            if [[ "$ENV" == "staging" ]]; then
-              kubectl apply -f k8s/secrets.yaml -n analytics-platform
-            fi
+            # Apply base Kubernetes resources
+            [ -f "k8s/namespace.yaml" ] && kubectl apply -f k8s/namespace.yaml || echo "namespace.yaml not found, skipping"
             
             # Apply configmaps, PVs, and PVCs
-            kubectl apply -f k8s/configmap.yaml -n analytics-platform
+            [ -f "k8s/configmap.yaml" ] && kubectl apply -f k8s/configmap.yaml -n analytics-platform || echo "configmap.yaml not found, skipping"
             
             # Apply RBAC resources 
-            kubectl apply -f k8s/rbac.yaml -n analytics-platform
-            kubectl apply -f k8s/prometheus-rbac.yaml -n analytics-platform
+            [ -f "k8s/rbac.yaml" ] && kubectl apply -f k8s/rbac.yaml -n analytics-platform || echo "rbac.yaml not found, skipping"
+            [ -f "k8s/prometheus-rbac.yaml" ] && kubectl apply -f k8s/prometheus-rbac.yaml -n analytics-platform || echo "prometheus-rbac.yaml not found, skipping"
             
             # Apply StatefulSet for Kafka with KRaft mode (no Zookeeper required)
-            kubectl apply -f k8s/kafka-kraft-statefulset.yaml -n analytics-platform
+            [ -f "k8s/kafka-kraft-statefulset.yaml" ] && kubectl apply -f k8s/kafka-kraft-statefulset.yaml -n analytics-platform || echo "kafka-kraft-statefulset.yaml not found, skipping"
             
             # Apply other resources
-            kubectl apply -f k8s/network-policy.yaml -n analytics-platform
+            [ -f "k8s/network-policy.yaml" ] && kubectl apply -f k8s/network-policy.yaml -n analytics-platform || echo "network-policy.yaml not found, skipping"
             
             # Apply deployments and services
-            kubectl apply -f k8s/prometheus-deployment.yaml -n analytics-platform
-            kubectl apply -f k8s/grafana-deployment.yaml -n analytics-platform
-            kubectl apply -f k8s/data-ingestion-go-deployment.yaml -n analytics-platform
-            kubectl apply -f k8s/data-ingestion-go-service.yaml -n analytics-platform
-            kubectl apply -f k8s/processing-engine-go-deployment.yaml -n analytics-platform
-            kubectl apply -f k8s/processing-engine-go-service.yaml -n analytics-platform
-            kubectl apply -f k8s/storage-layer-go-deployment.yaml -n analytics-platform
-            kubectl apply -f k8s/storage-layer-go-service.yaml -n analytics-platform
-            kubectl apply -f k8s/visualization-go-deployment.yaml -n analytics-platform
-            kubectl apply -f k8s/visualization-go-service.yaml -n analytics-platform
-            kubectl apply -f k8s/clean-ingestion-go-deployment.yaml -n analytics-platform
-            kubectl apply -f k8s/clean-ingestion-go-service.yaml -n analytics-platform
-            kubectl apply -f k8s/tenant-management-go-deployment.yaml -n analytics-platform
+            [ -f "k8s/prometheus-deployment.yaml" ] && kubectl apply -f k8s/prometheus-deployment.yaml -n analytics-platform || echo "prometheus-deployment.yaml not found, skipping"
+            [ -f "k8s/grafana-deployment.yaml" ] && kubectl apply -f k8s/grafana-deployment.yaml -n analytics-platform || echo "grafana-deployment.yaml not found, skipping"
+            
+            # Apply service deployments
+            [ -f "k8s/data-ingestion-go-deployment.yaml" ] && kubectl apply -f k8s/data-ingestion-go-deployment.yaml -n analytics-platform || echo "data-ingestion-go-deployment.yaml not found, skipping"
+            [ -f "k8s/data-ingestion-go-service.yaml" ] && kubectl apply -f k8s/data-ingestion-go-service.yaml -n analytics-platform || echo "data-ingestion-go-service.yaml not found, skipping"
+            [ -f "k8s/processing-engine-go-deployment.yaml" ] && kubectl apply -f k8s/processing-engine-go-deployment.yaml -n analytics-platform || echo "processing-engine-go-deployment.yaml not found, skipping"
+            [ -f "k8s/processing-engine-go-service.yaml" ] && kubectl apply -f k8s/processing-engine-go-service.yaml -n analytics-platform || echo "processing-engine-go-service.yaml not found, skipping"
+            [ -f "k8s/storage-layer-go-deployment.yaml" ] && kubectl apply -f k8s/storage-layer-go-deployment.yaml -n analytics-platform || echo "storage-layer-go-deployment.yaml not found, skipping"
+            [ -f "k8s/storage-layer-go-service.yaml" ] && kubectl apply -f k8s/storage-layer-go-service.yaml -n analytics-platform || echo "storage-layer-go-service.yaml not found, skipping"
+            [ -f "k8s/visualization-go-deployment.yaml" ] && kubectl apply -f k8s/visualization-go-deployment.yaml -n analytics-platform || echo "visualization-go-deployment.yaml not found, skipping"
+            [ -f "k8s/visualization-go-service.yaml" ] && kubectl apply -f k8s/visualization-go-service.yaml -n analytics-platform || echo "visualization-go-service.yaml not found, skipping"
+            [ -f "k8s/clean-ingestion-go-deployment.yaml" ] && kubectl apply -f k8s/clean-ingestion-go-deployment.yaml -n analytics-platform || echo "clean-ingestion-go-deployment.yaml not found, skipping"
+            [ -f "k8s/clean-ingestion-go-service.yaml" ] && kubectl apply -f k8s/clean-ingestion-go-service.yaml -n analytics-platform || echo "clean-ingestion-go-service.yaml not found, skipping"
+            [ -f "k8s/tenant-management-go-deployment.yaml" ] && kubectl apply -f k8s/tenant-management-go-deployment.yaml -n analytics-platform || echo "tenant-management-go-deployment.yaml not found, skipping"
           else
             echo "::error::No k8s directory found for kubectl deployment."
             exit 1
@@ -288,15 +332,30 @@ jobs:
           echo "Waiting for services to stabilize..."
           sleep 30
           
+          # Show what was deployed
+          echo "=== Deployed Resources ==="
+          kubectl get all -n analytics-platform || echo "No resources in analytics-platform namespace"
+          
+          echo "=== Secrets ==="
+          kubectl get secrets -n analytics-platform || echo "No secrets in analytics-platform namespace"
+          
+          echo "=== ConfigMaps ==="
+          kubectl get configmaps -n analytics-platform || echo "No configmaps in analytics-platform namespace"
+          
           # Check if each deployment exists before checking status
           for deployment in data-ingestion-go clean-ingestion-go processing-engine-go storage-layer-go visualization-go tenant-management-go; do
             if kubectl get deployment $deployment -n analytics-platform &>/dev/null; then
               echo "Waiting for deployment/$deployment to be ready..."
               kubectl rollout status deployment/$deployment -n analytics-platform --timeout=180s || true
+              echo "Deployment $deployment status:"
+              kubectl get deployment $deployment -n analytics-platform -o wide || true
             else
               echo "Warning: deployment/$deployment not found. Skipping status check."
             fi
           done
+          
+          echo "=== Pod Status ==="
+          kubectl get pods -n analytics-platform -o wide || echo "No pods in analytics-platform namespace"
 
       - name: Run production readiness check
         if: needs.prepare-deployment.outputs.environment == 'production'
