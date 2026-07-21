@@ -2,6 +2,15 @@
 
 A comprehensive real-time analytics platform built with Go microservices, designed for high-throughput sensor data processing and visualization. The platform provides real-time data ingestion, stream processing, storage, and interactive visualization capabilities.
 
+## Proposed Project Direction
+
+The repository is evaluating a Kubernetes-first investment analytics workload as
+a focused cloud-platform engineering capstone. The proposal defines the goals,
+non-goals, target architecture, producer contract, delivery slices, failure
+tests, cloud milestones, and graduation criteria before implementation begins.
+
+Review the [Cloud-Native Investment Analytics Platform feature proposal](docs/features/cloud-native-investment-platform/README.md).
+
 ## 🛡️ Status
 - **Build Status**: ✅ All services building successfully
 - **Security Score**: 9/9 (100%) - Production ready
