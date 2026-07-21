@@ -11,6 +11,8 @@ tests, cloud milestones, and graduation criteria before implementation begins.
 
 Review the [Cloud-Native Investment Analytics Platform feature proposal](docs/features/cloud-native-investment-platform/README.md).
 
+The first implementation slice is the [reproducible local Kubernetes platform baseline](platform/local/README.md).
+
 ## 🛡️ Status
 - **Build Status**: ✅ All services building successfully
 - **Security Score**: 9/9 (100%) - Production ready

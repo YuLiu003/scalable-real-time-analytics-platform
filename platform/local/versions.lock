@@ -1,0 +1,10 @@
+# Tool and component versions for the reproducible local platform baseline.
+# Update this file through a reviewed change and rerun the verification workflow.
+KIND_VERSION=v0.31.0
+KUBERNETES_VERSION=v1.33.7
+KIND_NODE_IMAGE=kindest/node:v1.33.7@sha256:d26ef333bdb2cbe9862a0f7c3803ecc7b4303d8cea8e814b481b09949d353040
+KUBE_PROMETHEUS_STACK_VERSION=87.12.2
+CLUSTER_NAME=investment-platform
+KUBERNETES_CONTEXT=kind-investment-platform
+OBSERVABILITY_NAMESPACE=platform-observability
+MONITORING_RELEASE=monitoring

@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed |
+| Status | Accepted; Slice 1 in progress |
 | Branch | `feature/cloud-native-investment-platform-scope` |
 | Scope owner | Repository maintainers |
 | Last updated | 2026-07-20 |
@@ -538,3 +538,11 @@ split by the delivery slices above. Each pull request should include:
 
 Large repository-wide rewrites should not be combined with the first working
 vertical slice.
+
+## Implementation tracking
+
+| Slice | Status | Evidence |
+| --- | --- | --- |
+| 0: Approve the proposal | Complete | Scope accepted on 2026-07-20; commit `8d953a2` |
+| 1: Reproducible local platform baseline | In progress | [`platform/local`](../../../platform/local/README.md) |
+| 2-7 | Not started | Graduation evidence will be linked as each slice begins |
