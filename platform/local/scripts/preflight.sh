@@ -46,6 +46,16 @@ if ! docker info >/dev/null 2>&1; then
   failed=1
 fi
 
+docker_config_file="${DOCKER_CONFIG:-${HOME}/.docker}/config.json"
+if [[ -f "${docker_config_file}" ]]; then
+  credentials_store="$(sed -nE 's/.*"credsStore"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "${docker_config_file}" | head -n 1)"
+  if [[ -n "${credentials_store}" ]] && ! command -v "docker-credential-${credentials_store}" >/dev/null 2>&1; then
+    printf 'ERROR: Docker config %s references missing helper docker-credential-%s. Restore the helper or use an isolated DOCKER_CONFIG with the active daemon.\n' \
+      "${docker_config_file}" "${credentials_store}" >&2
+    failed=1
+  fi
+fi
+
 kubectl_client_version="$(kubectl version --client=true -o json 2>/dev/null | sed -n 's/.*"gitVersion": "\([^"]*\)".*/\1/p' | head -n 1)"
 printf 'kind:       %s\n' "${installed_kind_version}"
 printf 'Kubernetes: %s (%s)\n' "${KUBERNETES_VERSION}" "${KIND_NODE_IMAGE}"

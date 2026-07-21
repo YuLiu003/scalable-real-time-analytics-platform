@@ -7,7 +7,11 @@ metadata:
     platform.yuliu.dev/environment: local
     platform.yuliu.dev/owner: platform
     platform.yuliu.dev/purpose: observability
-    pod-security.kubernetes.io/enforce: baseline
+    # Node exporter requires host namespaces, host ports, and read-only hostPath
+    # mounts. Pod Security Admission exemptions are namespace-scoped, so keep
+    # this exception in the dedicated platform namespace and retain restricted
+    # audit/warn visibility below.
+    pod-security.kubernetes.io/enforce: privileged
     pod-security.kubernetes.io/audit: restricted
     pod-security.kubernetes.io/warn: restricted
 ---

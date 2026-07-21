@@ -2,10 +2,10 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted; Slice 1 in progress |
+| Status | Accepted; Slice 1 complete |
 | Branch | `feature/cloud-native-investment-platform-scope` |
 | Scope owner | Repository maintainers |
-| Last updated | 2026-07-20 |
+| Last updated | 2026-07-21 |
 | First environment | Local multi-node Kubernetes with `kind` |
 | First cloud target | AWS; GCP and Azure follow as comparison exercises |
 | Review gate | Approve the goals, boundaries, and first vertical slice before implementation |
@@ -544,5 +544,5 @@ vertical slice.
 | Slice | Status | Evidence |
 | --- | --- | --- |
 | 0: Approve the proposal | Complete | Scope accepted on 2026-07-20; commit `8d953a2` |
-| 1: Reproducible local platform baseline | In progress | [`platform/local`](../../../platform/local/README.md) |
+| 1: Reproducible local platform baseline | Complete | [`verification record`](../../../platform/local/VERIFICATION.md) |
 | 2-7 | Not started | Graduation evidence will be linked as each slice begins |

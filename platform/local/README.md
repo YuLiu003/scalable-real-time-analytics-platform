@@ -55,6 +55,22 @@ receive actionable missing-tool or version errors:
 make -C platform/local preflight
 ```
 
+If preflight reports a missing Docker credential helper after Docker Desktop was
+removed, do not weaken or overwrite the global Docker config just for this lab.
+For the named Colima profile used in the verification record, isolate the
+session instead:
+
+```bash
+export DOCKER_HOST="$(docker context inspect colima-investment-platform \
+  --format '{{.Endpoints.docker.Host}}')"
+export DOCKER_CONFIG="${TMPDIR:-/tmp}/investment-platform-docker-config"
+mkdir -p "${DOCKER_CONFIG}"
+```
+
+Resolve `DOCKER_HOST` before changing `DOCKER_CONFIG`; Docker context metadata
+lives in the original config directory. These exports affect only the current
+shell and leave the user's global credential configuration unchanged.
+
 ## Create and verify
 
 Optionally supply the Grafana password without writing it to a file:
@@ -75,8 +91,9 @@ Run verification again at any time:
 make -C platform/local verify
 ```
 
-If no Grafana password is supplied, bootstrap generates and prints one. It can
-also be retrieved from the cluster when needed:
+If no Grafana password is supplied, bootstrap generates one and stores it only
+in the Kubernetes Secret. Re-running bootstrap reuses that Secret rather than
+silently rotating the credential. Retrieve the password explicitly when needed:
 
 ```bash
 kubectl --context kind-investment-platform \
@@ -136,8 +153,11 @@ deleted with it.
 | `analytics-apps` | Application | Producers, processors, APIs, and dashboards |
 
 Pod Security Admission is enforced at `restricted` for application workloads
-and `baseline` for platform/stateful namespaces. The latter are audited and
-warned against the restricted profile so exceptions remain visible.
+and `baseline` for stateful-data workloads. The dedicated observability
+namespace enforces `privileged` because node exporter requires host namespaces,
+host ports, and read-only hostPath mounts. It remains audited and warned against
+`restricted`, keeping the exception visible and isolated from application and
+data workloads.
 
 Default-deny NetworkPolicies are deliberately deferred until required ingress,
 egress, DNS, scraping, and control-plane flows are enumerated and accompanied by
