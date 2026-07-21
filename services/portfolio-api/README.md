@@ -4,6 +4,11 @@ This stateless Go service reads the latest canonical portfolio-allocation JSON
 from object storage, validates it strictly, and exposes it through an API and a
 small embedded dashboard.
 
+The current dashboard is API-driven and clearly labeled as synthetic. It shows
+QQQ, QQQM, and FSELX as illustrative holdings and SP500 as a benchmark. The
+result contract distinguishes ETF market prices, mutual-fund NAV, and an index
+level instead of presenting all four values as equivalent tradable positions.
+
 | Endpoint | Contract |
 | --- | --- |
 | `/healthz` | Process liveness; independent of object storage |

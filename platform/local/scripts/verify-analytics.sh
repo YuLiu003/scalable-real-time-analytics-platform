@@ -32,8 +32,8 @@ inspect_result() {
   kubectl --context "${context}" --namespace "${namespace}" exec deployment/portfolio-api -- \
     /portfolio-inspector \
     --portfolio "${PORTFOLIO_ID}" \
-    --expected-total 5341.67000000 \
-    --expected-positions 4 \
+    --expected-total 6200.00000000 \
+    --expected-positions 3 \
     --expected-silver-objects 1 \
     --expected-gold-objects 2 \
     "$@"
@@ -50,12 +50,14 @@ fi
 verify_user_visible_result() {
   local api_result dashboard
   api_result="$(kubectl --context "${context}" get --raw "${service_proxy}/api/v1/portfolios/${PORTFOLIO_ID}/allocation")"
-  if [[ "${api_result}" != *'"total_market_value":"5341.67000000"'* ]] || [[ "${api_result}" != *'"positions":['* ]]; then
+  if [[ "${api_result}" != *'"total_market_value":"6200.00000000"'* ]] || \
+    [[ "${api_result}" != *'"instrument":"SP500"'* ]] || [[ "${api_result}" != *'"positions":['* ]]; then
     printf 'ERROR: user-visible allocation API did not return the expected result.\n' >&2
     exit 1
   fi
   dashboard="$(kubectl --context "${context}" get --raw "${service_proxy}/")"
-  if [[ "${dashboard}" != *'<title>Demo Portfolio Allocation</title>'* ]]; then
+  if [[ "${dashboard}" != *'<title>Synthetic Fund Portfolio</title>'* ]] || \
+    [[ "${dashboard}" != *'Not live market data'* ]]; then
     printf 'ERROR: dashboard HTML was not served.\n' >&2
     exit 1
   fi

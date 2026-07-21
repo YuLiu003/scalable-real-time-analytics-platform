@@ -14,7 +14,7 @@ source "${LOCAL_DIR}/versions.lock"
 printf 'Publishing the versioned demo holdings fixture to the application namespace...\n'
 kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${APPLICATION_NAMESPACE}" \
   create configmap demo-portfolio-holdings \
-  --from-file="holdings.json=${REPO_ROOT}/contracts/fixtures/demo-portfolio-holdings.v1.json" \
+  --from-file="holdings.json=${REPO_ROOT}/contracts/fixtures/demo-fund-portfolio.v2.json" \
   --dry-run=client --output=yaml \
   | kubectl --context "${KUBERNETES_CONTEXT}" apply -f -
 

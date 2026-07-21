@@ -170,6 +170,16 @@ Expose the dashboard at <http://localhost:8080>:
 make -C platform/local portfolio-dashboard
 ```
 
+If port 8080 is occupied, choose another local port:
+
+```bash
+make -C platform/local portfolio-dashboard PORTFOLIO_DASHBOARD_PORT=18080
+```
+
+The dashboard labels its source-controlled quantities and prices as synthetic.
+It models QQQ and QQQM as ETFs using market prices, FSELX as a mutual fund using
+daily NAV, and the S&P 500 as a benchmark index level rather than a holding.
+
 Delete only the Slice 3 workloads and derived silver/gold products. Bronze,
 Kafka, Garage, and all Slice 2 resources remain intact:
 

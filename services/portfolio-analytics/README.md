@@ -5,6 +5,10 @@ objects into normalized silver Parquet and a deterministic gold portfolio
 allocation. Its replay and consistency boundary is documented in the
 [`Slice 3 analytics contract`](../../docs/features/cloud-native-investment-platform/slice-3-analytics-contract.md).
 
+The versioned v2 fixture models QQQ and QQQM as ETF market-price holdings,
+FSELX as a mutual-fund NAV holding, and SP500 as a non-position benchmark index
+level. All quantities and values are synthetic test data.
+
 The Job deliberately downloads bronze objects through the S3 API and runs
 DuckDB against local ephemeral storage. It therefore needs no DuckDB network
 extension at runtime, and the same transformation can later use S3, Cloud

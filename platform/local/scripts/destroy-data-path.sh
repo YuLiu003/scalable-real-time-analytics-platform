@@ -41,6 +41,13 @@ fi
 kubectl --context "${KUBERNETES_CONTEXT}" delete \
   -k "${REPO_ROOT}/platform/gitops/apps/local/market-pipeline" \
   --ignore-not-found --wait=true
+# KafkaTopic finalizers are reconciled by the Topic Operator, which runs inside
+# the Kafka cluster's Entity Operator. Delete and wait for topics while that
+# controller and the broker still exist; deleting the whole data-services tree
+# at once can orphan terminating topics after their controller disappears.
+kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${DATA_NAMESPACE}" \
+  delete kafkatopic ingestion-quarantine market-prices \
+  --ignore-not-found --wait=true --timeout=2m
 kubectl --context "${KUBERNETES_CONTEXT}" delete \
   -k "${REPO_ROOT}/platform/gitops/platform/local/market-data-services" \
   --ignore-not-found --wait=true

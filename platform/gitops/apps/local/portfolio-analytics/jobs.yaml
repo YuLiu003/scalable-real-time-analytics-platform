@@ -107,7 +107,7 @@ spec:
             - name: PORTFOLIO_ID
               value: demo
             - name: EXPECTED_TOTAL
-              value: "5341.67000000"
+              value: "6200.00000000"
             - name: WORK_ROOT
               value: /work
           resources:

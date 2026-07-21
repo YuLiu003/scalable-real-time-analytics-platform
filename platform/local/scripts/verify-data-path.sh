@@ -98,7 +98,7 @@ if job_is_suspended synthetic-market-producer-consumer-crash; then
     rollout status deployment/raw-event-archiver --timeout=120s >/dev/null
   recovered_pod="$(kubectl --context "${context}" --namespace "${namespace}" get pod \
     -l app.kubernetes.io/name=raw-event-archiver --output=jsonpath='{.items[0].metadata.name}')"
-  wait_for_log "${recovered_pod}" 'synthetic:price:goog:consumer-crash-001'
+  wait_for_log "${recovered_pod}" 'synthetic:price:sp500:consumer-crash-001'
   wait_for_log "${recovered_pod}" '"result":"duplicate"'
   printf 'Observed consumer redelivery as an idempotent duplicate after the injected crash.\n'
   restore_archiver

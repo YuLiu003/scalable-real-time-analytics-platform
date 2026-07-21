@@ -42,8 +42,8 @@ func run(logger *slog.Logger) error {
 	var messages []outboundMessage
 	switch scenario {
 	case "baseline":
-		first := fixture("AAPL", "214.1250", 1, "11111111111111111111111111111111", "2026-07-21T00:00:00Z")
-		second := fixture("VTI", "319.4200", 2, "22222222222222222222222222222222", "2026-07-21T00:00:02Z")
+		first := fixture("QQQ", "600.0000", 1, "11111111111111111111111111111111", "2026-07-21T00:00:00Z")
+		second := fixture("QQQM", "250.0000", 2, "22222222222222222222222222222222", "2026-07-21T00:00:02Z")
 		firstBytes, err := first.Marshal()
 		if err != nil {
 			return err
@@ -63,8 +63,8 @@ func run(logger *slog.Logger) error {
 			},
 		}
 	case "single":
-		instrument := envOrDefault("EVENT_INSTRUMENT", "MSFT")
-		price := envOrDefault("EVENT_PRICE", "512.3400")
+		instrument := envOrDefault("EVENT_INSTRUMENT", "FSELX")
+		price := envOrDefault("EVENT_PRICE", "60.0000")
 		sequence, err := strconv.ParseInt(envOrDefault("EVENT_SEQUENCE", "100"), 10, 64)
 		if err != nil {
 			return fmt.Errorf("parse EVENT_SEQUENCE: %w", err)

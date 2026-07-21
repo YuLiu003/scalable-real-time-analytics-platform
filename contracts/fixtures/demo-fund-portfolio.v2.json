@@ -1,0 +1,35 @@
+{
+  "schema_version": 2,
+  "portfolio_id": "demo",
+  "display_name": "Synthetic Fund Portfolio",
+  "base_currency": "USD",
+  "positions": [
+    {
+      "instrument": "QQQ",
+      "display_name": "Invesco QQQ",
+      "asset_type": "etf",
+      "valuation_type": "market_price",
+      "quantity": "4.00000000"
+    },
+    {
+      "instrument": "QQQM",
+      "display_name": "Invesco NASDAQ 100 ETF",
+      "asset_type": "etf",
+      "valuation_type": "market_price",
+      "quantity": "8.00000000"
+    },
+    {
+      "instrument": "FSELX",
+      "display_name": "Fidelity Select Semiconductors Portfolio",
+      "asset_type": "mutual_fund",
+      "valuation_type": "nav",
+      "quantity": "30.00000000"
+    }
+  ],
+  "benchmark": {
+    "instrument": "SP500",
+    "display_name": "S&P 500 Index",
+    "asset_type": "index",
+    "valuation_type": "index_level"
+  }
+}

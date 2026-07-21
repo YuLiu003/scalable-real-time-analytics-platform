@@ -46,7 +46,7 @@ topic=ingestion.quarantine records=1 partitions=1
 bronze object count=4
 ```
 
-The four keys were the deterministic AAPL, VTI, MSFT, and GOOG objects under:
+The four keys were the deterministic QQQ, QQQM, FSELX, and SP500 objects under:
 
 ```text
 bronze/market.price.observed/v1/date=2026-07-21/source=synthetic/
@@ -64,12 +64,12 @@ Observed controller and workload state:
   acknowledged.
 
 The producer failure log recorded the broker acknowledgement for
-`synthetic:price:msft:ack-unknown-001` immediately before the injected failure.
+`synthetic:price:fselx:ack-unknown-001` immediately before the injected failure.
 The retry then sent the same stable event ID, resulting in two Kafka records but
-one MSFT archive object.
+one FSELX archive object.
 
 For the consumer boundary, the verifier inserted a 30-second delay after the
-GOOG S3 write, observed the `post-write failure window open` marker, deleted that
+SP500 S3 write, observed the `post-write failure window open` marker, deleted that
 archiver pod, and waited for its replacement to log the same event with
 `result=duplicate`. Only then did verification restore the normal Deployment.
 This demonstrates the intended post-effect/pre-offset redelivery outcome without
@@ -109,6 +109,10 @@ and restarted. It was not OOM-killed; Kafka and Garage remained Ready with zero
 restarts. This is consistent with a laptop-hosted control plane becoming
 unavailable and is not treated as cloud availability evidence.
 
+The later fund-fixture refresh performed another complete scoped rebuild in
+`148.59s` and reached the same 7/1/4 record state with QQQ, QQQM, FSELX, and
+SP500 as the four archived objects.
+
 ## Failures found and durable corrections
 
 1. Cross-namespace User Operator reconciliation initially failed with RBAC 403.
@@ -125,13 +129,18 @@ unavailable and is not treated as cloud availability evidence.
 5. Initial teardown returned while Kafka dependents were still terminating. The
    destroy script now waits for the selected pods and PVCs before reporting
    completion.
+6. A later scoped teardown deleted the Topic Operator concurrently with two
+   terminating KafkaTopics, orphaning their `strimzi.io/topic-operator`
+   finalizers. After preserving the deletion evidence, the already-deleting
+   synthetic topics were released. The script now deletes and waits for topics
+   while Kafka and its Topic Operator are still available.
 
 ## Evidence handling
 
 The final diagnostic bundle was written to:
 
 ```text
-${TMPDIR}/market-data-path-diagnostics-20260721T222711Z
+${TMPDIR}/market-data-path-diagnostics-20260721T233934Z
 ```
 
 The diagnostic script excludes Secret objects, Secret values, archive object

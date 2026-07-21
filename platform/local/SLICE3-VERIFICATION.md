@@ -50,16 +50,19 @@ bronze objects. It then produced and inspected this exact result:
 
 ```text
 portfolio=demo
-total=5341.67000000
-positions=4
+total=6200.00000000
+positions=3
 input_objects=4
 silver_objects=1
 gold_objects=2
-input_set_sha256=2f08a5b366aa9512dd6a32f9ede5df8deebce4cd86049911db1963023c107513
-result_sha256=bb104c89a8865607b26a97e6aaa42a99f8f0249d8cc41231900eb32b6aa107e3
+input_set_sha256=4faafb293f811f8475712b858e6c22109dca5a7dfccdf2fe9ddcacd63a1799e1
+result_sha256=ee62de5a28a25c34b67cf9df59deaf810a657a2994d78c416ff28f6cb08c99d6
 ```
 
-The API returned the expected allocation JSON and the embedded dashboard HTML.
+The API returned three fund positions, the separate SP500 benchmark, and the
+embedded dashboard HTML. The dashboard response includes an explicit synthetic,
+non-live-data disclosure. Screenshot-level browser QA was not available in the
+verification session because no in-app or Chrome browser was connected.
 The process-only `/healthz` endpoint returned HTTP 200. The `/readyz` endpoint
 depended on fetching and validating the canonical gold result.
 
@@ -67,7 +70,7 @@ An independent DuckDB query opened the live silver and gold Parquet files and
 reported:
 
 ```json
-{"event":"DuckDB Parquet query passed","gold_rows":4,"silver_rows":4,"total_market_value":"5341.67000000"}
+{"event":"DuckDB Parquet query passed","gold_rows":3,"silver_rows":4,"total_market_value":"6200.00000000"}
 ```
 
 ## Replay and failure-boundary evidence
@@ -86,11 +89,11 @@ readiness-probe HTTP 503 during that interval; the API process did not restart.
 
 The replay Job then read the same four bronze objects and the versioned holdings
 fixture without invoking a producer or Kafka. It recreated one silver and two
-gold objects, the exact `5341.67000000` total, the same input-set identity, and
+gold objects, the exact `6200.00000000` total, the same input-set identity, and
 the same canonical result SHA-256:
 
 ```text
-bb104c89a8865607b26a97e6aaa42a99f8f0249d8cc41231900eb32b6aa107e3
+ee62de5a28a25c34b67cf9df59deaf810a657a2994d78c416ff28f6cb08c99d6
 ```
 
 All four Slice 3 Jobs were Complete and the portfolio API Deployment settled at
@@ -109,7 +112,7 @@ make -C platform/local bootstrap-analytics
 Teardown removed the API, analytics Jobs, service accounts, Service, generated
 holdings ConfigMap, and derived silver/gold products. It preserved the Slice 2
 Kafka, Garage, archiver, topics, identities, and four bronze objects. The clean
-rebuild and complete acceptance workflow finished in `41.33s` and reproduced
+rebuild and complete acceptance workflow finished in `34.59s` and reproduced
 the hashes above.
 
 An interruption was then simulated after the Parquet query and derived reset
@@ -142,7 +145,7 @@ returned the API to `1/1` Ready with the exact result hash above.
 The final diagnostic bundle was written to:
 
 ```text
-${TMPDIR}/portfolio-analytics-diagnostics-20260721T231059Z
+${TMPDIR}/portfolio-analytics-diagnostics-20260721T233939Z
 ```
 
 It contains workload state, events, component logs, and result metadata. The

@@ -30,6 +30,13 @@ constraints before archiving a record.
 - `trace_id` is a non-zero, 16-byte lowercase hexadecimal correlation ID. Full
   OpenTelemetry propagation is deferred to Slice 4.
 
+Version 1 deliberately carries one generic observed decimal named `price`; it
+does not distinguish an ETF trade/close, mutual-fund NAV, or index level. Slice
+3 supplies those semantics through its versioned instrument/portfolio fixture.
+A real source adapter must emit each value at its correct cadence, and the event
+schema should evolve before downstream consumers need observation-kind
+semantics at the event boundary.
+
 The archive layout is deterministic:
 
 ```text
@@ -89,8 +96,8 @@ The exact terminal state is:
 
 - `market.prices`: 7 retained records across 3 partitions.
 - `ingestion.quarantine`: 1 malformed-record outcome.
-- `bronze/`: 4 immutable objects (AAPL, VTI, MSFT, and GOOG).
-- The replacement archiver logs the GOOG event as a duplicate after redelivery.
+- `bronze/`: 4 immutable objects (QQQ, QQQM, FSELX, and SP500).
+- The replacement archiver logs the SP500 event as a duplicate after redelivery.
 
 Run the complete test with:
 

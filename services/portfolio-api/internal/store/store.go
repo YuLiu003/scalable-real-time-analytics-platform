@@ -58,7 +58,7 @@ func New(ctx context.Context, settings Settings) (*Store, error) {
 }
 
 func (s *Store) Latest(ctx context.Context, portfolioID string) ([]byte, error) {
-	key := fmt.Sprintf("gold/portfolio_allocations/v1/portfolio=%s/latest.json", portfolioID)
+	key := fmt.Sprintf("gold/portfolio_allocations/v2/portfolio=%s/latest.json", portfolioID)
 	return s.Get(ctx, key)
 }
 

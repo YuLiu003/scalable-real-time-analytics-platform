@@ -1,4 +1,5 @@
 SHELL := /usr/bin/env bash
+PORTFOLIO_DASHBOARD_PORT ?= 8080
 
 .PHONY: preflight bootstrap verify diagnose destroy grafana prometheus \
 	build-data-path bootstrap-data-path verify-data-path diagnose-data-path destroy-data-path \
@@ -59,4 +60,4 @@ destroy-analytics:
 
 portfolio-dashboard:
 	kubectl --context kind-investment-platform --namespace analytics-apps \
-		port-forward service/portfolio-api 8080:8080
+		port-forward service/portfolio-api $(PORTFOLIO_DASHBOARD_PORT):8080

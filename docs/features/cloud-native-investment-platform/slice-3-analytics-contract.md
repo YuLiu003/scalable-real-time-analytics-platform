@@ -25,14 +25,29 @@ market prices but no canonical transaction, cash-flow, or cost-basis events, so
 claiming time-weighted return, money-weighted return, or gain/loss would invent
 financial history.
 
-The versioned `demo` fixture holds:
+The versioned `demo` fixture is explicitly synthetic and holds:
 
-| Instrument | Quantity |
-| --- | ---: |
-| AAPL | 10 |
-| VTI | 5 |
-| MSFT | 2 |
-| GOOG | 3 |
+| Instrument | Type | Valuation | Quantity |
+| --- | --- | --- | ---: |
+| QQQ | ETF | Market price | 4 |
+| QQQM | ETF | Market price | 8 |
+| FSELX | Mutual fund | Daily NAV | 30 |
+
+`SP500` represents the S&P 500 Index as a benchmark index level. It has no
+quantity, contributes nothing to portfolio market value, and is not presented
+as an investable holding. If the portfolio owns an S&P 500 fund, its actual
+ticker belongs in `positions` instead.
+
+QQQ and QQQM both provide Nasdaq-100 exposure. They remain separate here to
+preserve possible account-level holdings, while the dashboard explicitly warns
+that this is overlapping rather than distinct index exposure.
+
+Instrument identity and classification follow the issuer/index-provider pages
+for [Invesco QQQ](https://www.invesco.com/us/financial-products/etfs/product-detail?audienceType=investors&productId=QQQ&ticker=QQQ),
+[Invesco QQQM](https://www.invesco.com/us/en/solutions/invesco-etfs.html),
+[Fidelity FSELX](https://fundresearch.fidelity.com/mutual-funds/summary/316390863),
+and the [S&P 500](https://www.spglobal.com/spdji/en/indices/equity/sp-500/).
+The fixture prices and quantities do not come from those pages.
 
 For each instrument, DuckDB selects the latest valid price by `occurred_at`,
 then `provider_sequence`, then `event_id`. All quantities, prices, market values,
@@ -43,8 +58,9 @@ market_value = quantity * latest_price
 allocation_pct = round(market_value / portfolio_total * 100, 4)
 ```
 
-With the Slice 2 fixtures, the expected total is exactly `5341.67000000` USD
-across four positions.
+With the synthetic Slice 2 fixtures, the expected total is exactly
+`6200.00000000` USD across three positions. These values are deterministic test
+inputs, not current quotes or investment advice.
 
 ## Data products
 
@@ -54,12 +70,13 @@ the immutable run partition:
 
 ```text
 silver/market_prices/v1/run=<input_set_sha256>/part-00000.parquet
-gold/portfolio_allocations/v1/portfolio=demo/run=<input_set_sha256>/allocation.parquet
-gold/portfolio_allocations/v1/portfolio=demo/latest.json
+gold/portfolio_allocations/v2/portfolio=demo/run=<input_set_sha256>/allocation.parquet
+gold/portfolio_allocations/v2/portfolio=demo/latest.json
 ```
 
-Silver contains normalized, deduplicated price observations. Gold contains one
-row per holding and a canonical JSON representation for the API. The run-scoped
+Silver contains normalized, deduplicated observations. Gold contains one row
+per holding and a canonical JSON representation for the API, including the
+separate benchmark. The run-scoped
 Parquet objects are immutable for a given input identity. `latest.json` is a
 replaceable materialized pointer/result and is therefore not an audit record.
 
@@ -92,7 +109,8 @@ The acceptance test performs the following sequence:
 1. Build silver/gold from the four Slice 2 bronze objects.
 2. Assert one silver Parquet object, one immutable gold Parquet object, and one
    gold `latest.json` object.
-3. Assert the API returns four positions and total value `5341.67000000`.
+3. Assert the API returns three positions, the SP500 benchmark, and total value
+   `6200.00000000`.
 4. Record the canonical result SHA-256.
 5. Delete only the `silver/market_prices/` and
    `gold/portfolio_allocations/` prefixes.

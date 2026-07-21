@@ -21,8 +21,9 @@ EVENT_KEYS = {
     "payload",
 }
 PAYLOAD_KEYS = {"instrument", "currency", "price", "provider_sequence"}
-HOLDINGS_KEYS = {"schema_version", "portfolio_id", "base_currency", "positions"}
-POSITION_KEYS = {"instrument", "quantity"}
+HOLDINGS_KEYS = {"schema_version", "portfolio_id", "display_name", "base_currency", "positions", "benchmark"}
+POSITION_KEYS = {"instrument", "display_name", "asset_type", "valuation_type", "quantity"}
+BENCHMARK_KEYS = {"instrument", "display_name", "asset_type", "valuation_type"}
 
 EVENT_ID = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,127}$")
 SOURCE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,31}$")
@@ -31,6 +32,9 @@ INSTRUMENT = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,14}$")
 CURRENCY = re.compile(r"^[A-Z]{3}$")
 DECIMAL_VALUE = re.compile(r"^(0|[1-9][0-9]*)(\.[0-9]{1,8})?$")
 TRACE_ID = re.compile(r"^[0-9a-f]{32}$")
+DISPLAY_NAME = re.compile(r"^[^\x00-\x1f\x7f]{1,100}$")
+POSITION_ASSET_TYPES = {"etf", "mutual_fund"}
+POSITION_VALUATION_TYPES = {"market_price", "nav"}
 
 
 @dataclass(frozen=True)
@@ -54,10 +58,29 @@ class PriceObservation:
 
 
 @dataclass(frozen=True)
+class PositionDefinition:
+    instrument: str
+    display_name: str
+    asset_type: str
+    valuation_type: str
+    quantity: Decimal
+
+
+@dataclass(frozen=True)
+class BenchmarkDefinition:
+    instrument: str
+    display_name: str
+    asset_type: str
+    valuation_type: str
+
+
+@dataclass(frozen=True)
 class Portfolio:
     portfolio_id: str
+    display_name: str
     base_currency: str
-    positions: tuple[tuple[str, Decimal], ...]
+    positions: tuple[PositionDefinition, ...]
+    benchmark: BenchmarkDefinition
 
 
 def _strict_object(value: Any, expected: set[str], name: str) -> dict[str, Any]:
@@ -93,6 +116,18 @@ def _decimal(value: Any, field: str, *, positive: bool = False) -> Decimal:
     if positive and parsed <= 0:
         raise ValueError(f"{field} must be greater than zero")
     return parsed
+
+
+def _display_name(value: Any, field: str) -> str:
+    if not isinstance(value, str) or value != value.strip() or not DISPLAY_NAME.fullmatch(value):
+        raise ValueError(f"{field} is invalid")
+    return value
+
+
+def _instrument(value: Any, field: str) -> str:
+    if not isinstance(value, str) or not INSTRUMENT.fullmatch(value):
+        raise ValueError(f"{field} is invalid")
+    return value
 
 
 def parse_price(obj: BronzeObject) -> PriceObservation:
@@ -158,30 +193,66 @@ def parse_portfolio(data: bytes) -> Portfolio:
         raise ValueError("holdings fixture is invalid JSON") from error
     holdings = _strict_object(value, HOLDINGS_KEYS, "holdings")
     schema_version = holdings["schema_version"]
-    if not isinstance(schema_version, int) or isinstance(schema_version, bool) or schema_version != 1:
-        raise ValueError("holdings schema_version must be 1")
+    if not isinstance(schema_version, int) or isinstance(schema_version, bool) or schema_version != 2:
+        raise ValueError("holdings schema_version must be 2")
     portfolio_id = holdings["portfolio_id"]
     if not isinstance(portfolio_id, str) or not TENANT.fullmatch(portfolio_id):
         raise ValueError("holdings portfolio_id is invalid")
     currency = holdings["base_currency"]
     if not isinstance(currency, str) or not CURRENCY.fullmatch(currency):
         raise ValueError("holdings base_currency is invalid")
+    display_name = _display_name(holdings["display_name"], "holdings display_name")
     raw_positions = holdings["positions"]
     if not isinstance(raw_positions, list) or not raw_positions:
         raise ValueError("holdings positions must be a non-empty array")
 
-    positions: list[tuple[str, Decimal]] = []
+    positions: list[PositionDefinition] = []
     seen: set[str] = set()
     for index, raw in enumerate(raw_positions):
         position = _strict_object(raw, POSITION_KEYS, f"holdings position {index}")
-        instrument = position["instrument"]
-        if not isinstance(instrument, str) or not INSTRUMENT.fullmatch(instrument):
-            raise ValueError(f"holdings position {index} instrument is invalid")
+        instrument = _instrument(position["instrument"], f"holdings position {index} instrument")
         if instrument in seen:
             raise ValueError(f"holdings contains duplicate instrument {instrument}")
         seen.add(instrument)
-        positions.append((instrument, _decimal(position["quantity"], f"holdings {instrument} quantity", positive=True)))
-    return Portfolio(portfolio_id, currency, tuple(sorted(positions)))
+        asset_type = position["asset_type"]
+        valuation_type = position["valuation_type"]
+        if asset_type not in POSITION_ASSET_TYPES:
+            raise ValueError(f"holdings {instrument} asset_type is invalid")
+        if valuation_type not in POSITION_VALUATION_TYPES:
+            raise ValueError(f"holdings {instrument} valuation_type is invalid")
+        if asset_type == "mutual_fund" and valuation_type != "nav":
+            raise ValueError(f"holdings {instrument} mutual fund must use NAV")
+        if asset_type == "etf" and valuation_type != "market_price":
+            raise ValueError(f"holdings {instrument} ETF must use market price")
+        positions.append(
+            PositionDefinition(
+                instrument=instrument,
+                display_name=_display_name(position["display_name"], f"holdings {instrument} display_name"),
+                asset_type=asset_type,
+                valuation_type=valuation_type,
+                quantity=_decimal(position["quantity"], f"holdings {instrument} quantity", positive=True),
+            )
+        )
+
+    benchmark_value = _strict_object(holdings["benchmark"], BENCHMARK_KEYS, "holdings benchmark")
+    benchmark_instrument = _instrument(benchmark_value["instrument"], "holdings benchmark instrument")
+    if benchmark_instrument in seen:
+        raise ValueError("holdings benchmark must not also be a position")
+    if benchmark_value["asset_type"] != "index" or benchmark_value["valuation_type"] != "index_level":
+        raise ValueError("holdings benchmark must be an index level")
+    benchmark = BenchmarkDefinition(
+        instrument=benchmark_instrument,
+        display_name=_display_name(benchmark_value["display_name"], "holdings benchmark display_name"),
+        asset_type="index",
+        valuation_type="index_level",
+    )
+    return Portfolio(
+        portfolio_id=portfolio_id,
+        display_name=display_name,
+        base_currency=currency,
+        positions=tuple(sorted(positions, key=lambda item: item.instrument)),
+        benchmark=benchmark,
+    )
 
 
 def input_set_sha256(holdings_data: bytes, objects: Iterable[BronzeObject]) -> str:

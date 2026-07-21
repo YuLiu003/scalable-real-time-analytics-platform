@@ -3,44 +3,143 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Demo Portfolio Allocation</title>
+  <title>Synthetic Fund Portfolio</title>
   <style>
-    :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, sans-serif; background: #0b1220; color: #e5edf8; }
-    body { margin: 0; padding: 3rem 1.25rem; }
-    main { max-width: 900px; margin: auto; }
-    h1 { margin-bottom: .3rem; }
-    .muted { color: #9fb0c8; }
-    .total { font-size: 2.4rem; font-weight: 700; margin: 2rem 0; color: #65d6ad; }
-    table { width: 100%; border-collapse: collapse; background: #111c2e; border-radius: .7rem; overflow: hidden; }
-    th, td { padding: .9rem 1rem; text-align: right; border-bottom: 1px solid #24344d; }
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #08111f; color: #edf4ff; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top left, #153252 0, #08111f 42rem); }
+    main { width: min(1080px, calc(100% - 2rem)); margin: auto; padding: 2rem 0 4rem; }
+    .notice { padding: .7rem 1rem; border: 1px solid #8a6b1f; border-radius: .7rem; background: #30250d; color: #ffe39a; font-size: .88rem; }
+    header { padding: 2.8rem 0 1.5rem; }
+    h1 { margin: 0; font-size: clamp(2rem, 6vw, 4.2rem); letter-spacing: -.05em; }
+    h2 { margin: 0 0 1rem; font-size: 1.1rem; }
+    .eyebrow, .muted { color: #9bb0c9; }
+    .eyebrow { margin: 0 0 .5rem; text-transform: uppercase; letter-spacing: .13em; font-size: .76rem; font-weight: 700; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+    .card, .panel { border: 1px solid #213653; background: rgba(13, 28, 47, .88); box-shadow: 0 18px 45px rgba(0, 0, 0, .18); }
+    .card { border-radius: 1rem; padding: 1.15rem; min-height: 8.4rem; }
+    .card strong { display: block; margin-top: .65rem; font-size: clamp(1.35rem, 4vw, 2.2rem); }
+    .card small { color: #9bb0c9; }
+    .panel { margin-top: 1rem; border-radius: 1rem; padding: 1.25rem; }
+    .allocation { display: grid; grid-template-columns: 5rem minmax(8rem, 1fr) 5rem; gap: .8rem; align-items: center; margin: .85rem 0; }
+    .track { height: .8rem; overflow: hidden; border-radius: 999px; background: #1e3049; }
+    .bar { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #43d7b2, #5ea4ff); }
+    .right { text-align: right; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: .9rem .7rem; text-align: right; border-bottom: 1px solid #20334d; }
     th:first-child, td:first-child { text-align: left; }
-    th { color: #9fb0c8; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
-    .error { color: #ff9a9a; }
+    th { color: #9bb0c9; font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; }
+    .name { display: block; margin-top: .2rem; color: #9bb0c9; font-size: .78rem; }
+    .tag { display: inline-block; margin-top: .35rem; padding: .2rem .45rem; border-radius: 999px; background: #1d3850; color: #acd7ff; font-size: .68rem; }
+    .warning { color: #ffd98a; }
+    .error { margin-top: 1rem; color: #ff9a9a; }
+    footer { margin-top: 1rem; color: #8298b3; font-size: .8rem; line-height: 1.55; }
+    @media (max-width: 760px) {
+      .grid { grid-template-columns: 1fr; }
+      .table-wrap { overflow-x: auto; }
+      th, td { white-space: nowrap; }
+    }
   </style>
 </head>
 <body>
 <main>
-  <h1>Demo Portfolio Allocation</h1>
-  <div id="meta" class="muted">Loading the latest deterministic snapshot…</div>
-  <div id="total" class="total"></div>
+  <div class="notice">Synthetic demonstration data · Not live market data · Not financial advice</div>
+  <header>
+    <p class="eyebrow">Kubernetes analytics lab</p>
+    <h1 id="portfolio-name">Fund portfolio</h1>
+    <p id="meta" class="muted">Loading the latest deterministic snapshot…</p>
+  </header>
+
+  <div id="summary" class="grid" aria-live="polite"></div>
   <div id="error" class="error" role="alert"></div>
-  <table aria-label="Portfolio positions">
-    <thead><tr><th>Instrument</th><th>Quantity</th><th>Price</th><th>Market value</th><th>Allocation</th></tr></thead>
-    <tbody id="positions"></tbody>
-  </table>
+
+  <section class="panel" aria-labelledby="allocation-title">
+    <h2 id="allocation-title">Allocation by market value</h2>
+    <div id="allocation"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="positions-title">
+    <h2 id="positions-title">Illustrative holdings</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Fund</th><th>Quantity</th><th>Valuation</th><th>Unit value</th><th>Market value</th><th>Allocation</th></tr></thead>
+        <tbody id="positions"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Exposure note</h2>
+    <p class="warning">QQQ and QQQM both track the Nasdaq-100. Holding both preserves account-level reality, but it does not create distinct index exposure.</p>
+    <p class="muted">FSELX is modeled using a daily mutual-fund NAV. The S&amp;P 500 is modeled as a benchmark index level, not as a purchasable portfolio position.</p>
+  </section>
+
+  <footer>The displayed quantities and values are source-controlled fixtures used to prove object storage, DuckDB, Kubernetes Jobs, API readiness, and deterministic replay. Replace them only with data you are authorized to store.</footer>
 </main>
 <script>
   const text = (value) => document.createTextNode(value);
+  const valuationLabel = {market_price: 'Market price', nav: 'Daily NAV', index_level: 'Index level'};
+  const money = (value, currency) => new Intl.NumberFormat('en-US', {style: 'currency', currency}).format(Number(value));
+
+  function card(label, value, detail) {
+    const node = document.createElement('section');
+    node.className = 'card';
+    const heading = document.createElement('small');
+    heading.appendChild(text(label));
+    const strong = document.createElement('strong');
+    strong.appendChild(text(value));
+    const foot = document.createElement('small');
+    foot.appendChild(text(detail));
+    node.append(heading, strong, foot);
+    return node;
+  }
+
   fetch('/api/v1/portfolios/demo/allocation', {cache: 'no-store'})
     .then((response) => { if (!response.ok) throw new Error(`result unavailable (${response.status})`); return response.json(); })
     .then((result) => {
-      document.getElementById('meta').textContent = `As of ${result.as_of} · ${result.input_object_count} bronze objects`;
-      document.getElementById('total').textContent = `${result.total_market_value} ${result.base_currency}`;
+      document.getElementById('portfolio-name').textContent = result.display_name;
+      document.getElementById('meta').textContent = `As of ${result.as_of} · ${result.input_object_count} immutable bronze objects`;
+
+      const summary = document.getElementById('summary');
+      summary.append(
+        card('Illustrative value', money(result.total_market_value, result.base_currency), `${result.positions.length} holdings`),
+        card('Benchmark', result.benchmark.display_name, `${result.benchmark.instrument} · ${valuationLabel[result.benchmark.valuation_type]}`),
+        card('Benchmark level', Number(result.benchmark.price).toLocaleString('en-US'), `As of ${result.benchmark.price_as_of}`)
+      );
+
+      const allocation = document.getElementById('allocation');
       const body = document.getElementById('positions');
       result.positions.forEach((position) => {
+        const allocationRow = document.createElement('div');
+        allocationRow.className = 'allocation';
+        const ticker = document.createElement('strong');
+        ticker.appendChild(text(position.instrument));
+        const track = document.createElement('div');
+        track.className = 'track';
+        const bar = document.createElement('div');
+        bar.className = 'bar';
+        bar.style.width = `${Math.max(0, Math.min(100, Number(position.allocation_pct)))}%`;
+        track.appendChild(bar);
+        const percent = document.createElement('span');
+        percent.className = 'right';
+        percent.appendChild(text(`${position.allocation_pct}%`));
+        allocationRow.append(ticker, track, percent);
+        allocation.appendChild(allocationRow);
+
         const row = document.createElement('tr');
-        [position.instrument, position.quantity, position.price, position.market_value, `${position.allocation_pct}%`]
-          .forEach((value) => { const cell = document.createElement('td'); cell.appendChild(text(value)); row.appendChild(cell); });
+        const identity = document.createElement('td');
+        const symbol = document.createElement('strong');
+        symbol.appendChild(text(position.instrument));
+        const name = document.createElement('span');
+        name.className = 'name';
+        name.appendChild(text(position.display_name));
+        const tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.appendChild(text(position.asset_type === 'mutual_fund' ? 'Mutual fund' : 'ETF'));
+        identity.append(symbol, name, tag);
+        const values = [position.quantity, valuationLabel[position.valuation_type], money(position.price, result.base_currency), money(position.market_value, result.base_currency), `${position.allocation_pct}%`];
+        row.appendChild(identity);
+        values.forEach((value) => { const cell = document.createElement('td'); cell.appendChild(text(value)); row.appendChild(cell); });
         body.appendChild(row);
       });
     })

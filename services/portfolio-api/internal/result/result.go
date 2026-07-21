@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 var (
@@ -23,6 +26,7 @@ var (
 type Snapshot struct {
 	SchemaVersion       int        `json:"schema_version"`
 	PortfolioID         string     `json:"portfolio_id"`
+	DisplayName         string     `json:"display_name"`
 	BaseCurrency        string     `json:"base_currency"`
 	AsOf                string     `json:"as_of"`
 	InputObjectCount    int        `json:"input_object_count"`
@@ -31,14 +35,27 @@ type Snapshot struct {
 	GoldParquetObject   string     `json:"gold_parquet_object"`
 	TotalMarketValue    string     `json:"total_market_value"`
 	Positions           []Position `json:"positions"`
+	Benchmark           Benchmark  `json:"benchmark"`
 }
 
 type Position struct {
 	Instrument    string `json:"instrument"`
+	DisplayName   string `json:"display_name"`
+	AssetType     string `json:"asset_type"`
+	ValuationType string `json:"valuation_type"`
 	Quantity      string `json:"quantity"`
 	Price         string `json:"price"`
 	MarketValue   string `json:"market_value"`
 	AllocationPct string `json:"allocation_pct"`
+	PriceAsOf     string `json:"price_as_of"`
+}
+
+type Benchmark struct {
+	Instrument    string `json:"instrument"`
+	DisplayName   string `json:"display_name"`
+	AssetType     string `json:"asset_type"`
+	ValuationType string `json:"valuation_type"`
+	Price         string `json:"price"`
 	PriceAsOf     string `json:"price_as_of"`
 }
 
@@ -60,7 +77,7 @@ func DecodeStrict(data []byte) (Snapshot, error) {
 }
 
 func (s Snapshot) Validate() error {
-	if s.SchemaVersion != 1 || !portfolioID.MatchString(s.PortfolioID) || !currency.MatchString(s.BaseCurrency) {
+	if s.SchemaVersion != 2 || !portfolioID.MatchString(s.PortfolioID) || !validDisplayName(s.DisplayName) || !currency.MatchString(s.BaseCurrency) {
 		return errInvalidResult
 	}
 	if _, err := time.Parse(time.RFC3339, s.AsOf); err != nil {
@@ -71,7 +88,7 @@ func (s Snapshot) Validate() error {
 	}
 	expectedSilver := fmt.Sprintf("silver/market_prices/v1/run=%s/part-00000.parquet", s.InputSetSHA256)
 	expectedGold := fmt.Sprintf(
-		"gold/portfolio_allocations/v1/portfolio=%s/run=%s/allocation.parquet",
+		"gold/portfolio_allocations/v2/portfolio=%s/run=%s/allocation.parquet",
 		s.PortfolioID,
 		s.InputSetSHA256,
 	)
@@ -83,7 +100,8 @@ func (s Snapshot) Validate() error {
 	}
 	seen := make(map[string]struct{}, len(s.Positions))
 	for _, position := range s.Positions {
-		if !instrument.MatchString(position.Instrument) || !decimal8.MatchString(position.Quantity) ||
+		if !instrument.MatchString(position.Instrument) || !validDisplayName(position.DisplayName) ||
+			!validPositionSemantics(position.AssetType, position.ValuationType) || !decimal8.MatchString(position.Quantity) ||
 			!decimal8.MatchString(position.Price) || !decimal8.MatchString(position.MarketValue) ||
 			!decimal4.MatchString(position.AllocationPct) {
 			return fmt.Errorf("%w: position %q", errInvalidResult, position.Instrument)
@@ -96,5 +114,33 @@ func (s Snapshot) Validate() error {
 		}
 		seen[position.Instrument] = struct{}{}
 	}
+	if !instrument.MatchString(s.Benchmark.Instrument) || !validDisplayName(s.Benchmark.DisplayName) ||
+		s.Benchmark.AssetType != "index" || s.Benchmark.ValuationType != "index_level" ||
+		!decimal8.MatchString(s.Benchmark.Price) {
+		return fmt.Errorf("%w: benchmark", errInvalidResult)
+	}
+	if _, exists := seen[s.Benchmark.Instrument]; exists {
+		return fmt.Errorf("%w: benchmark is also a position", errInvalidResult)
+	}
+	if _, err := time.Parse(time.RFC3339, s.Benchmark.PriceAsOf); err != nil {
+		return fmt.Errorf("%w: benchmark price_as_of", errInvalidResult)
+	}
 	return nil
+}
+
+func validDisplayName(value string) bool {
+	if value == "" || strings.TrimSpace(value) != value || utf8.RuneCountInString(value) > 100 {
+		return false
+	}
+	for _, character := range value {
+		if unicode.IsControl(character) {
+			return false
+		}
+	}
+	return true
+}
+
+func validPositionSemantics(assetType, valuationType string) bool {
+	return (assetType == "etf" && valuationType == "market_price") ||
+		(assetType == "mutual_fund" && valuationType == "nav")
 }
