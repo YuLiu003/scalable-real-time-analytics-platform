@@ -17,6 +17,11 @@ The second slice implements a tested
 [canonical market-event-to-object-storage path](docs/features/cloud-native-investment-platform/slice-2-event-contract.md)
 on that Kubernetes baseline.
 
+The third slice turns retained bronze events into deterministic
+[portfolio-allocation analytics and a user-visible Go dashboard](docs/features/cloud-native-investment-platform/slice-3-analytics-contract.md),
+with exact replay evidence in the
+[Slice 3 verification record](platform/local/SLICE3-VERIFICATION.md).
+
 ## 🛡️ Status
 - **Build Status**: ✅ All services building successfully
 - **Security Score**: 9/9 (100%) - Production ready

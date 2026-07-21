@@ -1,18 +1,24 @@
 # Local Kubernetes Platform Baseline
 
-This directory implements Slice 1 and the local runtime for Slice 2 of the
+This directory implements Slice 1 and the local runtime for Slices 2 and 3 of the
 [Cloud-Native Investment Analytics Platform proposal](../../docs/features/cloud-native-investment-platform/README.md).
 It creates a disposable, multi-node Kubernetes environment with explicit
 namespace ownership, local resource guardrails, Prometheus, and Grafana.
 
 Runtime proof is recorded in the
-[`Slice 1 verification`](VERIFICATION.md) and
-[`Slice 2 verification`](SLICE2-VERIFICATION.md) records.
+[`Slice 1 verification`](VERIFICATION.md),
+[`Slice 2 verification`](SLICE2-VERIFICATION.md), and
+[`Slice 3 verification`](SLICE3-VERIFICATION.md) records.
 
 Slice 2 adds a Strimzi-managed Kafka broker, Garage object storage, a synthetic
 market producer, and a raw-event archiver. Its exact event and failure semantics
 are defined in the
 [`Slice 2 contract`](../../docs/features/cloud-native-investment-platform/slice-2-event-contract.md).
+
+Slice 3 adds a deterministic DuckDB Job, silver/gold Parquet products, and a
+stateless Go API with an embedded portfolio-allocation dashboard. Its exact
+calculation, publication, readiness, and replay semantics are defined in the
+[`Slice 3 contract`](../../docs/features/cloud-native-investment-platform/slice-3-analytics-contract.md).
 
 The baseline is intentionally separate from the legacy Minikube, raw-manifest,
 and incomplete Helm deployment paths. Those paths remain untouched until a
@@ -26,9 +32,14 @@ later migration proposal defines their disposition.
 - Data and application namespaces have bounded resource budgets.
 - Prometheus and Grafana are installed from a pinned chart version.
 - Verification and diagnostics are scripted and exclude Kubernetes Secrets.
+- Retained bronze objects can deterministically reconstruct silver/gold products
+  without rerunning a producer or reading Kafka.
+- A stateless API can expose a user-visible result while separating process
+  liveness from result-dependent readiness.
 
 It does not prove cloud-zone availability, durable monitoring retention,
-production security, disaster recovery, or application correctness.
+production security, disaster recovery, historical portfolio performance, or
+concurrent analytical publication.
 
 ## Pinned baseline
 
@@ -129,6 +140,43 @@ CONFIRM_DESTROY_DATA_PATH=market-data-path \
 This local topology has one Kafka broker and one Garage replica. It tests API,
 identity, persistence, and failure boundaries but does not claim broker or
 object-store availability.
+
+## Analytics and portfolio dashboard
+
+With the Slice 2 data path running, build silver/gold products, deploy the API,
+query the Parquet products directly, and prove exact reconstruction from bronze:
+
+```bash
+make -C platform/local bootstrap-analytics
+```
+
+Re-run settled-state assertions without deleting data or repeating completed
+Jobs:
+
+```bash
+make -C platform/local verify-analytics
+```
+
+Collect Slice 3 diagnostics without Secrets, bronze payloads, or portfolio
+result contents:
+
+```bash
+make -C platform/local diagnose-analytics
+```
+
+Expose the dashboard at <http://localhost:8080>:
+
+```bash
+make -C platform/local portfolio-dashboard
+```
+
+Delete only the Slice 3 workloads and derived silver/gold products. Bronze,
+Kafka, Garage, and all Slice 2 resources remain intact:
+
+```bash
+CONFIRM_DESTROY_ANALYTICS=portfolio-analytics \
+  make -C platform/local destroy-analytics
+```
 
 If no Grafana password is supplied, bootstrap generates one and stores it only
 in the Kubernetes Secret. Re-running bootstrap reuses that Secret rather than

@@ -1,7 +1,8 @@
 SHELL := /usr/bin/env bash
 
 .PHONY: preflight bootstrap verify diagnose destroy grafana prometheus \
-	build-data-path bootstrap-data-path verify-data-path diagnose-data-path destroy-data-path
+	build-data-path bootstrap-data-path verify-data-path diagnose-data-path destroy-data-path \
+	build-analytics bootstrap-analytics verify-analytics diagnose-analytics destroy-analytics portfolio-dashboard
 
 preflight:
 	./scripts/preflight.sh
@@ -40,3 +41,22 @@ diagnose-data-path:
 
 destroy-data-path:
 	./scripts/destroy-data-path.sh
+
+build-analytics:
+	./scripts/build-analytics.sh
+
+bootstrap-analytics:
+	./scripts/bootstrap-analytics.sh
+
+verify-analytics:
+	./scripts/verify-analytics.sh
+
+diagnose-analytics:
+	./scripts/diagnose-analytics.sh
+
+destroy-analytics:
+	./scripts/destroy-analytics.sh
+
+portfolio-dashboard:
+	kubectl --context kind-investment-platform --namespace analytics-apps \
+		port-forward service/portfolio-api 8080:8080

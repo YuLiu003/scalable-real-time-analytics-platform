@@ -1,0 +1,133 @@
+package store
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+)
+
+type Settings struct {
+	Endpoint  string
+	Region    string
+	Bucket    string
+	AccessKey string
+	SecretKey string
+}
+
+func FromEnvironment() (Settings, error) {
+	settings := Settings{
+		Endpoint:  os.Getenv("S3_ENDPOINT"),
+		Region:    os.Getenv("AWS_REGION"),
+		Bucket:    os.Getenv("S3_BUCKET"),
+		AccessKey: os.Getenv("AWS_ACCESS_KEY_ID"),
+		SecretKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
+	}
+	if settings.Endpoint == "" || settings.Region == "" || settings.Bucket == "" || settings.AccessKey == "" || settings.SecretKey == "" {
+		return Settings{}, errors.New("S3 endpoint, region, bucket, access key, and secret key are required")
+	}
+	return settings, nil
+}
+
+type Store struct {
+	client *s3.Client
+	bucket string
+}
+
+func New(ctx context.Context, settings Settings) (*Store, error) {
+	awsConfig, err := config.LoadDefaultConfig(
+		ctx,
+		config.WithRegion(settings.Region),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(settings.AccessKey, settings.SecretKey, "")),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load S3 configuration: %w", err)
+	}
+	client := s3.NewFromConfig(awsConfig, func(options *s3.Options) {
+		options.BaseEndpoint = aws.String(settings.Endpoint)
+		options.UsePathStyle = true
+	})
+	return &Store{client: client, bucket: settings.Bucket}, nil
+}
+
+func (s *Store) Latest(ctx context.Context, portfolioID string) ([]byte, error) {
+	key := fmt.Sprintf("gold/portfolio_allocations/v1/portfolio=%s/latest.json", portfolioID)
+	return s.Get(ctx, key)
+}
+
+func (s *Store) Get(ctx context.Context, key string) ([]byte, error) {
+	const maximumResultBytes = 2 << 20
+
+	output, err := s.client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(key)})
+	if err != nil {
+		return nil, fmt.Errorf("get portfolio result: %w", err)
+	}
+	defer output.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(output.Body, maximumResultBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read portfolio result: %w", err)
+	}
+	if len(data) > maximumResultBytes {
+		return nil, errors.New("portfolio result exceeds 2 MiB limit")
+	}
+	return data, nil
+}
+
+func (s *Store) ListKeys(ctx context.Context, prefix string) ([]string, error) {
+	var keys []string
+	var continuation *string
+	for {
+		output, err := s.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+			Bucket:            aws.String(s.bucket),
+			Prefix:            aws.String(prefix),
+			ContinuationToken: continuation,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list objects for prefix %s: %w", prefix, err)
+		}
+		for _, object := range output.Contents {
+			keys = append(keys, aws.ToString(object.Key))
+		}
+		if !aws.ToBool(output.IsTruncated) {
+			return keys, nil
+		}
+		continuation = output.NextContinuationToken
+	}
+}
+
+func (s *Store) DeletePrefix(ctx context.Context, prefix string) (int, error) {
+	keys, err := s.ListKeys(ctx, prefix)
+	if err != nil {
+		return 0, err
+	}
+	deleted := 0
+	for start := 0; start < len(keys); start += 1000 {
+		end := start + 1000
+		if end > len(keys) {
+			end = len(keys)
+		}
+		objects := make([]s3types.ObjectIdentifier, 0, end-start)
+		for _, key := range keys[start:end] {
+			objects = append(objects, s3types.ObjectIdentifier{Key: aws.String(key)})
+		}
+		output, err := s.client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+			Bucket: aws.String(s.bucket),
+			Delete: &s3types.Delete{Objects: objects, Quiet: aws.Bool(true)},
+		})
+		if err != nil {
+			return deleted, fmt.Errorf("delete objects for prefix %s: %w", prefix, err)
+		}
+		if len(output.Errors) != 0 {
+			return deleted, fmt.Errorf("delete objects for prefix %s returned %d errors", prefix, len(output.Errors))
+		}
+		deleted += len(objects)
+	}
+	return deleted, nil
+}

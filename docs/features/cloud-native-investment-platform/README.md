@@ -2,8 +2,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted; Slices 1 and 2 complete |
-| Current branch | `feature/market-events-to-object-storage` |
+| Status | Accepted; Slices 1, 2, and 3 complete |
+| Current branch | `feature/portfolio-analytics-slice3` |
 | Scope owner | Repository maintainers |
 | Last updated | 2026-07-21 |
 | First environment | Local multi-node Kubernetes with `kind` |
@@ -520,7 +520,8 @@ These decisions require follow-up ADRs or implementation evidence:
 3. Choose Strimzi-on-EKS versus MSK for the first AWS streaming milestone based
    on learning objective and cost boundary.
 4. Define the first public or synthetic data source and its rate limits.
-5. Define the first portfolio calculation and its deterministic reference data.
+5. Define canonical transaction and cash-flow events before adding portfolio
+   performance calculations; Slice 3 deliberately proves allocation first.
 6. Set measured resource budgets for the local cluster.
 7. Decide when the existing sensor pipeline is deprecated, if at all.
 
@@ -546,4 +547,5 @@ vertical slice.
 | 0: Approve the proposal | Complete | Scope accepted on 2026-07-20; commit `8d953a2` |
 | 1: Reproducible local platform baseline | Complete | [`verification record`](../../../platform/local/VERIFICATION.md) |
 | 2: Producer-to-storage path | Complete | [`contract and failure model`](slice-2-event-contract.md); [`verification record`](../../../platform/local/SLICE2-VERIFICATION.md) |
-| 3-7 | Not started | Graduation evidence will be linked as each slice begins |
+| 3: Analytics and visible result | Complete | [`analytics and replay contract`](slice-3-analytics-contract.md); [`verification record`](../../../platform/local/SLICE3-VERIFICATION.md) |
+| 4-7 | Not started | Graduation evidence will be linked as each slice begins |
