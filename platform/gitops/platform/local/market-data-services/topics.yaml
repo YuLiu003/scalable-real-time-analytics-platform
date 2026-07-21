@@ -1,0 +1,31 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: market-prices
+  namespace: analytics-data
+  labels:
+    strimzi.io/cluster: market-kafka
+spec:
+  topicName: market.prices
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 86400000
+    min.insync.replicas: 1
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: ingestion-quarantine
+  namespace: analytics-data
+  labels:
+    strimzi.io/cluster: market-kafka
+spec:
+  topicName: ingestion.quarantine
+  partitions: 1
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 604800000
+    min.insync.replicas: 1

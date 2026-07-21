@@ -1,0 +1,309 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: synthetic-market-producer-baseline
+  namespace: analytics-apps
+  labels:
+    app.kubernetes.io/name: synthetic-market-producer
+    app.kubernetes.io/component: baseline-fixture
+    app.kubernetes.io/part-of: investment-analytics-platform
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: synthetic-market-producer
+        app.kubernetes.io/component: baseline-fixture
+        app.kubernetes.io/part-of: investment-analytics-platform
+    spec:
+      serviceAccountName: synthetic-market-producer
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: producer
+          image: local/market-pipeline:slice2
+          imagePullPolicy: Never
+          command:
+            - /synthetic-producer
+          env:
+            - name: PRODUCER_SCENARIO
+              value: baseline
+            - name: KAFKA_BROKERS
+              value: market-kafka-kafka-bootstrap.analytics-data.svc.cluster.local:9093
+            - name: KAFKA_TOPIC
+              value: market.prices
+            - name: KAFKA_TLS_CA_FILE
+              value: /etc/kafka-cluster-ca/ca.crt
+            - name: KAFKA_TLS_CERT_FILE
+              value: /etc/kafka/user.crt
+            - name: KAFKA_TLS_KEY_FILE
+              value: /etc/kafka/user.key
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: kafka-user
+              mountPath: /etc/kafka
+              readOnly: true
+      volumes:
+        - name: kafka-user
+          secret:
+            secretName: synthetic-market-producer
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: synthetic-market-producer-ack-unknown
+  namespace: analytics-apps
+  labels:
+    app.kubernetes.io/name: synthetic-market-producer
+    app.kubernetes.io/component: failure-injection
+    app.kubernetes.io/part-of: investment-analytics-platform
+spec:
+  suspend: true
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: synthetic-market-producer
+        app.kubernetes.io/component: failure-injection
+    spec:
+      serviceAccountName: synthetic-market-producer
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: producer
+          image: local/market-pipeline:slice2
+          imagePullPolicy: Never
+          command:
+            - /synthetic-producer
+          env:
+            - name: PRODUCER_SCENARIO
+              value: single
+            - name: FAIL_AFTER_FIRST_ACK
+              value: "true"
+            - name: EVENT_ID
+              value: synthetic:price:msft:ack-unknown-001
+            - name: EVENT_INSTRUMENT
+              value: MSFT
+            - name: EVENT_PRICE
+              value: "512.3400"
+            - name: EVENT_SEQUENCE
+              value: "100"
+            - name: EVENT_OCCURRED_AT
+              value: "2026-07-21T00:01:00Z"
+            - name: EVENT_TRACE_ID
+              value: "33333333333333333333333333333333"
+            - name: KAFKA_BROKERS
+              value: market-kafka-kafka-bootstrap.analytics-data.svc.cluster.local:9093
+            - name: KAFKA_TOPIC
+              value: market.prices
+            - name: KAFKA_TLS_CA_FILE
+              value: /etc/kafka-cluster-ca/ca.crt
+            - name: KAFKA_TLS_CERT_FILE
+              value: /etc/kafka/user.crt
+            - name: KAFKA_TLS_KEY_FILE
+              value: /etc/kafka/user.key
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: kafka-user
+              mountPath: /etc/kafka
+              readOnly: true
+      volumes:
+        - name: kafka-user
+          secret:
+            secretName: synthetic-market-producer
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: synthetic-market-producer-ack-retry
+  namespace: analytics-apps
+  labels:
+    app.kubernetes.io/name: synthetic-market-producer
+    app.kubernetes.io/component: failure-recovery
+    app.kubernetes.io/part-of: investment-analytics-platform
+spec:
+  suspend: true
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: synthetic-market-producer
+        app.kubernetes.io/component: failure-recovery
+    spec:
+      serviceAccountName: synthetic-market-producer
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: producer
+          image: local/market-pipeline:slice2
+          imagePullPolicy: Never
+          command:
+            - /synthetic-producer
+          env:
+            - name: PRODUCER_SCENARIO
+              value: single
+            - name: EVENT_ID
+              value: synthetic:price:msft:ack-unknown-001
+            - name: EVENT_INSTRUMENT
+              value: MSFT
+            - name: EVENT_PRICE
+              value: "512.3400"
+            - name: EVENT_SEQUENCE
+              value: "100"
+            - name: EVENT_OCCURRED_AT
+              value: "2026-07-21T00:01:00Z"
+            - name: EVENT_TRACE_ID
+              value: "33333333333333333333333333333333"
+            - name: KAFKA_BROKERS
+              value: market-kafka-kafka-bootstrap.analytics-data.svc.cluster.local:9093
+            - name: KAFKA_TOPIC
+              value: market.prices
+            - name: KAFKA_TLS_CA_FILE
+              value: /etc/kafka-cluster-ca/ca.crt
+            - name: KAFKA_TLS_CERT_FILE
+              value: /etc/kafka/user.crt
+            - name: KAFKA_TLS_KEY_FILE
+              value: /etc/kafka/user.key
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: kafka-user
+              mountPath: /etc/kafka
+              readOnly: true
+      volumes:
+        - name: kafka-user
+          secret:
+            secretName: synthetic-market-producer
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: synthetic-market-producer-consumer-crash
+  namespace: analytics-apps
+  labels:
+    app.kubernetes.io/name: synthetic-market-producer
+    app.kubernetes.io/component: consumer-failure-injection
+    app.kubernetes.io/part-of: investment-analytics-platform
+spec:
+  suspend: true
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: synthetic-market-producer
+        app.kubernetes.io/component: consumer-failure-injection
+    spec:
+      serviceAccountName: synthetic-market-producer
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: producer
+          image: local/market-pipeline:slice2
+          imagePullPolicy: Never
+          command:
+            - /synthetic-producer
+          env:
+            - name: PRODUCER_SCENARIO
+              value: single
+            - name: EVENT_ID
+              value: synthetic:price:goog:consumer-crash-001
+            - name: EVENT_INSTRUMENT
+              value: GOOG
+            - name: EVENT_PRICE
+              value: "192.8800"
+            - name: EVENT_SEQUENCE
+              value: "101"
+            - name: EVENT_OCCURRED_AT
+              value: "2026-07-21T00:01:30Z"
+            - name: EVENT_TRACE_ID
+              value: "44444444444444444444444444444444"
+            - name: KAFKA_BROKERS
+              value: market-kafka-kafka-bootstrap.analytics-data.svc.cluster.local:9093
+            - name: KAFKA_TOPIC
+              value: market.prices
+            - name: KAFKA_TLS_CA_FILE
+              value: /etc/kafka-cluster-ca/ca.crt
+            - name: KAFKA_TLS_CERT_FILE
+              value: /etc/kafka/user.crt
+            - name: KAFKA_TLS_KEY_FILE
+              value: /etc/kafka/user.key
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: kafka-user
+              mountPath: /etc/kafka
+              readOnly: true
+      volumes:
+        - name: kafka-user
+          secret:
+            secretName: synthetic-market-producer

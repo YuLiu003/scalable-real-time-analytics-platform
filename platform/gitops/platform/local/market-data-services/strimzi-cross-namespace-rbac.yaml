@@ -1,0 +1,34 @@
+# The Kafka resource asks its User Operator to watch analytics-apps. Strimzi's
+# cluster operator therefore needs its standard namespaced and delegation roles
+# in that namespace before it can create the User Operator's generated RBAC.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: strimzi-cluster-operator
+  namespace: analytics-apps
+  labels:
+    app.kubernetes.io/part-of: investment-analytics-platform
+subjects:
+  - kind: ServiceAccount
+    name: strimzi-cluster-operator
+    namespace: analytics-data
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: strimzi-cluster-operator-namespaced
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: strimzi-cluster-operator-entity-operator-delegation
+  namespace: analytics-apps
+  labels:
+    app.kubernetes.io/part-of: investment-analytics-platform
+subjects:
+  - kind: ServiceAccount
+    name: strimzi-cluster-operator
+    namespace: analytics-data
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: strimzi-entity-operator

@@ -1,6 +1,7 @@
 SHELL := /usr/bin/env bash
 
-.PHONY: preflight bootstrap verify diagnose destroy grafana prometheus
+.PHONY: preflight bootstrap verify diagnose destroy grafana prometheus \
+	build-data-path bootstrap-data-path verify-data-path diagnose-data-path destroy-data-path
 
 preflight:
 	./scripts/preflight.sh
@@ -24,3 +25,18 @@ grafana:
 prometheus:
 	kubectl --context kind-investment-platform --namespace platform-observability \
 		port-forward service/monitoring-kube-prometheus-prometheus 9090:9090
+
+build-data-path:
+	./scripts/build-market-pipeline.sh
+
+bootstrap-data-path:
+	./scripts/bootstrap-data-path.sh
+
+verify-data-path:
+	./scripts/verify-data-path.sh
+
+diagnose-data-path:
+	./scripts/diagnose-data-path.sh
+
+destroy-data-path:
+	./scripts/destroy-data-path.sh

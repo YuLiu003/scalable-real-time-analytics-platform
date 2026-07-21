@@ -2,8 +2,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted; Slice 1 complete |
-| Branch | `feature/cloud-native-investment-platform-scope` |
+| Status | Accepted; Slices 1 and 2 complete |
+| Current branch | `feature/market-events-to-object-storage` |
 | Scope owner | Repository maintainers |
 | Last updated | 2026-07-21 |
 | First environment | Local multi-node Kubernetes with `kind` |
@@ -513,9 +513,9 @@ The feature is complete when all of the following have reproducible evidence:
 
 These decisions require follow-up ADRs or implementation evidence:
 
-1. Select the maintained local S3-compatible object store after evaluating
-   resource requirements, Kubernetes operation, API compatibility, backup, and
-   project health.
+1. Validate Garage's S3 compatibility and operational behavior beyond the
+   single-node Slice 2 learning environment before using it for a resilient
+   deployment.
 2. Select JSON Schema serialization details and Apicurio compatibility policy.
 3. Choose Strimzi-on-EKS versus MSK for the first AWS streaming milestone based
    on learning objective and cost boundary.
@@ -545,4 +545,5 @@ vertical slice.
 | --- | --- | --- |
 | 0: Approve the proposal | Complete | Scope accepted on 2026-07-20; commit `8d953a2` |
 | 1: Reproducible local platform baseline | Complete | [`verification record`](../../../platform/local/VERIFICATION.md) |
-| 2-7 | Not started | Graduation evidence will be linked as each slice begins |
+| 2: Producer-to-storage path | Complete | [`contract and failure model`](slice-2-event-contract.md); [`verification record`](../../../platform/local/SLICE2-VERIFICATION.md) |
+| 3-7 | Not started | Graduation evidence will be linked as each slice begins |

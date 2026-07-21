@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yuliu.dev/schemas/market.price.observed.v1.schema.json",
+  "title": "Market Price Observed v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "event_type",
+    "schema_version",
+    "source",
+    "tenant_id",
+    "occurred_at",
+    "ingested_at",
+    "partition_key",
+    "trace_id",
+    "payload"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$"
+    },
+    "event_type": {
+      "const": "market.price.observed"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "source": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,31}$"
+    },
+    "tenant_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "occurred_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ingested_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "partition_key": {
+      "type": "string",
+      "pattern": "^[A-Z0-9][A-Z0-9.-]{0,14}$"
+    },
+    "trace_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$",
+      "not": {
+        "const": "00000000000000000000000000000000"
+      }
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instrument", "currency", "price", "provider_sequence"],
+      "properties": {
+        "instrument": {
+          "type": "string",
+          "pattern": "^[A-Z0-9][A-Z0-9.-]{0,14}$"
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "price": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,8})?$"
+        },
+        "provider_sequence": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

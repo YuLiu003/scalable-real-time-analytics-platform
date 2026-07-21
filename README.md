@@ -13,6 +13,10 @@ Review the [Cloud-Native Investment Analytics Platform feature proposal](docs/fe
 
 The first implementation slice is the [reproducible local Kubernetes platform baseline](platform/local/README.md).
 
+The second slice implements a tested
+[canonical market-event-to-object-storage path](docs/features/cloud-native-investment-platform/slice-2-event-contract.md)
+on that Kubernetes baseline.
+
 ## 🛡️ Status
 - **Build Status**: ✅ All services building successfully
 - **Security Score**: 9/9 (100%) - Production ready

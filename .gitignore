@@ -156,6 +156,8 @@ docker-compose.override.yml
 
 # Archive directories
 archive/
+!services/market-pipeline/internal/archive/
+!services/market-pipeline/internal/archive/**
 
 # Local development files
 *.dev.yaml
@@ -238,6 +240,7 @@ tenant-management-go/tenant-management-go
 *.test
 *.out
 **/build_output.txt
+**/.build/
 
 # Test data files
 large_payload*.json

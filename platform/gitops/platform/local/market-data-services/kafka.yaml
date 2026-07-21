@@ -1,0 +1,82 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: dual-role
+  namespace: analytics-data
+  labels:
+    strimzi.io/cluster: market-kafka
+spec:
+  replicas: 1
+  roles:
+    - controller
+    - broker
+  storage:
+    type: persistent-claim
+    size: 2Gi
+    deleteClaim: true
+    kraftMetadata: shared
+  jvmOptions:
+    -Xms: 256m
+    -Xmx: 384m
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+  template:
+    pod:
+      terminationGracePeriodSeconds: 30
+      tmpDirSizeLimit: 32Mi
+---
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: market-kafka
+  namespace: analytics-data
+spec:
+  kafka:
+    version: 4.2.1
+    listeners:
+      - name: mtls
+        port: 9093
+        type: internal
+        tls: true
+        authentication:
+          type: tls
+        networkPolicyPeers:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: analytics-data
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: analytics-apps
+    authorization:
+      type: simple
+    config:
+      auto.create.topics.enable: false
+      default.replication.factor: 1
+      min.insync.replicas: 1
+      num.partitions: 3
+      offsets.topic.replication.factor: 1
+      transaction.state.log.min.isr: 1
+      transaction.state.log.replication.factor: 1
+  entityOperator:
+    topicOperator:
+      resources:
+        requests:
+          cpu: 25m
+          memory: 96Mi
+        limits:
+          cpu: 250m
+          memory: 256Mi
+    userOperator:
+      watchedNamespace: analytics-apps
+      resources:
+        requests:
+          cpu: 25m
+          memory: 96Mi
+        limits:
+          cpu: 250m
+          memory: 256Mi

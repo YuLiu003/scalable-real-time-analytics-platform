@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: raw-event-archiver
+  namespace: analytics-apps
+  labels:
+    app.kubernetes.io/name: raw-event-archiver
+    app.kubernetes.io/part-of: investment-analytics-platform
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: raw-event-archiver
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: raw-event-archiver
+        app.kubernetes.io/part-of: investment-analytics-platform
+    spec:
+      serviceAccountName: raw-event-archiver
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: archiver
+          image: local/market-pipeline:slice2
+          imagePullPolicy: Never
+          command:
+            - /raw-event-archiver
+          envFrom:
+            - secretRef:
+                name: market-archive-credentials
+          env:
+            - name: KAFKA_BROKERS
+              value: market-kafka-kafka-bootstrap.analytics-data.svc.cluster.local:9093
+            - name: KAFKA_TOPIC
+              value: market.prices
+            - name: KAFKA_QUARANTINE_TOPIC
+              value: ingestion.quarantine
+            - name: KAFKA_CONSUMER_GROUP
+              value: raw-event-archiver-v1
+            - name: KAFKA_TLS_CA_FILE
+              value: /etc/kafka-cluster-ca/ca.crt
+            - name: KAFKA_TLS_CERT_FILE
+              value: /etc/kafka/user.crt
+            - name: KAFKA_TLS_KEY_FILE
+              value: /etc/kafka/user.key
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: kafka-user
+              mountPath: /etc/kafka
+              readOnly: true
+      volumes:
+        - name: kafka-user
+          secret:
+            secretName: raw-event-archiver

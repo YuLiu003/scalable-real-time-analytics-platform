@@ -1,12 +1,18 @@
 # Local Kubernetes Platform Baseline
 
-This directory implements Slice 1 of the
+This directory implements Slice 1 and the local runtime for Slice 2 of the
 [Cloud-Native Investment Analytics Platform proposal](../../docs/features/cloud-native-investment-platform/README.md).
 It creates a disposable, multi-node Kubernetes environment with explicit
 namespace ownership, local resource guardrails, Prometheus, and Grafana.
 
-Current test results and remaining runtime proof are recorded in
-[`VERIFICATION.md`](VERIFICATION.md).
+Runtime proof is recorded in the
+[`Slice 1 verification`](VERIFICATION.md) and
+[`Slice 2 verification`](SLICE2-VERIFICATION.md) records.
+
+Slice 2 adds a Strimzi-managed Kafka broker, Garage object storage, a synthetic
+market producer, and a raw-event archiver. Its exact event and failure semantics
+are defined in the
+[`Slice 2 contract`](../../docs/features/cloud-native-investment-platform/slice-2-event-contract.md).
 
 The baseline is intentionally separate from the legacy Minikube, raw-manifest,
 and incomplete Helm deployment paths. Those paths remain untouched until a
@@ -90,6 +96,39 @@ Run verification again at any time:
 ```bash
 make -C platform/local verify
 ```
+
+## Producer-to-storage data path
+
+With the Slice 1 cluster running, build and exercise the complete Slice 2 data
+path, including producer- and consumer-crash tests:
+
+```bash
+make -C platform/local bootstrap-data-path
+```
+
+Re-run the terminal-state assertions without repeating completed failure
+injections:
+
+```bash
+make -C platform/local verify-data-path
+```
+
+Collect Slice 2 diagnostics without Secret objects or values:
+
+```bash
+make -C platform/local diagnose-data-path
+```
+
+Delete only the Slice 2 workloads and durable data:
+
+```bash
+CONFIRM_DESTROY_DATA_PATH=market-data-path \
+  make -C platform/local destroy-data-path
+```
+
+This local topology has one Kafka broker and one Garage replica. It tests API,
+identity, persistence, and failure boundaries but does not claim broker or
+object-store availability.
 
 If no Grafana password is supplied, bootstrap generates one and stores it only
 in the Kubernetes Secret. Re-running bootstrap reuses that Secret rather than
