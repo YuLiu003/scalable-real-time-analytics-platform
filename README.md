@@ -32,6 +32,11 @@ The next stacked slice adds a deployable, cost-guarded
 Kafka, EBS, encrypted S3, ECR, and EKS Pod Identity. It is statically validated;
 AWS runtime evidence requires a separately authorized billable apply.
 
+Routine development remains
+[free-first](docs/features/cloud-native-investment-platform/free-first-lab-strategy.md):
+the full kind environment can run in an automatically deleted Colima profile,
+while managed-cloud applies are optional, short-lived learning exercises.
+
 ## 🛡️ Status
 - **Build Status**: ✅ All services building successfully
 - **Security Score**: 9/9 (100%) - Production ready

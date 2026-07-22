@@ -70,6 +70,10 @@ branches, and manual dispatch.
    ambiguity, consumer redelivery, immutable S3 effects, DuckDB/Parquet queries,
    readiness loss, and exact replay. Failure diagnostics are retained for 14
    days and the cluster is always deleted.
+   For local macOS use, `make -C platform/local e2e-ephemeral` applies the same
+   disposable principle to a dedicated Colima profile and removes its VM disk
+   in an exit trap. Mocked lifecycle tests prove success, failure, confirmation,
+   absent-profile, and pre-existing-profile boundaries.
 4. `portfolio / aws infrastructure` verifies the pinned OpenTofu and AWS
    provider configuration, reusable Kustomize bases, AWS overlays, Kafka
    replication settings, Pod Identity service accounts, and absence of static

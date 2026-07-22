@@ -1,7 +1,7 @@
 SHELL := /usr/bin/env bash
 PORTFOLIO_DASHBOARD_PORT ?= 8080
 
-.PHONY: preflight bootstrap verify diagnose destroy grafana prometheus \
+.PHONY: preflight bootstrap verify diagnose destroy e2e-ephemeral reclaim-runtime grafana prometheus \
 	build-data-path bootstrap-data-path verify-data-path diagnose-data-path destroy-data-path \
 	build-analytics bootstrap-analytics verify-analytics diagnose-analytics destroy-analytics portfolio-dashboard \
 	quality
@@ -23,6 +23,12 @@ diagnose:
 
 destroy:
 	./scripts/destroy.sh
+
+e2e-ephemeral:
+	./scripts/run-ephemeral.sh
+
+reclaim-runtime:
+	./scripts/cleanup-runtime.sh
 
 grafana:
 	kubectl --context kind-investment-platform --namespace platform-observability \

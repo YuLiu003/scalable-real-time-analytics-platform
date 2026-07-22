@@ -82,6 +82,11 @@ one physical machine and are not independent availability zones.
 - OpenSSL
 - Approximately 6 GiB of free memory for the three nodes and monitoring stack
 
+The full platform is intentionally heavyweight: kind stores each node's
+containerd data in a Docker volume, and a persistent Colima VM retains that
+data until explicitly deleted. On a developer Mac, prefer the ephemeral path
+below instead of leaving the cluster running between sessions.
+
 The bootstrap does not install host tools automatically. Run the preflight to
 receive actionable missing-tool or version errors:
 
@@ -106,6 +111,34 @@ lives in the original config directory. These exports affect only the current
 shell and leave the user's global credential configuration unchanged.
 
 ## Create and verify
+
+### Recommended: disposable full-platform run
+
+On macOS with Colima, run the complete platform in an isolated runtime that is
+deleted on both success and failure:
+
+```bash
+make -C platform/local e2e-ephemeral
+```
+
+This command creates the reserved `investment-platform-ephemeral` Colima
+profile, bootstraps and verifies all three slices, writes failure diagnostics
+to the host or CI log before cleanup, deletes the kind cluster, and finally
+runs `colima delete --force --data`. It refuses to reuse or delete a
+pre-existing profile.
+The tradeoff is that images and charts must be downloaded again on the next
+run; CI is therefore the preferred place for frequent full end-to-end tests.
+
+The following variables can reduce or increase the temporary VM boundary:
+
+```bash
+EPHEMERAL_COLIMA_CPUS=4 \
+EPHEMERAL_COLIMA_MEMORY_GIB=8 \
+EPHEMERAL_COLIMA_DISK_GIB=30 \
+  make -C platform/local e2e-ephemeral
+```
+
+### Persistent development mode
 
 Optionally supply the Grafana password without writing it to a file:
 
@@ -257,6 +290,19 @@ CONFIRM_DESTROY=investment-platform make -C platform/local destroy
 
 The cluster is disposable. Monitoring data and generated local credentials are
 deleted with it.
+
+Deleting only the kind cluster removes its node containers and volumes but
+retains the Colima VM and cached images. To reclaim the entire disk of the
+dedicated `investment-platform` profile, use the separately confirmed command:
+
+```bash
+CONFIRM_RUNTIME_CLEANUP=investment-platform \
+  make -C platform/local reclaim-runtime
+```
+
+This deletes all images, volumes, settings, and VM disk in that dedicated
+profile. It deliberately refuses to target profiles whose names do not start
+with `investment-platform`.
 
 ## Namespace model
 

@@ -555,3 +555,9 @@ vertical slice.
 | 4-5 | Not started | Graduation evidence will be linked as each slice begins |
 | 6: AWS deployment | Implemented; runtime pending | [`AWS streaming decision`](aws-streaming-decision.md); [`OpenTofu lab runbook`](../../../infra/opentofu/aws/README.md) |
 | 7: Provider comparison | Not started | Begins after AWS runtime and teardown evidence |
+
+Routine development follows the
+[free-first lab strategy](free-first-lab-strategy.md): static and mocked tests by
+default, disposable local/CI Kubernetes for end-to-end proof, and separately
+authorized managed-cloud applies only for behavior that cannot be learned
+locally.
