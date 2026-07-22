@@ -24,6 +24,23 @@ The baseline is intentionally separate from the legacy Minikube, raw-manifest,
 and incomplete Helm deployment paths. Those paths remain untouched until a
 later migration proposal defines their disposition.
 
+## Local quality gate
+
+Install the pinned Python development dependencies in an isolated environment,
+then run the same coverage and race-test gate used by CI:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install \
+  --requirement services/portfolio-analytics/requirements-dev.txt
+PYTHON_BIN=.venv/bin/python make -C platform/local quality
+```
+
+The command fails below 100% measured application coverage. Its exact scope,
+the separate kind end-to-end test, and the continuous-delivery boundary are
+documented in the
+[quality-gates contract](../../docs/features/cloud-native-investment-platform/quality-gates.md).
+
 ## What this proves
 
 - A version-pinned Kubernetes cluster can be created and removed repeatably.

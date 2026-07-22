@@ -18,3 +18,10 @@ level instead of presenting all four values as equivalent tradable positions.
 
 The service holds no portfolio state and uses no SQL or cache database. Derived
 state remains rebuildable from bronze objects through the Slice 3 analytics Job.
+
+The repository quality gate runs all internal API packages under the Go race
+detector and fails unless their combined statement coverage is exactly 100%:
+
+```bash
+PYTHON_BIN=.venv/bin/python make -C platform/local quality
+```

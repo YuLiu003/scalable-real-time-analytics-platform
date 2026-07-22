@@ -3,7 +3,11 @@ PORTFOLIO_DASHBOARD_PORT ?= 8080
 
 .PHONY: preflight bootstrap verify diagnose destroy grafana prometheus \
 	build-data-path bootstrap-data-path verify-data-path diagnose-data-path destroy-data-path \
-	build-analytics bootstrap-analytics verify-analytics diagnose-analytics destroy-analytics portfolio-dashboard
+	build-analytics bootstrap-analytics verify-analytics diagnose-analytics destroy-analytics portfolio-dashboard \
+	quality
+
+quality:
+	../../scripts/ci/portfolio-quality-gates.sh
 
 preflight:
 	./scripts/preflight.sh

@@ -134,6 +134,11 @@ SP500 as the four archived objects.
    finalizers. After preserving the deletion evidence, the already-deleting
    synthetic topics were released. The script now deletes and waits for topics
    while Kafka and its Topic Operator are still available.
+7. The consumer-crash verifier originally accepted any event's post-write delay
+   marker before deleting the archiver. A queued earlier event could therefore
+   satisfy the wait before SP500 was archived, making the recovered consumer
+   correctly report `created` instead of the expected replay `duplicate`. Both
+   waits now match the exact SP500 event and durable duplicate log record.
 
 ## Evidence handling
 

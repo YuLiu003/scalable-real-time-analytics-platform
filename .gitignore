@@ -169,7 +169,9 @@ archive/
 
 # Temporary test files
 test_*.py
-!test/*/test_*.py  # Exclude actual test files in test directory
+# Test modules under a service's canonical test suite are source code. Keep the
+# broad temporary-file rule above without silently dropping real tests from CI.
+!services/**/tests/test_*.py
 
 # Node.js (if any JavaScript is used in visualization)
 node_modules/
@@ -228,6 +230,8 @@ tenant-management-go/tenant-management-go
 *coverage.html
 *-coverage.html
 *.coverage.html
+.coverage
+.coverage.*
 
 # Backup files
 *.bak

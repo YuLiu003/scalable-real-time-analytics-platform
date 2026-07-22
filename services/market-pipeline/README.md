@@ -29,5 +29,13 @@ cd services/market-pipeline
 GOWORK=off go test ./...
 ```
 
+The portfolio feature quality gate additionally requires 100% statement
+coverage for the canonical event and synthetic-fixture domain packages, while
+the complete Kafka/S3 process boundary is exercised in kind:
+
+```bash
+PYTHON_BIN=.venv/bin/python make -C platform/local quality
+```
+
 Use `make -C platform/local build-data-path` to test, cross-compile, build the
 container, and load it into the existing kind cluster.

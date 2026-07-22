@@ -92,14 +92,15 @@ if job_is_suspended synthetic-market-producer-consumer-crash; then
     job synthetic-market-producer-consumer-crash --type=merge --patch '{"spec":{"suspend":false}}' >/dev/null
   kubectl --context "${context}" --namespace "${namespace}" \
     wait job/synthetic-market-producer-consumer-crash --for=condition=Complete --timeout=120s
-  wait_for_log "${crash_pod}" 'post-write failure window open'
+  wait_for_log "${crash_pod}" \
+    '"msg":"post-write failure window open","event_id":"synthetic:price:sp500:consumer-crash-001"'
   kubectl --context "${context}" --namespace "${namespace}" delete pod "${crash_pod}" --wait=false >/dev/null
   kubectl --context "${context}" --namespace "${namespace}" \
     rollout status deployment/raw-event-archiver --timeout=120s >/dev/null
   recovered_pod="$(kubectl --context "${context}" --namespace "${namespace}" get pod \
     -l app.kubernetes.io/name=raw-event-archiver --output=jsonpath='{.items[0].metadata.name}')"
-  wait_for_log "${recovered_pod}" 'synthetic:price:sp500:consumer-crash-001'
-  wait_for_log "${recovered_pod}" '"result":"duplicate"'
+  wait_for_log "${recovered_pod}" \
+    '"msg":"archive effect durable","event_id":"synthetic:price:sp500:consumer-crash-001","result":"duplicate"'
   printf 'Observed consumer redelivery as an idempotent duplicate after the injected crash.\n'
   restore_archiver
   trap - EXIT

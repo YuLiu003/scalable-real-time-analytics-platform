@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -47,5 +48,63 @@ func TestHealthDoesNotDependOnObjectStorage(t *testing.T) {
 	server.Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", response.Code)
+	}
+}
+
+func TestReadinessReturnsReadyForValidResult(t *testing.T) {
+	server := New(fakeReader{data: validResult}, "demo", nil)
+	request := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Body.String() != "ready\n" {
+		t.Fatalf("readiness = %d %q", response.Code, response.Body.String())
+	}
+}
+
+func TestAllocationRejectsUnknownPortfolioAndUnavailableResult(t *testing.T) {
+	tests := []struct {
+		name      string
+		reader    fakeReader
+		portfolio string
+		want      int
+	}{
+		{name: "unknown route portfolio", reader: fakeReader{data: validResult}, portfolio: "other", want: http.StatusNotFound},
+		{name: "invalid result", reader: fakeReader{data: []byte(`{}`)}, portfolio: "demo", want: http.StatusServiceUnavailable},
+		{name: "reader error", reader: fakeReader{err: errors.New("unavailable")}, portfolio: "demo", want: http.StatusServiceUnavailable},
+		{
+			name:      "result portfolio mismatch",
+			reader:    fakeReader{data: []byte(strings.ReplaceAll(string(validResult), "demo", "other"))},
+			portfolio: "demo",
+			want:      http.StatusServiceUnavailable,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := New(tt.reader, "demo", nil)
+			request := httptest.NewRequest(http.MethodGet, "/api/v1/portfolios/"+tt.portfolio+"/allocation", nil)
+			response := httptest.NewRecorder()
+			server.Handler().ServeHTTP(response, request)
+			if response.Code != tt.want {
+				t.Fatalf("status = %d, want %d", response.Code, tt.want)
+			}
+		})
+	}
+}
+
+func TestIndexServesDashboardAndRejectsUnknownPath(t *testing.T) {
+	server := New(fakeReader{}, "demo", []byte("<h1>dashboard</h1>"))
+	for _, tt := range []struct {
+		path string
+		want int
+	}{
+		{path: "/", want: http.StatusOK},
+		{path: "/unknown", want: http.StatusNotFound},
+	} {
+		request := httptest.NewRequest(http.MethodGet, tt.path, nil)
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+		if response.Code != tt.want {
+			t.Fatalf("GET %s status = %d, want %d", tt.path, response.Code, tt.want)
+		}
 	}
 }

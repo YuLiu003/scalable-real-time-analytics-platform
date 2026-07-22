@@ -37,12 +37,24 @@ func FromEnvironment() (Settings, error) {
 }
 
 type Store struct {
-	client *s3.Client
+	client s3API
 	bucket string
 }
 
 func New(ctx context.Context, settings Settings) (*Store, error) {
-	awsConfig, err := config.LoadDefaultConfig(
+	return newWithConfigLoader(ctx, settings, config.LoadDefaultConfig)
+}
+
+type configLoader func(context.Context, ...func(*config.LoadOptions) error) (aws.Config, error)
+
+type s3API interface {
+	GetObject(context.Context, *s3.GetObjectInput, ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+	ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
+	DeleteObjects(context.Context, *s3.DeleteObjectsInput, ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
+}
+
+func newWithConfigLoader(ctx context.Context, settings Settings, load configLoader) (*Store, error) {
+	awsConfig, err := load(
 		ctx,
 		config.WithRegion(settings.Region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(settings.AccessKey, settings.SecretKey, "")),

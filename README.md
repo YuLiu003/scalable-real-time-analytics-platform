@@ -23,6 +23,9 @@ with exact replay evidence in the
 [Slice 3 verification record](platform/local/SLICE3-VERIFICATION.md).
 Its current QQQ, QQQM, FSELX, and S&P 500 values are explicitly synthetic
 fixtures; the dashboard does not claim to show live or personal account data.
+The feature's enforceable coverage, CI, kind acceptance, and image-delivery
+policy is defined in the
+[portfolio platform quality gates](docs/features/cloud-native-investment-platform/quality-gates.md).
 
 ## 🛡️ Status
 - **Build Status**: ✅ All services building successfully

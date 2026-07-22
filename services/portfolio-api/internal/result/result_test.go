@@ -1,6 +1,10 @@
 package result
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 const testSHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
@@ -50,4 +54,75 @@ func TestValidateRejectsMismatchedDataProductKey(t *testing.T) {
 	if err := snapshot.Validate(); err == nil {
 		t.Fatal("Validate() accepted a data product key for another portfolio")
 	}
+}
+
+func TestDecodeStrictAcceptsCanonicalSnapshot(t *testing.T) {
+	decoded, err := DecodeStrict(validResultBytes(t))
+	if err != nil {
+		t.Fatalf("DecodeStrict() error = %v", err)
+	}
+	if decoded.PortfolioID != "demo" {
+		t.Fatalf("portfolio = %q", decoded.PortfolioID)
+	}
+}
+
+func TestDecodeStrictRejectsInvalidAndTrailingJSON(t *testing.T) {
+	for _, data := range [][]byte{[]byte(`{"schema_version":`), append(validResultBytes(t), []byte(` {}`)...), []byte(`{}`)} {
+		if _, err := DecodeStrict(data); err == nil {
+			t.Fatal("DecodeStrict() unexpectedly succeeded")
+		}
+	}
+}
+
+func TestValidateRejectsEveryInvalidResultClass(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*Snapshot)
+	}{
+		{name: "identity", mutate: func(s *Snapshot) { s.SchemaVersion = 1 }},
+		{name: "as of", mutate: func(s *Snapshot) { s.AsOf = "invalid" }},
+		{name: "input metadata", mutate: func(s *Snapshot) { s.InputObjectCount = 0 }},
+		{name: "no positions", mutate: func(s *Snapshot) { s.Positions = nil }},
+		{name: "position fields", mutate: func(s *Snapshot) { s.Positions[0].Quantity = "1" }},
+		{name: "position timestamp", mutate: func(s *Snapshot) { s.Positions[0].PriceAsOf = "invalid" }},
+		{name: "duplicate position", mutate: func(s *Snapshot) { s.Positions = append(s.Positions, s.Positions[0]) }},
+		{name: "benchmark fields", mutate: func(s *Snapshot) { s.Benchmark.AssetType = "etf" }},
+		{name: "benchmark position collision", mutate: func(s *Snapshot) { s.Benchmark.Instrument = "QQQ" }},
+		{name: "benchmark timestamp", mutate: func(s *Snapshot) { s.Benchmark.PriceAsOf = "invalid" }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			snapshot := validSnapshot()
+			tt.mutate(&snapshot)
+			if err := snapshot.Validate(); err == nil {
+				t.Fatal("Validate() unexpectedly succeeded")
+			}
+		})
+	}
+}
+
+func TestDisplayNameAndPositionSemanticsValidation(t *testing.T) {
+	for _, name := range []string{"", " padded", strings.Repeat("x", 101), "control\nname"} {
+		if validDisplayName(name) {
+			t.Fatalf("validDisplayName(%q) = true", name)
+		}
+	}
+	if !validDisplayName("S&P 500 Index") {
+		t.Fatal("validDisplayName() rejected a valid name")
+	}
+	if !validPositionSemantics("etf", "market_price") || !validPositionSemantics("mutual_fund", "nav") {
+		t.Fatal("validPositionSemantics() rejected a supported position")
+	}
+	if validPositionSemantics("index", "index_level") {
+		t.Fatal("validPositionSemantics() accepted an index position")
+	}
+}
+
+func validResultBytes(t *testing.T) []byte {
+	t.Helper()
+	data, err := json.Marshal(validSnapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }

@@ -1,6 +1,8 @@
 package event
 
 import (
+	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -70,6 +72,15 @@ func TestValidateRejectsEventIdentityCollisionInputs(t *testing.T) {
 		{name: "source too long", mutate: func(e *Envelope) { e.Source = strings.Repeat("s", 33) }},
 		{name: "tenant too long", mutate: func(e *Envelope) { e.TenantID = strings.Repeat("t", 65) }},
 		{name: "unknown schema", mutate: func(e *Envelope) { e.SchemaVersion = 2 }},
+		{name: "event ID", mutate: func(e *Envelope) { e.EventID = "INVALID" }},
+		{name: "event type", mutate: func(e *Envelope) { e.EventType = "unknown" }},
+		{name: "occurred timestamp", mutate: func(e *Envelope) { e.OccurredAt = "invalid" }},
+		{name: "ingested timestamp", mutate: func(e *Envelope) { e.IngestedAt = "invalid" }},
+		{name: "ingestion before occurrence", mutate: func(e *Envelope) { e.IngestedAt = "2026-07-20T23:59:59Z" }},
+		{name: "partition key", mutate: func(e *Envelope) { e.PartitionKey = "invalid" }},
+		{name: "trace format", mutate: func(e *Envelope) { e.TraceID = "not-a-trace" }},
+		{name: "currency", mutate: func(e *Envelope) { e.Payload.Currency = "usd" }},
+		{name: "negative sequence", mutate: func(e *Envelope) { e.Payload.ProviderSequence = -1 }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -79,5 +90,46 @@ func TestValidateRejectsEventIdentityCollisionInputs(t *testing.T) {
 				t.Fatal("Validate() unexpectedly succeeded")
 			}
 		})
+	}
+}
+
+func TestDecodeStrictRejectsMalformedTrailingAndInvalidEvents(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{name: "malformed", data: []byte(`{"event_id":`)},
+		{name: "multiple values", data: []byte(`{} {}`)},
+		{name: "malformed trailer", data: []byte(`{} trailing`)},
+		{name: "invalid event", data: []byte(`{}`)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := DecodeStrict(tt.data); err == nil {
+				t.Fatal("DecodeStrict() unexpectedly succeeded")
+			}
+		})
+	}
+}
+
+func TestEnsureEOFReturnsEOFForOneValue(t *testing.T) {
+	decoder := json.NewDecoder(bytes.NewBufferString(`{} `))
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureEOF(decoder); err != nil {
+		t.Fatalf("ensureEOF() error = %v", err)
+	}
+}
+
+func TestMarshalAndArchiveKeyRejectInvalidEnvelope(t *testing.T) {
+	invalid := validEvent()
+	invalid.EventID = "INVALID"
+	if _, err := invalid.Marshal(); err == nil {
+		t.Fatal("Marshal() accepted an invalid envelope")
+	}
+	if _, err := invalid.ArchiveKey(); err == nil {
+		t.Fatal("ArchiveKey() accepted an invalid envelope")
 	}
 }

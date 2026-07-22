@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Status | Accepted; Slices 1, 2, and 3 complete |
-| Current branch | `feature/portfolio-analytics-slice3` |
+| Current branch | `feature/portfolio-analytics-quality-gates` (stacked on Slice 3) |
 | Scope owner | Repository maintainers |
 | Last updated | 2026-07-21 |
 | First environment | Local multi-node Kubernetes with `kind` |
@@ -35,6 +35,9 @@ goals, non-goals, risks, test plans, rollout, rollback, and graduation criteria.
 Implementation should follow Google's guidance on
 [small, reviewable changes](https://google.github.io/eng-practices/review/developer/small-cls.html)
 and record both what changed and why.
+
+The implemented feature's automated test and delivery boundary is specified in
+the [quality-gates contract](quality-gates.md).
 
 ## Motivation
 

@@ -111,9 +111,6 @@ func (e Envelope) Validate() error {
 	if e.Payload.Instrument != e.PartitionKey {
 		return errors.New("payload.instrument must match partition_key")
 	}
-	if !instrumentPattern.MatchString(e.Payload.Instrument) {
-		return errors.New("payload.instrument is invalid")
-	}
 	if !currencyPattern.MatchString(e.Payload.Currency) {
 		return errors.New("payload.currency must be an ISO-style three-letter code")
 	}

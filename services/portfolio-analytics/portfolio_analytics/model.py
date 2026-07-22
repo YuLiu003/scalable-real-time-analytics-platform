@@ -5,7 +5,7 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Any, Iterable
 
 EVENT_KEYS = {
@@ -109,10 +109,7 @@ def _timestamp(value: Any, field: str) -> datetime:
 def _decimal(value: Any, field: str, *, positive: bool = False) -> Decimal:
     if not isinstance(value, str) or not DECIMAL_VALUE.fullmatch(value):
         raise ValueError(f"{field} must be a non-negative fixed-point decimal string")
-    try:
-        parsed = Decimal(value)
-    except InvalidOperation as error:
-        raise ValueError(f"{field} is not a decimal") from error
+    parsed = Decimal(value)
     if positive and parsed <= 0:
         raise ValueError(f"{field} must be greater than zero")
     return parsed
