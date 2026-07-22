@@ -1,0 +1,20 @@
+region = "us-west-2"
+
+# Replace both values before planning. The API CIDR should normally be your
+# current public address with /32; do not use 0.0.0.0/0.
+api_server_allowed_cidrs   = ["192.0.2.10/32"]
+cluster_admin_principal_arn = "arn:aws:iam::123456789012:role/replace-with-federated-admin-role"
+
+node_capacity_type = "SPOT"
+monthly_budget_usd = 100
+budget_alert_email = ""
+
+# Keep false unless every object is disposable synthetic lab data and you need
+# an automated teardown that removes versioned S3/ECR content.
+force_destroy_data = false
+
+tags = {
+  Owner      = "replace-me"
+  Repository = "real-time-analytics-platform"
+  CostCenter = "learning"
+}

@@ -1,0 +1,7 @@
+region            = "us-west-2"
+state_bucket_name = "replace-with-a-globally-unique-tofu-state-bucket"
+
+tags = {
+  Owner      = "replace-me"
+  Repository = "real-time-analytics-platform"
+}

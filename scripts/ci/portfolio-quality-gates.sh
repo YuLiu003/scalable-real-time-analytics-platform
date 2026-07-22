@@ -76,7 +76,7 @@ printf 'Building and race-testing every Go package in the feature services...\n'
 printf 'Checking shell and JSON source contracts...\n'
 while IFS= read -r script; do
   bash -n "${REPO_ROOT}/${script}"
-done < <(cd "${REPO_ROOT}" && rg --files platform/local/scripts scripts/ci -g '*.sh' | sort)
+done < <(cd "${REPO_ROOT}" && rg --files platform/local/scripts scripts/ci scripts/cloud -g '*.sh' | sort)
 "${PYTHON_BIN}" -m json.tool "${REPO_ROOT}/contracts/fixtures/demo-fund-portfolio.v2.json" >/dev/null
 
 printf 'Portfolio feature quality gates passed with 100%% measured application coverage.\n'

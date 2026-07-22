@@ -1,6 +1,30 @@
 package archive
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
+
+func TestNewSupportsStaticAndWorkloadIdentityCredentials(t *testing.T) {
+	for _, settings := range []Settings{
+		{Endpoint: "http://garage", Region: "garage", Bucket: "analytics", AccessKey: "access", SecretKey: "secret"},
+		{Region: "us-west-2", Bucket: "analytics"},
+	} {
+		store, err := New(context.Background(), settings)
+		if err != nil || store == nil {
+			t.Fatalf("New(%+v) = %+v, %v", settings, store, err)
+		}
+	}
+	for _, settings := range []Settings{
+		{},
+		{Region: "us-west-2", Bucket: "analytics", AccessKey: "partial"},
+		{Endpoint: "http://garage", Region: "garage", Bucket: "analytics"},
+	} {
+		if _, err := New(context.Background(), settings); err == nil {
+			t.Fatalf("New(%+v) unexpectedly succeeded", settings)
+		}
+	}
+}
 
 func TestContentHashIsStable(t *testing.T) {
 	first := contentHash([]byte(`{"event_id":"one"}`))

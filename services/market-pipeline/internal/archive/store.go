@@ -41,20 +41,28 @@ type Store struct {
 }
 
 func New(ctx context.Context, settings Settings) (*Store, error) {
-	if settings.Endpoint == "" || settings.Region == "" || settings.Bucket == "" || settings.AccessKey == "" || settings.SecretKey == "" {
-		return nil, errors.New("S3 endpoint, region, bucket, access key, and secret key are required")
+	if settings.Region == "" || settings.Bucket == "" {
+		return nil, errors.New("AWS region and S3 bucket are required")
 	}
-	awsConfig, err := config.LoadDefaultConfig(
-		ctx,
-		config.WithRegion(settings.Region),
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(settings.AccessKey, settings.SecretKey, "")),
-	)
+	if (settings.AccessKey == "") != (settings.SecretKey == "") {
+		return nil, errors.New("S3 access key and secret key must be configured together")
+	}
+	if settings.Endpoint != "" && settings.AccessKey == "" {
+		return nil, errors.New("a custom S3 endpoint requires static access credentials")
+	}
+	loadOptions := []func(*config.LoadOptions) error{config.WithRegion(settings.Region)}
+	if settings.AccessKey != "" {
+		loadOptions = append(loadOptions, config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(settings.AccessKey, settings.SecretKey, "")))
+	}
+	awsConfig, err := config.LoadDefaultConfig(ctx, loadOptions...)
 	if err != nil {
 		return nil, fmt.Errorf("load S3 configuration: %w", err)
 	}
 	client := s3.NewFromConfig(awsConfig, func(options *s3.Options) {
-		options.BaseEndpoint = aws.String(settings.Endpoint)
-		options.UsePathStyle = true
+		if settings.Endpoint != "" {
+			options.BaseEndpoint = aws.String(settings.Endpoint)
+			options.UsePathStyle = true
+		}
 	})
 	return &Store{client: client, bucket: settings.Bucket}, nil
 }

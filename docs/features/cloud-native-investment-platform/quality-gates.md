@@ -24,7 +24,7 @@ producer/consumer failures, and a clean kind deployment.
 
 | Scope | Metric | Required | Current evidence |
 | --- | --- | ---: | ---: |
-| `portfolio_analytics` Python package | Statements and branches | 100% | 345/345 statements; 86/86 branches |
+| `portfolio_analytics` Python package | Statements and branches | 100% | 352/352 statements; 92/92 branches |
 | Portfolio API `internal/...` packages | Go statements with `-race` | 100% | 100.0% |
 | Market `internal/event` and `internal/synthetic` | Go statements with `-race` | 100% | 100.0% |
 
@@ -70,7 +70,15 @@ branches, and manual dispatch.
    ambiguity, consumer redelivery, immutable S3 effects, DuckDB/Parquet queries,
    readiness loss, and exact replay. Failure diagnostics are retained for 14
    days and the cluster is always deleted.
-4. `portfolio / continuous delivery` runs only after a successful `main` push.
+4. `portfolio / aws infrastructure` verifies the pinned OpenTofu and AWS
+   provider configuration, reusable Kustomize bases, AWS overlays, Kafka
+   replication settings, Pod Identity service accounts, and absence of static
+   AWS credential references. It never plans or applies against an account.
+5. The separate manual `AWS Lab Plan` workflow exchanges GitHub's OIDC token
+   for short-lived AWS credentials and creates a real remote-state-backed plan.
+   Its role is plan-only, its target account is checked, and no binary plan or
+   apply step is retained.
+6. `portfolio / continuous delivery` runs only after a successful `main` push.
    It publishes the three images to GHCR with immutable `sha-<commit>` tags and
    a movable `main` tag.
 
@@ -81,10 +89,17 @@ rollback procedure, and GitOps reconciliation target.
 
 ## Verification record
 
-The local-equivalent gate completed with 345/345 Python statements, 86/86
+The local-equivalent gate completed with 352/352 Python statements, 92/92
 Python branches, and 100.0% Go statement coverage in both measured profiles.
 All three production images built, and all 27 analytics tests passed again from
 inside the non-root production image.
+
+The AWS static gate validated both OpenTofu roots with AWS provider 6.55.0,
+passed 2 state-foundation and 5 platform architecture tests, rendered every AWS
+overlay without static AWS credentials, and passed Strimzi 1.1 server-side
+schema dry-run for the replicated Kafka resources. This is implementation
+evidence only; AWS runtime, failure, cost, and teardown evidence remains pending
+an explicitly authorized billable apply.
 
 A clean scoped kind rebuild then reproduced the exact Slice 2 terminal state of
 7 market records, 1 quarantine record, and 4 immutable bronze objects. The
@@ -112,6 +127,7 @@ checks:
 - `portfolio / 100% application coverage`
 - `portfolio / container build`
 - `portfolio / kind end-to-end`
+- `portfolio / aws infrastructure`
 
 GitHub documents that required checks must pass before a protected branch can
 merge. The workflow uses least-privilege default permissions and grants

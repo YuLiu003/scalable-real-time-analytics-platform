@@ -1,0 +1,129 @@
+name: AWS Lab Plan
+
+run-name: AWS lab plan from ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aws-lab-plan
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: aws lab / federated plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: aws-lab-plan
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      EXPECTED_AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      TF_IN_AUTOMATION: 'true'
+      TF_VAR_region: ${{ vars.AWS_REGION }}
+      TF_VAR_api_server_allowed_cidrs: ${{ vars.EKS_API_ALLOWED_CIDRS_JSON }}
+      TF_VAR_cluster_admin_principal_arn: ${{ vars.EKS_ADMIN_ROLE_ARN }}
+      TF_VAR_budget_alert_email: ${{ vars.BUDGET_ALERT_EMAIL }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate required environment configuration
+        env:
+          AWS_PLAN_ROLE_ARN: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          TOFU_STATE_BUCKET: ${{ vars.TOFU_STATE_BUCKET }}
+          TOFU_STATE_KMS_KEY_ARN: ${{ vars.TOFU_STATE_KMS_KEY_ARN }}
+        run: |
+          required=(
+            AWS_REGION
+            EXPECTED_AWS_ACCOUNT_ID
+            AWS_PLAN_ROLE_ARN
+            TOFU_STATE_BUCKET
+            TOFU_STATE_KMS_KEY_ARN
+            TF_VAR_api_server_allowed_cidrs
+            TF_VAR_cluster_admin_principal_arn
+          )
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              printf 'Missing GitHub environment variable: %s\n' "${name}" >&2
+              exit 1
+            fi
+          done
+          if [[ ! "${EXPECTED_AWS_ACCOUNT_ID}" =~ ^[0-9]{12}$ ]]; then
+            printf 'AWS_ACCOUNT_ID must contain exactly 12 digits.\n' >&2
+            exit 1
+          fi
+          jq --exit-status \
+            'type == "array" and length > 0 and all(.[]; type == "string")' \
+            <<<"${TF_VAR_api_server_allowed_cidrs}" >/dev/null
+          while IFS= read -r cidr; do
+            printf '::add-mask::%s\n' "${cidr}"
+          done < <(jq --raw-output '.[]' <<<"${TF_VAR_api_server_allowed_cidrs}")
+
+      - name: Install checksum-verified OpenTofu
+        run: |
+          scripts/ci/install-opentofu.sh "${RUNNER_TEMP}/portfolio-bin"
+          printf '%s\n' "${RUNNER_TEMP}/portfolio-bin" >> "${GITHUB_PATH}"
+
+      - name: Configure short-lived AWS credentials
+        uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+          role-session-name: github-plan-${{ github.run_id }}
+          mask-aws-account-id: true
+
+      - name: Verify target account
+        run: |
+          actual_account_id="$(aws sts get-caller-identity --query Account --output text)"
+          if [[ "${actual_account_id}" != "${EXPECTED_AWS_ACCOUNT_ID}" ]]; then
+            printf 'Refusing to plan account %s; expected %s.\n' \
+              "${actual_account_id}" "${EXPECTED_AWS_ACCOUNT_ID}" >&2
+            exit 1
+          fi
+
+      - name: Initialize encrypted remote state
+        env:
+          TOFU_STATE_BUCKET: ${{ vars.TOFU_STATE_BUCKET }}
+          TOFU_STATE_KMS_KEY_ARN: ${{ vars.TOFU_STATE_KMS_KEY_ARN }}
+        run: |
+          tofu -chdir=infra/opentofu/aws/lab init \
+            -input=false \
+            -reconfigure \
+            -backend-config="bucket=${TOFU_STATE_BUCKET}" \
+            -backend-config="key=aws-lab/platform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="kms_key_id=${TOFU_STATE_KMS_KEY_ARN}"
+
+      - name: Produce reviewable plan
+        run: |
+          plan_file="${RUNNER_TEMP}/aws-lab.tfplan"
+          raw_log="${RUNNER_TEMP}/aws-lab-plan.log"
+          if ! tofu -chdir=infra/opentofu/aws/lab plan \
+              -input=false \
+              -lock-timeout=5m \
+              -out="${plan_file}" >"${raw_log}" 2>&1; then
+            sed -E 's#([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]+#[REDACTED_CIDR]#g' \
+              "${raw_log}" >&2
+            exit 1
+          fi
+          tofu -chdir=infra/opentofu/aws/lab show \
+            -no-color "${plan_file}" | \
+            sed -E 's#([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]+#[REDACTED_CIDR]#g' \
+              >"${RUNNER_TEMP}/aws-lab-plan.txt"
+          sed -E 's#([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]+#[REDACTED_CIDR]#g' \
+            "${raw_log}"
+
+      - name: Preserve human-readable plan
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: aws-lab-plan-${{ github.run_id }}
+          path: ${{ runner.temp }}/aws-lab-plan.txt
+          if-no-files-found: error
+          retention-days: 7

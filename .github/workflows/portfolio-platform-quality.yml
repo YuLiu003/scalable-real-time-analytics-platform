@@ -5,12 +5,15 @@ on:
     branches: [main]
     paths:
       - '.gitignore'
+      - '.github/workflows/aws-lab-plan.yml'
       - '.github/workflows/portfolio-platform-quality.yml'
       - 'README.md'
       - 'contracts/fixtures/demo-fund-portfolio.v2.json'
       - 'docs/features/cloud-native-investment-platform/**'
+      - 'infra/opentofu/aws/**'
       - 'platform/gitops/**'
       - 'platform/local/**'
+      - 'scripts/cloud/aws/**'
       - 'scripts/ci/**'
       - 'services/market-pipeline/**'
       - 'services/portfolio-analytics/**'
@@ -19,14 +22,18 @@ on:
     branches:
       - main
       - 'feature/portfolio-analytics-*'
+      - 'feature/aws-*'
     paths:
       - '.gitignore'
+      - '.github/workflows/aws-lab-plan.yml'
       - '.github/workflows/portfolio-platform-quality.yml'
       - 'README.md'
       - 'contracts/fixtures/demo-fund-portfolio.v2.json'
       - 'docs/features/cloud-native-investment-platform/**'
+      - 'infra/opentofu/aws/**'
       - 'platform/gitops/**'
       - 'platform/local/**'
+      - 'scripts/cloud/aws/**'
       - 'scripts/ci/**'
       - 'services/market-pipeline/**'
       - 'services/portfolio-analytics/**'
@@ -84,7 +91,9 @@ jobs:
       - name: Validate the GitHub Actions workflow
         run: |
           GOBIN="${RUNNER_TEMP}/portfolio-bin" go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          "${RUNNER_TEMP}/portfolio-bin/actionlint" .github/workflows/portfolio-platform-quality.yml
+          "${RUNNER_TEMP}/portfolio-bin/actionlint" \
+            .github/workflows/aws-lab-plan.yml \
+            .github/workflows/portfolio-platform-quality.yml
 
       - name: Preserve coverage evidence
         if: always()
@@ -119,6 +128,31 @@ jobs:
           IMAGE_PREFIX: local
           IMAGE_TAG: ${{ github.sha }}
         run: scripts/ci/build-portfolio-images.sh
+
+  aws-infrastructure:
+    name: portfolio / aws infrastructure
+    needs: coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go for verified tool installation
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install verified Kubernetes and OpenTofu tools
+        run: |
+          scripts/ci/install-kubernetes-tools.sh "${RUNNER_TEMP}/portfolio-bin"
+          scripts/ci/install-opentofu.sh "${RUNNER_TEMP}/portfolio-bin"
+          printf '%s\n' "${RUNNER_TEMP}/portfolio-bin" >> "${GITHUB_PATH}"
+
+      - name: Validate AWS infrastructure and desired state
+        run: scripts/ci/validate-aws-platform.sh
 
   kind-e2e:
     name: portfolio / kind end-to-end
@@ -185,7 +219,7 @@ jobs:
   publish:
     name: portfolio / continuous delivery
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [coverage, container-build, kind-e2e]
+    needs: [coverage, container-build, aws-infrastructure, kind-e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:

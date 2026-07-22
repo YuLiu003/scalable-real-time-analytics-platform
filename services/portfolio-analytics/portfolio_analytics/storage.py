@@ -28,22 +28,27 @@ class S3Settings:
             access_key=os.environ.get("AWS_ACCESS_KEY_ID", ""),
             secret_key=os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
         )
-        if not all(settings.__dict__.values()):
-            raise ValueError("S3 endpoint, region, bucket, access key, and secret key are required")
+        if not settings.region or not settings.bucket:
+            raise ValueError("AWS region and S3 bucket are required")
+        if bool(settings.access_key) != bool(settings.secret_key):
+            raise ValueError("S3 access key and secret key must be configured together")
+        if settings.endpoint and not settings.access_key:
+            raise ValueError("a custom S3 endpoint requires static access credentials")
         return settings
 
 
 class ObjectStore:
     def __init__(self, settings: S3Settings):
         self.bucket = settings.bucket
-        self.client = boto3.client(
-            "s3",
-            endpoint_url=settings.endpoint,
-            region_name=settings.region,
-            aws_access_key_id=settings.access_key,
-            aws_secret_access_key=settings.secret_key,
-            config=Config(s3={"addressing_style": "path"}),
-        )
+        options: dict[str, object] = {"region_name": settings.region}
+        if settings.endpoint:
+            options.update(
+                endpoint_url=settings.endpoint,
+                aws_access_key_id=settings.access_key,
+                aws_secret_access_key=settings.secret_key,
+                config=Config(s3={"addressing_style": "path"}),
+            )
+        self.client = boto3.client("s3", **options)
 
     def list_objects(self, prefix: str) -> list[BronzeObject]:
         objects: list[BronzeObject] = []

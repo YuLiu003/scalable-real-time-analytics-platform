@@ -26,6 +26,11 @@ func Messages(scenario string) ([]Message, error) {
 		first := fixture("QQQ", "600.0000", 1, "11111111111111111111111111111111", "2026-07-21T00:00:00Z")
 		second := fixture("QQQM", "250.0000", 2, "22222222222222222222222222222222", "2026-07-21T00:00:02Z")
 		return baselineMessages(first, second)
+	case "portfolio-complete":
+		return validMessages(
+			fixture("FSELX", "60.0000", 100, "33333333333333333333333333333333", "2026-07-21T00:01:00Z"),
+			fixture("SP500", "6500.0000", 101, "44444444444444444444444444444444", "2026-07-21T00:01:30Z"),
+		)
 	case "single":
 		instrument := envOrDefault("EVENT_INSTRUMENT", "FSELX")
 		price := envOrDefault("EVENT_PRICE", "60.0000")
@@ -54,24 +59,30 @@ func Messages(scenario string) ([]Message, error) {
 }
 
 func baselineMessages(first, second event.Envelope) ([]Message, error) {
-	firstBytes, err := first.Marshal()
+	messages, err := validMessages(first, second)
 	if err != nil {
 		return nil, err
 	}
-	secondBytes, err := second.Marshal()
-	if err != nil {
-		return nil, err
-	}
-	return []Message{
-		{Key: first.PartitionKey, EventID: first.EventID, Value: firstBytes},
-		{Key: second.PartitionKey, EventID: second.EventID, Value: secondBytes},
-		{Key: first.PartitionKey, EventID: first.EventID, Value: firstBytes},
+	return append(messages, []Message{
+		{Key: first.PartitionKey, EventID: first.EventID, Value: messages[0].Value},
 		{
 			Key:     "INVALID",
 			EventID: "synthetic:malformed:001",
 			Value:   []byte(`{"event_id":"synthetic:malformed:001","event_type":"market.price.observed","schema_version":1,"unexpected":true}`),
 		},
-	}, nil
+	}...), nil
+}
+
+func validMessages(envelopes ...event.Envelope) ([]Message, error) {
+	messages := make([]Message, 0, len(envelopes))
+	for _, envelope := range envelopes {
+		encoded, err := envelope.Marshal()
+		if err != nil {
+			return nil, err
+		}
+		messages = append(messages, Message{Key: envelope.PartitionKey, EventID: envelope.EventID, Value: encoded})
+	}
+	return messages, nil
 }
 
 func fixture(instrument, price string, sequence int64, traceID, occurredAt string) event.Envelope {

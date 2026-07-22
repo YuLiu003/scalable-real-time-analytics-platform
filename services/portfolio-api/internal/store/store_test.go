@@ -47,7 +47,7 @@ func validSettings() Settings {
 	}
 }
 
-func TestFromEnvironmentRequiresAndReturnsAllSettings(t *testing.T) {
+func TestFromEnvironmentSupportsLocalAndWorkloadIdentitySettings(t *testing.T) {
 	for _, name := range []string{"S3_ENDPOINT", "AWS_REGION", "S3_BUCKET", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"} {
 		t.Setenv(name, "")
 	}
@@ -63,6 +63,25 @@ func TestFromEnvironmentRequiresAndReturnsAllSettings(t *testing.T) {
 	if err != nil || settings.Bucket != "analytics" {
 		t.Fatalf("FromEnvironment() = %+v, %v", settings, err)
 	}
+
+	t.Setenv("S3_ENDPOINT", "")
+	t.Setenv("AWS_REGION", "us-west-2")
+	t.Setenv("AWS_ACCESS_KEY_ID", "")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "")
+	settings, err = FromEnvironment()
+	if err != nil || settings.Endpoint != "" || settings.AccessKey != "" {
+		t.Fatalf("FromEnvironment(workload identity) = %+v, %v", settings, err)
+	}
+
+	t.Setenv("AWS_ACCESS_KEY_ID", "partial")
+	if _, err := FromEnvironment(); err == nil {
+		t.Fatal("FromEnvironment() accepted partial static credentials")
+	}
+	t.Setenv("AWS_ACCESS_KEY_ID", "")
+	t.Setenv("S3_ENDPOINT", "http://garage")
+	if _, err := FromEnvironment(); err == nil {
+		t.Fatal("FromEnvironment() accepted a custom endpoint without credentials")
+	}
 }
 
 func TestNewBuildsClientAndPropagatesConfigurationError(t *testing.T) {
@@ -76,6 +95,22 @@ func TestNewBuildsClientAndPropagatesConfigurationError(t *testing.T) {
 	})
 	if !errors.Is(err, want) {
 		t.Fatalf("newWithConfigLoader() error = %v", err)
+	}
+
+	cloud := Settings{Region: "us-west-2", Bucket: "analytics"}
+	store, err = newWithConfigLoader(context.Background(), cloud, func(_ context.Context, options ...func(*config.LoadOptions) error) (aws.Config, error) {
+		if len(options) != 1 {
+			t.Fatalf("workload identity config options = %d, want 1", len(options))
+		}
+		return aws.Config{Region: "us-west-2"}, nil
+	})
+	if err != nil || store.client == nil {
+		t.Fatalf("newWithConfigLoader(workload identity) = %+v, %v", store, err)
+	}
+	if _, err := newWithConfigLoader(context.Background(), Settings{}, func(context.Context, ...func(*config.LoadOptions) error) (aws.Config, error) {
+		return aws.Config{}, nil
+	}); err == nil {
+		t.Fatal("newWithConfigLoader() accepted invalid settings")
 	}
 }
 

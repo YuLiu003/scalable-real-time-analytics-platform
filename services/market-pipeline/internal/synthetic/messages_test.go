@@ -40,6 +40,16 @@ func TestBaselineMessagesPropagatesEitherEncodingError(t *testing.T) {
 	}
 }
 
+func TestPortfolioCompleteMessagesSupplyAnalyticsInputs(t *testing.T) {
+	messages, err := Messages("portfolio-complete")
+	if err != nil {
+		t.Fatalf("Messages(portfolio-complete) error = %v", err)
+	}
+	if len(messages) != 2 || messages[0].Key != "FSELX" || messages[1].Key != "SP500" {
+		t.Fatalf("portfolio-complete messages = %+v", messages)
+	}
+}
+
 func TestSingleMessageDefaultsAndOverrides(t *testing.T) {
 	message, err := Messages("single")
 	if err != nil {

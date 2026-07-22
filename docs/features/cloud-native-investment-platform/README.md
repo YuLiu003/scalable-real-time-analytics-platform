@@ -2,8 +2,8 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Accepted; Slices 1, 2, and 3 complete |
-| Current branch | `feature/portfolio-analytics-quality-gates` (stacked on Slice 3) |
+| Status | Slices 1-3 complete; AWS Slice 6 implementation awaiting runtime apply |
+| Current branch | `feature/aws-eks-platform-slice` (stacked on quality gates) |
 | Scope owner | Repository maintainers |
 | Last updated | 2026-07-21 |
 | First environment | Local multi-node Kubernetes with `kind` |
@@ -520,8 +520,9 @@ These decisions require follow-up ADRs or implementation evidence:
    single-node Slice 2 learning environment before using it for a resilient
    deployment.
 2. Select JSON Schema serialization details and Apicurio compatibility policy.
-3. Choose Strimzi-on-EKS versus MSK for the first AWS streaming milestone based
-   on learning objective and cost boundary.
+3. Compare the accepted first milestone, Strimzi on EKS, with MSK after the EKS
+   runtime and teardown evidence is recorded. See the
+   [AWS streaming decision](aws-streaming-decision.md).
 4. Define the first public or synthetic data source and its rate limits.
 5. Define canonical transaction and cash-flow events before adding portfolio
    performance calculations; Slice 3 deliberately proves allocation first.
@@ -551,4 +552,6 @@ vertical slice.
 | 1: Reproducible local platform baseline | Complete | [`verification record`](../../../platform/local/VERIFICATION.md) |
 | 2: Producer-to-storage path | Complete | [`contract and failure model`](slice-2-event-contract.md); [`verification record`](../../../platform/local/SLICE2-VERIFICATION.md) |
 | 3: Analytics and visible result | Complete | [`analytics and replay contract`](slice-3-analytics-contract.md); [`verification record`](../../../platform/local/SLICE3-VERIFICATION.md) |
-| 4-7 | Not started | Graduation evidence will be linked as each slice begins |
+| 4-5 | Not started | Graduation evidence will be linked as each slice begins |
+| 6: AWS deployment | Implemented; runtime pending | [`AWS streaming decision`](aws-streaming-decision.md); [`OpenTofu lab runbook`](../../../infra/opentofu/aws/README.md) |
+| 7: Provider comparison | Not started | Begins after AWS runtime and teardown evidence |

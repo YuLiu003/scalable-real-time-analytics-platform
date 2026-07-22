@@ -30,10 +30,23 @@ func FromEnvironment() (Settings, error) {
 		AccessKey: os.Getenv("AWS_ACCESS_KEY_ID"),
 		SecretKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
 	}
-	if settings.Endpoint == "" || settings.Region == "" || settings.Bucket == "" || settings.AccessKey == "" || settings.SecretKey == "" {
-		return Settings{}, errors.New("S3 endpoint, region, bucket, access key, and secret key are required")
+	if err := settings.validate(); err != nil {
+		return Settings{}, err
 	}
 	return settings, nil
+}
+
+func (s Settings) validate() error {
+	if s.Region == "" || s.Bucket == "" {
+		return errors.New("AWS region and S3 bucket are required")
+	}
+	if (s.AccessKey == "") != (s.SecretKey == "") {
+		return errors.New("S3 access key and secret key must be configured together")
+	}
+	if s.Endpoint != "" && s.AccessKey == "" {
+		return errors.New("a custom S3 endpoint requires static access credentials")
+	}
+	return nil
 }
 
 type Store struct {
@@ -54,17 +67,22 @@ type s3API interface {
 }
 
 func newWithConfigLoader(ctx context.Context, settings Settings, load configLoader) (*Store, error) {
-	awsConfig, err := load(
-		ctx,
-		config.WithRegion(settings.Region),
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(settings.AccessKey, settings.SecretKey, "")),
-	)
+	if err := settings.validate(); err != nil {
+		return nil, err
+	}
+	loadOptions := []func(*config.LoadOptions) error{config.WithRegion(settings.Region)}
+	if settings.AccessKey != "" {
+		loadOptions = append(loadOptions, config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(settings.AccessKey, settings.SecretKey, "")))
+	}
+	awsConfig, err := load(ctx, loadOptions...)
 	if err != nil {
 		return nil, fmt.Errorf("load S3 configuration: %w", err)
 	}
 	client := s3.NewFromConfig(awsConfig, func(options *s3.Options) {
-		options.BaseEndpoint = aws.String(settings.Endpoint)
-		options.UsePathStyle = true
+		if settings.Endpoint != "" {
+			options.BaseEndpoint = aws.String(settings.Endpoint)
+			options.UsePathStyle = true
+		}
 	})
 	return &Store{client: client, bucket: settings.Bucket}, nil
 }

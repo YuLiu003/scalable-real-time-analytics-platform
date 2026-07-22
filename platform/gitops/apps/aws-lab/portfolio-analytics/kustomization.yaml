@@ -1,0 +1,48 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base/portfolio-analytics
+  - runtime-config.yaml
+
+images:
+  - name: local/portfolio-analytics
+    newName: ECR_REGISTRY_PLACEHOLDER/investment-analytics/portfolio-analytics
+    newTag: IMAGE_TAG_PLACEHOLDER
+  - name: local/portfolio-api
+    newName: ECR_REGISTRY_PLACEHOLDER/investment-analytics/portfolio-api
+    newTag: IMAGE_TAG_PLACEHOLDER
+
+patches:
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+  - target:
+      kind: Job
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: IfNotPresent
+  - target:
+      kind: Deployment
+      name: portfolio-api
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/envFrom
+      - op: add
+        path: /spec/template/spec/containers/0/envFrom
+        value:
+          - configMapRef:
+              name: aws-runtime
+  - target:
+      kind: Job
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/envFrom
+      - op: add
+        path: /spec/template/spec/containers/0/envFrom
+        value:
+          - configMapRef:
+              name: aws-runtime

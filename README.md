@@ -27,6 +27,11 @@ The feature's enforceable coverage, CI, kind acceptance, and image-delivery
 policy is defined in the
 [portfolio platform quality gates](docs/features/cloud-native-investment-platform/quality-gates.md).
 
+The next stacked slice adds a deployable, cost-guarded
+[AWS EKS platform lab](infra/opentofu/aws/README.md) with OpenTofu, Strimzi
+Kafka, EBS, encrypted S3, ECR, and EKS Pod Identity. It is statically validated;
+AWS runtime evidence requires a separately authorized billable apply.
+
 ## 🛡️ Status
 - **Build Status**: ✅ All services building successfully
 - **Security Score**: 9/9 (100%) - Production ready

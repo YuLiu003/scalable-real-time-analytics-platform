@@ -1,0 +1,17 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: kafka-gp3
+  labels:
+    app.kubernetes.io/part-of: investment-analytics-platform
+provisioner: ebs.csi.aws.com
+parameters:
+  encrypted: "true"
+  tagSpecification_1: CostScope=investment-analytics-aws-lab
+  tagSpecification_2: Environment=aws-lab
+  tagSpecification_3: ManagedBy=Strimzi
+  tagSpecification_4: Project=investment-analytics
+  type: gp3
+reclaimPolicy: Delete
+allowVolumeExpansion: true
+volumeBindingMode: WaitForFirstConsumer

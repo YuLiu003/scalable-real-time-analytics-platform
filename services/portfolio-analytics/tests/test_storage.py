@@ -15,7 +15,7 @@ def client_error(code: str) -> ClientError:
 
 
 class StorageTests(unittest.TestCase):
-    def test_settings_require_and_return_complete_environment(self) -> None:
+    def test_settings_support_local_and_workload_identity_environments(self) -> None:
         with patch.dict("os.environ", {}, clear=True), self.assertRaisesRegex(ValueError, "required"):
             S3Settings.from_environment()
         values = {
@@ -29,6 +29,20 @@ class StorageTests(unittest.TestCase):
             settings = S3Settings.from_environment()
         self.assertEqual(settings.bucket, "analytics")
 
+        cloud_values = {"AWS_REGION": "us-west-2", "S3_BUCKET": "analytics"}
+        with patch.dict("os.environ", cloud_values, clear=True):
+            settings = S3Settings.from_environment()
+        self.assertEqual(settings.endpoint, "")
+
+        for invalid in (
+            {**cloud_values, "AWS_ACCESS_KEY_ID": "partial"},
+            {**cloud_values, "S3_ENDPOINT": "http://garage"},
+        ):
+            with self.subTest(invalid=invalid), patch.dict("os.environ", invalid, clear=True), self.assertRaises(
+                ValueError
+            ):
+                S3Settings.from_environment()
+
     @patch("portfolio_analytics.storage.boto3.client")
     def test_constructor_configures_path_style_s3(self, client: Mock) -> None:
         settings = S3Settings("http://garage", "garage", "analytics", "access", "secret")
@@ -37,6 +51,10 @@ class StorageTests(unittest.TestCase):
         _, kwargs = client.call_args
         self.assertEqual(kwargs["endpoint_url"], "http://garage")
         self.assertEqual(kwargs["config"].s3["addressing_style"], "path")
+
+        ObjectStore(S3Settings("", "us-west-2", "analytics", "", ""))
+        _, kwargs = client.call_args
+        self.assertEqual(kwargs, {"region_name": "us-west-2"})
 
     def test_list_and_get_objects(self) -> None:
         body = Mock()

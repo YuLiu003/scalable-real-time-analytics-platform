@@ -20,7 +20,7 @@ helm upgrade --install "${STRIMZI_RELEASE}" \
   --version "${STRIMZI_OPERATOR_VERSION}" \
   --kube-context "${KUBERNETES_CONTEXT}" \
   --namespace "${DATA_NAMESPACE}" \
-  --values "${LOCAL_DIR}/addons/strimzi/values.yaml" \
+  --values "${REPO_ROOT}/platform/gitops/addons/strimzi/values.yaml" \
   --wait \
   --timeout 5m
 

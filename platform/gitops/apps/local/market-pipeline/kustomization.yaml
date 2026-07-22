@@ -1,44 +1,4 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - identities.yaml
-  - kafka-users.yaml
-  - archiver.yaml
-  - producer-jobs.yaml
-
-# KafkaUser Secrets contain the client identity and clients CA. The broker
-# endpoint is signed by Strimzi's separate cluster CA, copied as a public
-# ConfigMap by bootstrap-data-path.sh after Kafka reconciliation.
-patches:
-  - target:
-      kind: Deployment
-      name: raw-event-archiver
-    patch: |-
-      - op: add
-        path: /spec/template/spec/volumes/-
-        value:
-          name: kafka-cluster-ca
-          configMap:
-            name: market-kafka-cluster-ca
-      - op: add
-        path: /spec/template/spec/containers/0/volumeMounts/-
-        value:
-          name: kafka-cluster-ca
-          mountPath: /etc/kafka-cluster-ca
-          readOnly: true
-  - target:
-      kind: Job
-      labelSelector: app.kubernetes.io/name=synthetic-market-producer
-    patch: |-
-      - op: add
-        path: /spec/template/spec/volumes/-
-        value:
-          name: kafka-cluster-ca
-          configMap:
-            name: market-kafka-cluster-ca
-      - op: add
-        path: /spec/template/spec/containers/0/volumeMounts/-
-        value:
-          name: kafka-cluster-ca
-          mountPath: /etc/kafka-cluster-ca
-          readOnly: true
+  - ../../base/market-pipeline

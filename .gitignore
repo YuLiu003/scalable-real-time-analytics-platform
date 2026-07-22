@@ -183,6 +183,9 @@ npm-debug.log
 *.tfstate
 *.tfstate.*
 *.tfvars
+*.tfplan
+crash.log
+crash.*.log
 
 # Skaffold local files
 .skaffold/
