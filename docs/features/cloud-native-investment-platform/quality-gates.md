@@ -74,6 +74,9 @@ branches, and manual dispatch.
    disposable principle to a dedicated Colima profile and removes its VM disk
    in an exit trap. Mocked lifecycle tests prove success, failure, confirmation,
    absent-profile, and pre-existing-profile boundaries.
+   The acceptance run also posts the source-controlled zero-return contribution
+   scenario through the Kubernetes service proxy and requires its deterministic
+   $2,200 ending balance, contribution total, and end-of-period timing contract.
 4. `portfolio / aws infrastructure` verifies the pinned OpenTofu and AWS
    provider configuration, reusable Kustomize bases, AWS overlays, Kafka
    replication settings, Pod Identity service accounts, and absence of static

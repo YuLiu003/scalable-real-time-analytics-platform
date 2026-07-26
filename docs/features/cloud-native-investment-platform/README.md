@@ -2,10 +2,10 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Slices 1-3 complete; AWS Slice 6 implementation awaiting runtime apply |
-| Current branch | `feature/aws-eks-platform-slice` (stacked on quality gates) |
+| Status | Slices 1-3 complete; contribution projection implemented; free cloud-service roadmap accepted |
+| Delivery target | `main`, after each stacked slice passes its verification gates |
 | Scope owner | Repository maintainers |
-| Last updated | 2026-07-21 |
+| Last updated | 2026-07-26 |
 | First environment | Local multi-node Kubernetes with `kind` |
 | First cloud target | AWS; GCP and Azure follow as comparison exercises |
 | Review gate | Approve the goals, boundaries, and first vertical slice before implementation |
@@ -38,6 +38,8 @@ and record both what changed and why.
 
 The implemented feature's automated test and delivery boundary is specified in
 the [quality-gates contract](quality-gates.md).
+The accepted product and free cloud-service sequence is tracked in
+[roadmap v2](roadmap-v2.md).
 
 ## Motivation
 
@@ -61,7 +63,11 @@ deduplication, replay, sensitive data, and analytical queries.
 - Keep Kubernetes as the primary learning and operating control plane.
 - Maintain one thin end-to-end workload throughout the curriculum.
 - Run the core platform locally with free and open-source components.
-- Deploy the same workload to one real cloud before comparing all three.
+- Implement free local contracts for Lambda, DynamoDB, ECS, and Jenkins as
+  required curriculum.
+- Keep paid provider applies outside the required completion boundary.
+- Provide transparent long-term contribution scenarios with explicit return,
+  inflation, expense, cadence, and timing assumptions.
 - Make a new producer an isolated adapter and contract change, not a pipeline
   rewrite.
 - Define event identity, schemas, partitioning, delivery, retry, and replay
@@ -69,7 +75,9 @@ deduplication, replay, sensitive data, and analytical queries.
 - Persist enough immutable data to reconstruct derived state.
 - Provision cloud infrastructure declaratively with OpenTofu.
 - Deliver workloads through Helm and GitOps.
-- Demonstrate workload identity and least-privilege access in real cloud labs.
+- Model workload identity and least-privilege access, statically validate the
+  provider contracts, and reserve real-cloud proof for separately authorized
+  work outside required graduation.
 - Produce metrics, logs, traces, alerts, runbooks, and failure-test evidence.
 - Replace unsupported "production ready" claims with reproducible verification.
 
@@ -103,10 +111,18 @@ changing existing consumers when I emit an existing canonical event contract.
 As a data consumer, I can query trusted historical portfolio datasets without
 depending on the availability of the original producer.
 
+### Long-term investor
+
+As a long-term investor, I can compare monthly and biweekly contribution
+scenarios, see total contributions separately from growth, and inspect nominal,
+inflation-adjusted, and fee-drag outcomes without receiving a promised return.
+
 ### Cloud engineer
 
-As a cloud engineer, I can deploy the same thin workload to AWS and later explain
-which responsibilities map differently to GCP and Azure.
+As a cloud engineer, I can validate provider-specific infrastructure and local
+service contracts, explain which responsibilities map differently across AWS,
+GCP, and Azure, and state which control-plane behavior remains unproven without
+a separately authorized cloud apply.
 
 ## End-to-end scope
 
@@ -380,26 +396,30 @@ Deliverables:
   encryption, and required managed services.
 - Workload identity with no static AWS access key in Kubernetes.
 - Budget guardrails and documented teardown.
+- Free local Lambda, DynamoDB, and ECS contracts from roadmap v2.
 
 Proof:
 
-- The same workload runs on AWS.
-- An unauthorized workload is denied object access and an authorized workload
-  succeeds.
-- The environment can be destroyed without orphaning in-scope resources.
+- Mocked-provider tests and static policy checks validate the AWS resource,
+  identity, encryption, cost, and teardown contracts.
+- Local service tests prove the portable application behavior and clearly
+  identify AWS control-plane behavior that remains unverified.
+- A paid runtime apply is outside required graduation and needs separate
+  authorization.
 
 ### Slice 7: GCP and Azure comparison
 
 Deliverables:
 
-- Minimal equivalent deployment or focused service labs.
+- Minimal equivalent configurations or focused free local service labs.
 - Decision record comparing identity, networking, storage, managed Kubernetes,
   observability, operations, and cost boundaries.
 
 Proof:
 
-- Differences are demonstrated with provider APIs and runtime evidence, not only
-  a service-name mapping table.
+- Provider configuration and portable behavior are executable where a free
+  local implementation exists; unsupported cloud-runtime differences are
+  documented rather than simulated as fact.
 
 ## Observability and reliability targets
 
@@ -451,7 +471,7 @@ Initial targets are hypotheses to test, not production guarantees:
 | Sensitive financial data leaks | Use synthetic data by default and enforce identity, secret, logging, and retention rules. |
 | Cloud labs create unexpected cost | Apply budgets, TTL labels, small environments, teardown verification, and no unattended multi-cloud clusters. |
 | Existing repository claims exceed evidence | Replace claims with links to tests, measurements, dashboards, or recovery reports. |
-| Emulators hide provider differences | Use them for development only and verify provider-specific behavior in short-lived real-cloud labs. |
+| Emulators hide provider differences | Document the unsupported boundary; reserve real-cloud verification for separately authorized work outside required graduation. |
 
 ## Alternatives considered
 
@@ -505,10 +525,12 @@ The feature is complete when all of the following have reproducible evidence:
       recovery results.
 - [ ] Durable data has a tested backup or reconstruction procedure.
 - [ ] GitOps rollback of a broken application release is demonstrated.
-- [ ] AWS infrastructure is provisioned with OpenTofu and uses workload identity
-      instead of static credentials.
-- [ ] Teardown and cost guardrails are tested for the AWS environment.
-- [ ] GCP and Azure differences are documented from focused runtime exercises.
+- [ ] AWS OpenTofu, identity, encryption, cost, and teardown contracts pass
+      mocked-provider and static policy tests without static credentials.
+- [ ] Free local Lambda, DynamoDB, ECS, and Jenkins paths have executable
+      application, failure, and cleanup evidence.
+- [ ] GCP and Azure differences are documented from executable free contracts
+      where possible, with provider-runtime gaps stated explicitly.
 - [ ] The root documentation no longer makes unqualified production-readiness or
       high-availability claims.
 
@@ -520,9 +542,9 @@ These decisions require follow-up ADRs or implementation evidence:
    single-node Slice 2 learning environment before using it for a resilient
    deployment.
 2. Select JSON Schema serialization details and Apicurio compatibility policy.
-3. Compare the accepted first milestone, Strimzi on EKS, with MSK after the EKS
-   runtime and teardown evidence is recorded. See the
-   [AWS streaming decision](aws-streaming-decision.md).
+3. Compare the accepted Strimzi-on-EKS design with MSK using current provider
+   contracts; treat a runtime comparison as separately authorized evidence.
+   See the [AWS streaming decision](aws-streaming-decision.md).
 4. Define the first public or synthetic data source and its rate limits.
 5. Define canonical transaction and cash-flow events before adding portfolio
    performance calculations; Slice 3 deliberately proves allocation first.
@@ -552,12 +574,16 @@ vertical slice.
 | 1: Reproducible local platform baseline | Complete | [`verification record`](../../../platform/local/VERIFICATION.md) |
 | 2: Producer-to-storage path | Complete | [`contract and failure model`](slice-2-event-contract.md); [`verification record`](../../../platform/local/SLICE2-VERIFICATION.md) |
 | 3: Analytics and visible result | Complete | [`analytics and replay contract`](slice-3-analytics-contract.md); [`verification record`](../../../platform/local/SLICE3-VERIFICATION.md) |
+| 3A: Contribution projection | Implemented | [`projection contract`](contribution-projection-contract.md); 100% Go domain/API coverage and Kubernetes golden request |
 | 4-5 | Not started | Graduation evidence will be linked as each slice begins |
-| 6: AWS deployment | Implemented; runtime pending | [`AWS streaming decision`](aws-streaming-decision.md); [`OpenTofu lab runbook`](../../../infra/opentofu/aws/README.md) |
-| 7: Provider comparison | Not started | Begins after AWS runtime and teardown evidence |
+| 6: AWS deployment | Static implementation complete; paid runtime excluded from graduation | [`AWS streaming decision`](aws-streaming-decision.md); [`OpenTofu lab runbook`](../../../infra/opentofu/aws/README.md) |
+| 7: Provider comparison | Not started | Free executable contracts and explicit provider-runtime gaps |
 
 Routine development follows the
 [free-first lab strategy](free-first-lab-strategy.md): static and mocked tests by
 default, disposable local/CI Kubernetes for end-to-end proof, and separately
 authorized managed-cloud applies only for behavior that cannot be learned
 locally.
+The updated [roadmap v2](roadmap-v2.md) makes the free local Lambda, DynamoDB,
+ECS, and Jenkins learning paths required while excluding paid cloud applies
+from completion.

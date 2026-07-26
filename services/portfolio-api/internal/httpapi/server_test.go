@@ -2,11 +2,14 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/YuLiu003/real-time-analytics-platform/services/portfolio-api/internal/projection"
 )
 
 type fakeReader struct {
@@ -28,6 +31,48 @@ func TestAllocationReturnsValidatedObject(t *testing.T) {
 	}
 	if response.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("allocation response must not be cached")
+	}
+}
+
+func TestContributionProjectionReturnsValidatedScenarios(t *testing.T) {
+	server := New(fakeReader{}, "demo", nil)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/projections/contributions", strings.NewReader(`{
+		"initial_investment":"1000.00",
+		"contribution_amount":"100.00",
+		"contribution_frequency":"monthly",
+		"years":1,
+		"annual_return_pct":"0",
+		"return_variance_pct":"0",
+		"annual_inflation_pct":"0",
+		"annual_expense_ratio_pct":"0"
+	}`))
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("projection response = %d, headers=%v, body=%s", response.Code, response.Header(), response.Body.String())
+	}
+	var result projection.Response
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Scenarios[1].EndingBalance != "2200.00" || result.Disclaimer != projection.Disclaimer {
+		t.Fatalf("projection = %+v", result)
+	}
+}
+
+func TestContributionProjectionRejectsInvalidAndOversizedRequests(t *testing.T) {
+	server := New(fakeReader{}, "demo", nil)
+	for _, body := range []string{
+		`{"initial_investment":"invalid"}`,
+		`{"initial_investment":"0","contribution_amount":"0","contribution_frequency":"monthly","years":0,"annual_return_pct":"0","return_variance_pct":"0","annual_inflation_pct":"0","annual_expense_ratio_pct":"0"}`,
+		strings.Repeat("x", maximumProjectionRequestBytes+1),
+	} {
+		request := httptest.NewRequest(http.MethodPost, "/api/v1/projections/contributions", strings.NewReader(body))
+		response := httptest.NewRecorder()
+		server.Handler().ServeHTTP(response, request)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("projection status = %d, want 400; body=%s", response.Code, response.Body.String())
+		}
 	}
 }
 
@@ -92,7 +137,7 @@ func TestAllocationRejectsUnknownPortfolioAndUnavailableResult(t *testing.T) {
 }
 
 func TestIndexServesDashboardAndRejectsUnknownPath(t *testing.T) {
-	server := New(fakeReader{}, "demo", []byte("<h1>dashboard</h1>"))
+	server := New(fakeReader{}, "demo", []byte(`<h1>dashboard</h1><form id="projection-form"></form>`))
 	for _, tt := range []struct {
 		path string
 		want int
@@ -105,6 +150,9 @@ func TestIndexServesDashboardAndRejectsUnknownPath(t *testing.T) {
 		server.Handler().ServeHTTP(response, request)
 		if response.Code != tt.want {
 			t.Fatalf("GET %s status = %d, want %d", tt.path, response.Code, tt.want)
+		}
+		if tt.path == "/" && !strings.Contains(response.Body.String(), `id="projection-form"`) {
+			t.Fatal("dashboard does not expose the projection form")
 		}
 	}
 }

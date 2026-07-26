@@ -2,12 +2,16 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/YuLiu003/real-time-analytics-platform/services/portfolio-api/internal/projection"
 	"github.com/YuLiu003/real-time-analytics-platform/services/portfolio-api/internal/result"
 )
+
+const maximumProjectionRequestBytes = 8 << 10
 
 type ResultReader interface {
 	Latest(context.Context, string) ([]byte, error)
@@ -28,6 +32,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("GET /readyz", s.ready)
 	mux.HandleFunc("GET /api/v1/portfolios/{portfolio}/allocation", s.allocation)
+	mux.HandleFunc("POST /api/v1/projections/contributions", s.contributionProjection)
 	mux.HandleFunc("GET /", s.index)
 	return mux
 }
@@ -66,6 +71,24 @@ func (s *Server) allocation(writer http.ResponseWriter, request *http.Request) {
 	writer.Header().Set("Cache-Control", "no-store")
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(data)
+}
+
+func (s *Server) contributionProjection(writer http.ResponseWriter, request *http.Request) {
+	request.Body = http.MaxBytesReader(writer, request.Body, maximumProjectionRequestBytes)
+	input, err := projection.Decode(request.Body)
+	if err != nil {
+		http.Error(writer, "invalid projection assumptions", http.StatusBadRequest)
+		return
+	}
+	output, err := projection.Calculate(input)
+	if err != nil {
+		http.Error(writer, "invalid projection assumptions", http.StatusBadRequest)
+		return
+	}
+	writer.Header().Set("Content-Type", "application/json")
+	writer.Header().Set("Cache-Control", "no-store")
+	writer.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(writer).Encode(output)
 }
 
 func (s *Server) index(writer http.ResponseWriter, request *http.Request) {

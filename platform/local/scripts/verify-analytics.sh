@@ -48,7 +48,7 @@ if [[ ! "${baseline_sha}" =~ ^[0-9a-f]{64}$ ]]; then
 fi
 
 verify_user_visible_result() {
-  local api_result dashboard
+  local api_result dashboard projection_request projection_result
   api_result="$(kubectl --context "${context}" get --raw "${service_proxy}/api/v1/portfolios/${PORTFOLIO_ID}/allocation")"
   if [[ "${api_result}" != *'"total_market_value":"6200.00000000"'* ]] || \
     [[ "${api_result}" != *'"instrument":"SP500"'* ]] || [[ "${api_result}" != *'"positions":['* ]]; then
@@ -57,8 +57,22 @@ verify_user_visible_result() {
   fi
   dashboard="$(kubectl --context "${context}" get --raw "${service_proxy}/")"
   if [[ "${dashboard}" != *'<title>Synthetic Fund Portfolio</title>'* ]] || \
-    [[ "${dashboard}" != *'Not live market data'* ]]; then
+    [[ "${dashboard}" != *'Not live market data'* ]] || \
+    [[ "${dashboard}" != *'id="projection-form"'* ]]; then
     printf 'ERROR: dashboard HTML was not served.\n' >&2
+    exit 1
+  fi
+  projection_request='{"initial_investment":"1000.00","contribution_amount":"100.00","contribution_frequency":"monthly","years":1,"annual_return_pct":"0","return_variance_pct":"0","annual_inflation_pct":"0","annual_expense_ratio_pct":"0"}'
+  projection_result="$(
+    printf '%s' "${projection_request}" |
+      kubectl --context "${context}" create \
+        --raw "${service_proxy}/api/v1/projections/contributions" \
+        --filename -
+  )"
+  if [[ "${projection_result}" != *'"ending_balance":"2200.00"'* ]] || \
+    [[ "${projection_result}" != *'"total_contributed":"2200.00"'* ]] || \
+    [[ "${projection_result}" != *'"contribution_timing":"end_of_period"'* ]]; then
+    printf 'ERROR: contribution projection API did not return the deterministic golden result.\n' >&2
     exit 1
   fi
 }

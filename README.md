@@ -27,6 +27,12 @@ The feature's enforceable coverage, CI, kind acceptance, and image-delivery
 policy is defined in the
 [portfolio platform quality gates](docs/features/cloud-native-investment-platform/quality-gates.md).
 
+The first personally useful planning slice adds a tested
+[monthly and biweekly contribution projection](docs/features/cloud-native-investment-platform/contribution-projection-contract.md)
+with conservative, base, and optimistic outcomes, inflation-adjusted value,
+expense-ratio drag, and explicit hypothetical assumptions. The complete
+free-first sequence is tracked in [roadmap v2](docs/features/cloud-native-investment-platform/roadmap-v2.md).
+
 The next stacked slice adds a deployable, cost-guarded
 [AWS EKS platform lab](infra/opentofu/aws/README.md) with OpenTofu, Strimzi
 Kafka, EBS, encrypted S3, ECR, and EKS Pod Identity. It is statically validated;
@@ -38,10 +44,12 @@ the full kind environment can run in an automatically deleted Colima profile,
 while managed-cloud applies are optional, short-lived learning exercises.
 
 ## 🛡️ Status
-- **Build Status**: ✅ All services building successfully
-- **Security Score**: 9/9 (100%) - Production ready
-- **Platform Health**: 11/11 pods operational
-- **Documentation**: Complete and up-to-date
+- **Investment platform slices**: Local lifecycle, event archive, analytics,
+  projection, quality gates, and static AWS lab implemented
+- **Maturity**: Educational cloud-platform capstone; not a production brokerage
+  or financial-advice system
+- **Runtime evidence**: Linked from slice-specific verification records
+- **Documentation**: Actively maintained as each roadmap slice graduates
 
 For detailed implementation status, see [Implementation Summary](IMPLEMENTATION_SUMMARY.md)
 
