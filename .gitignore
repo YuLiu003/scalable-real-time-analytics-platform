@@ -173,6 +173,7 @@ test_*.py
 # broad temporary-file rule above without silently dropping real tests from CI.
 !services/**/tests/test_*.py
 !tools/**/test_*.py
+!scripts/ci/tests/test_*.py
 
 # Node.js (if any JavaScript is used in visualization)
 node_modules/
