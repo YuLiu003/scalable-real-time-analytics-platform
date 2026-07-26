@@ -172,6 +172,7 @@ test_*.py
 # Test modules under a service's canonical test suite are source code. Keep the
 # broad temporary-file rule above without silently dropping real tests from CI.
 !services/**/tests/test_*.py
+!tools/**/test_*.py
 
 # Node.js (if any JavaScript is used in visualization)
 node_modules/
