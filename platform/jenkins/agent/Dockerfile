@@ -29,8 +29,8 @@ COPY tools/codex-plugins/cloud-platform-engineering/mcp/requirements-dev.txt /tm
 RUN set -eux; \
     apt-get update; \
     apt-get install --yes --no-install-recommends \
-      bash ca-certificates curl git jq make openjdk-21-jre-headless openssh-client \
-      procps tar unzip; \
+      bash ca-certificates curl gcc git jq libc6-dev make openjdk-21-jre-headless \
+      openssh-client procps tar unzip; \
     rm -rf /var/lib/apt/lists/*; \
     curl --fail --silent --show-error --location \
       "https://go.dev/dl/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" \
@@ -68,5 +68,6 @@ RUN set -eux; \
 USER 10000:10000
 WORKDIR /home/jenkins/agent
 
-RUN java -version && python --version && go version && docker --version && \
+RUN java -version && python --version && go version && \
+    test "$(go env CGO_ENABLED)" = 1 && gcc --version && docker --version && \
     kind version && kubectl version --client=true && helm version --short && tofu version

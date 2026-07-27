@@ -98,6 +98,8 @@ class JenkinsContractTests(unittest.TestCase):
         first_from = next(index for index, line in enumerate(lines) if line.startswith("FROM "))
         self.assertIn("ARG DOCKER_CLI_IMAGE", lines[:first_from])
         self.assertIn("ARG PYTHON_IMAGE", lines[:first_from])
+        self.assertIn("gcc git jq libc6-dev", text)
+        self.assertIn('test "$(go env CGO_ENABLED)" = 1', text)
         self.assertIn("openjdk-21-jre-headless", text)
 
 
