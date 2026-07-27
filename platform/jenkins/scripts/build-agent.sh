@@ -49,20 +49,33 @@ case "${architecture}" in
     ;;
 esac
 
-docker build \
-  --file "${jenkins_dir}/agent/Dockerfile" \
-  --tag "${JENKINS_AGENT_IMAGE}" \
-  --build-arg "TARGETARCH=${target_arch}" \
-  --build-arg "DOCKER_CLI_IMAGE=${docker_cli_image}" \
-  --build-arg "PYTHON_IMAGE=${PYTHON_IMAGE}" \
-  --build-arg "GO_VERSION=${GO_VERSION}" \
-  --build-arg "GO_SHA256=${go_sha256}" \
-  --build-arg "KIND_VERSION=${KIND_VERSION}" \
-  --build-arg "KUBERNETES_VERSION=${KUBERNETES_VERSION}" \
-  --build-arg "KUBECTL_SHA256=${kubectl_sha256}" \
-  --build-arg "HELM_VERSION=${HELM_VERSION}" \
-  --build-arg "HELM_SHA256=${helm_sha256}" \
-  --build-arg "OPENTOFU_VERSION=${OPENTOFU_VERSION}" \
-  --build-arg "OPENTOFU_SHA256=${tofu_sha256}" \
-  --build-arg "ACTIONLINT_VERSION=${ACTIONLINT_VERSION}" \
+build_args=(
+  --file "${jenkins_dir}/agent/Dockerfile"
+  --tag "${JENKINS_AGENT_IMAGE}"
+  --build-arg "TARGETARCH=${target_arch}"
+  --build-arg "DOCKER_CLI_IMAGE=${docker_cli_image}"
+  --build-arg "PYTHON_IMAGE=${PYTHON_IMAGE}"
+  --build-arg "GO_VERSION=${GO_VERSION}"
+  --build-arg "GO_SHA256=${go_sha256}"
+  --build-arg "KIND_VERSION=${KIND_VERSION}"
+  --build-arg "KUBERNETES_VERSION=${KUBERNETES_VERSION}"
+  --build-arg "KUBECTL_SHA256=${kubectl_sha256}"
+  --build-arg "HELM_VERSION=${HELM_VERSION}"
+  --build-arg "HELM_SHA256=${helm_sha256}"
+  --build-arg "OPENTOFU_VERSION=${OPENTOFU_VERSION}"
+  --build-arg "OPENTOFU_SHA256=${tofu_sha256}"
+  --build-arg "ACTIONLINT_VERSION=${ACTIONLINT_VERSION}"
   "${build_context}"
+)
+for attempt in 1 2 3; do
+  if docker build "${build_args[@]}"; then
+    exit 0
+  fi
+  if (( attempt == 3 )); then
+    printf 'ERROR: Jenkins agent image build failed after three attempts.\n' >&2
+    exit 1
+  fi
+  printf 'WARN: Jenkins agent image build attempt %d failed; retrying cached layers.\n' \
+    "${attempt}" >&2
+  sleep "$((attempt * 5))"
+done

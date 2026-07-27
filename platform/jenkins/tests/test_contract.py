@@ -69,6 +69,7 @@ class JenkinsContractTests(unittest.TestCase):
         text = (JENKINS_DIR / "scripts" / "build-agent.sh").read_text(encoding="utf-8")
         self.assertIn("jenkins-agent-context.", text)
         self.assertIn('"${build_context}"', text)
+        self.assertIn("for attempt in 1 2 3", text)
         self.assertNotIn('  "${repo_root}"\n', text)
 
     def test_bootstrap_loads_only_the_locally_built_agent(self) -> None:
