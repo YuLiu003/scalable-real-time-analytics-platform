@@ -76,6 +76,8 @@ class JenkinsContractTests(unittest.TestCase):
     def test_bootstrap_loads_only_the_locally_built_agent(self) -> None:
         text = (JENKINS_DIR / "scripts" / "bootstrap.sh").read_text(encoding="utf-8")
         self.assertIn('kind load docker-image "${JENKINS_AGENT_IMAGE}"', text)
+        self.assertIn("for attempt in 1 2", text)
+        self.assertIn("if (( jenkins_ready == 0 ))", text)
         self.assertNotIn('kind load docker-image "${JENKINS_CONTROLLER_IMAGE}"', text)
         self.assertNotIn('kind load docker-image "${DOCKER_DIND_IMAGE}"', text)
 

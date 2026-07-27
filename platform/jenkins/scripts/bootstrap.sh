@@ -36,12 +36,26 @@ kubectl --context "${JENKINS_CONTEXT}" --namespace "${JENKINS_NAMESPACE}" \
 
 helm repo add jenkins https://charts.jenkins.io --force-update
 helm repo update jenkins
-helm upgrade --install "${JENKINS_RELEASE}" jenkins/jenkins \
-  --version "${JENKINS_CHART_VERSION}" \
-  --kube-context "${JENKINS_CONTEXT}" \
-  --namespace "${JENKINS_NAMESPACE}" \
-  --values "${jenkins_dir}/helm/values.yaml" \
-  --wait \
-  --timeout 15m
+jenkins_ready=0
+for attempt in 1 2; do
+  if helm upgrade --install "${JENKINS_RELEASE}" jenkins/jenkins \
+    --version "${JENKINS_CHART_VERSION}" \
+    --kube-context "${JENKINS_CONTEXT}" \
+    --namespace "${JENKINS_NAMESPACE}" \
+    --values "${jenkins_dir}/helm/values.yaml" \
+    --wait \
+    --timeout 15m; then
+    jenkins_ready=1
+    break
+  fi
+  if (( attempt < 2 )); then
+    printf 'Jenkins install attempt %d failed; retrying with cached image layers.\n' \
+      "${attempt}" >&2
+  fi
+done
+if (( jenkins_ready == 0 )); then
+  printf 'ERROR: Jenkins did not become ready after two bounded attempts.\n' >&2
+  exit 1
+fi
 
 "${script_dir}/verify.sh"
