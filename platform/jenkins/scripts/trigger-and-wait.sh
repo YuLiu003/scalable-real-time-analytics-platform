@@ -13,8 +13,10 @@ port="${JENKINS_LOCAL_PORT:-18080}"
 log_file="$(mktemp)"
 netrc_file="$(mktemp)"
 cookie_file="$(mktemp)"
-chmod 0600 "${netrc_file}" "${cookie_file}"
+headers_file="$(mktemp)"
+chmod 0600 "${netrc_file}" "${cookie_file}" "${headers_file}"
 printf 'machine 127.0.0.1 login admin password %s\n' "${admin_password}" >"${netrc_file}"
+base_url="http://127.0.0.1:${port}"
 curl_args=(
   --fail-with-body
   --silent
@@ -29,39 +31,74 @@ kubectl --context "${JENKINS_CONTEXT}" --namespace "${JENKINS_NAMESPACE}" \
 port_forward_pid=$!
 cleanup() {
   kill "${port_forward_pid}" >/dev/null 2>&1 || true
-  rm -f "${log_file}" "${netrc_file}" "${cookie_file}"
+  rm -f "${log_file}" "${netrc_file}" "${cookie_file}" "${headers_file}"
 }
 trap cleanup EXIT
 
 ready=0
 for _ in {1..60}; do
   if curl "${curl_args[@]}" \
-    "http://127.0.0.1:${port}/api/json" >/dev/null; then
+    "${base_url}/api/json" >/dev/null 2>&1; then
     ready=1
     break
   fi
   sleep 1
 done
 if (( ready == 0 )); then
-  curl "${curl_args[@]}" "http://127.0.0.1:${port}/whoAmI/api/json" >&2 || true
+  curl "${curl_args[@]}" "${base_url}/whoAmI/api/json" >&2 || true
   cat "${log_file}" >&2
   printf 'ERROR: Jenkins API did not accept the trusted lab administrator.\n' >&2
   exit 1
 fi
 
 crumb_json="$(curl "${curl_args[@]}" \
-  "http://127.0.0.1:${port}/crumbIssuer/api/json")"
+  "${base_url}/crumbIssuer/api/json")"
 crumb_field="$(printf '%s' "${crumb_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["crumbRequestField"])')"
 crumb_value="$(printf '%s' "${crumb_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["crumb"])')"
 
 curl "${curl_args[@]}" \
   --header "${crumb_field}: ${crumb_value}" \
+  --dump-header "${headers_file}" \
+  --output /dev/null \
   --request POST \
-  "http://127.0.0.1:${port}/job/investment-platform-presubmit/build"
+  "${base_url}/job/investment-platform-presubmit/build"
 
+queue_url="$(awk 'BEGIN { IGNORECASE=1 } /^Location:/ { print $2 }' "${headers_file}" |
+  tr -d '\r' | tail -n 1)"
+if [[ ! "${queue_url}" =~ ^"${base_url}"/queue/item/[0-9]+/$ ]]; then
+  printf 'ERROR: Jenkins returned an invalid queue location: %s\n' "${queue_url}" >&2
+  exit 1
+fi
+
+build_number=""
+for _ in {1..120}; do
+  queue_state="$(curl "${curl_args[@]}" "${queue_url}api/json" |
+    python3 -c 'import json,sys
+item=json.load(sys.stdin)
+print("CANCELED" if item.get("cancelled") else item.get("executable", {}).get("number", "QUEUED"))')"
+  case "${queue_state}" in
+    CANCELED)
+      printf 'ERROR: Jenkins canceled the queued pipeline.\n' >&2
+      exit 1
+      ;;
+    QUEUED)
+      sleep 2
+      ;;
+    *)
+      build_number="${queue_state}"
+      break
+      ;;
+  esac
+done
+if [[ ! "${build_number}" =~ ^[0-9]+$ ]]; then
+  printf 'ERROR: Jenkins did not start the queued pipeline within four minutes.\n' >&2
+  exit 1
+fi
+
+build_url="${base_url}/job/investment-platform-presubmit/${build_number}"
 for _ in {1..180}; do
   result="$(curl "${curl_args[@]}" \
-    "http://127.0.0.1:${port}/job/investment-platform-presubmit/lastBuild/api/json" |
+    "${build_url}/api/json" |
     python3 -c 'import json,sys; print(json.load(sys.stdin).get("result") or "RUNNING")')"
   case "${result}" in
     SUCCESS)
@@ -73,7 +110,7 @@ for _ in {1..180}; do
       ;;
     *)
       curl "${curl_args[@]}" \
-        "http://127.0.0.1:${port}/job/investment-platform-presubmit/lastBuild/consoleText" >&2
+        "${build_url}/consoleText" >&2
       printf 'ERROR: Jenkins pipeline finished with %s.\n' "${result}" >&2
       exit 1
       ;;

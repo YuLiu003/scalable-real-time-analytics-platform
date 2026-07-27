@@ -84,6 +84,9 @@ class JenkinsContractTests(unittest.TestCase):
         )
         self.assertIn("--netrc-file", text)
         self.assertIn("--cookie-jar", text)
+        self.assertIn("--dump-header", text)
+        self.assertIn("/queue/item/", text)
+        self.assertNotIn("/lastBuild/", text)
         self.assertNotIn('--user "admin:${admin_password}"', text)
 
     def test_agent_base_image_arguments_are_global(self) -> None:
