@@ -70,6 +70,14 @@ class JenkinsContractTests(unittest.TestCase):
         )
         self.assertEqual(text.count("retry(3)"), 4)
 
+    def test_job_scm_is_shallow_and_branch_bounded(self) -> None:
+        text = (JENKINS_DIR / "helm" / "values.yaml").read_text(encoding="utf-8")
+        self.assertIn("refspec('+refs/heads/feature/presubmit-quality-gates:", text)
+        self.assertIn("shallow(true)", text)
+        self.assertIn("noTags(true)", text)
+        self.assertIn("depth(1)", text)
+        self.assertIn("timeout(5)", text)
+
     def test_agent_build_uses_a_narrow_temporary_context(self) -> None:
         text = (JENKINS_DIR / "scripts" / "build-agent.sh").read_text(encoding="utf-8")
         self.assertIn("jenkins-agent-context.", text)
@@ -95,6 +103,8 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertIn("/queue/item/", text)
         self.assertNotIn("/lastBuild/", text)
         self.assertNotIn('--user "admin:${admin_password}"', text)
+        self.assertIn('JENKINS_BUILD_TIMEOUT_SECONDS:-4200', text)
+        self.assertIn("while (( SECONDS < build_deadline ))", text)
 
     def test_agent_base_image_arguments_are_global(self) -> None:
         text = (JENKINS_DIR / "agent" / "Dockerfile").read_text(encoding="utf-8")

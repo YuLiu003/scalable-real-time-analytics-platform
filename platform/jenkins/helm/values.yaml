@@ -102,8 +102,17 @@ controller:
                     git {
                       remote {
                         url('https://github.com/YuLiu003/scalable-real-time-analytics-platform.git')
+                        refspec('+refs/heads/feature/presubmit-quality-gates:refs/remotes/origin/feature/presubmit-quality-gates')
                       }
                       branch('*/feature/presubmit-quality-gates')
+                      extensions {
+                        cloneOptions {
+                          shallow(true)
+                          noTags(true)
+                          depth(1)
+                          timeout(5)
+                        }
+                      }
                     }
                   }
                   scriptPath('Jenkinsfile')

@@ -96,7 +96,14 @@ if [[ ! "${build_number}" =~ ^[0-9]+$ ]]; then
 fi
 
 build_url="${base_url}/job/investment-platform-presubmit/${build_number}"
-for _ in {1..180}; do
+build_timeout_seconds="${JENKINS_BUILD_TIMEOUT_SECONDS:-4200}"
+if [[ ! "${build_timeout_seconds}" =~ ^[0-9]+$ ]] ||
+  (( build_timeout_seconds < 60 || build_timeout_seconds > 4200 )); then
+  printf 'ERROR: JENKINS_BUILD_TIMEOUT_SECONDS must be between 60 and 4200.\n' >&2
+  exit 2
+fi
+build_deadline=$((SECONDS + build_timeout_seconds))
+while (( SECONDS < build_deadline )); do
   result="$(curl "${curl_args[@]}" \
     "${build_url}/api/json" |
     python3 -c 'import json,sys; print(json.load(sys.stdin).get("result") or "RUNNING")')"
@@ -117,5 +124,6 @@ for _ in {1..180}; do
   esac
 done
 
-printf 'ERROR: Jenkins pipeline did not finish within 30 minutes.\n' >&2
+printf 'ERROR: Jenkins pipeline did not finish within %s seconds.\n' \
+  "${build_timeout_seconds}" >&2
 exit 1
