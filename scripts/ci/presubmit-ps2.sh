@@ -26,6 +26,8 @@ if [[ "$(uname -s)" == "Darwin" && "${CI:-false}" != "true" ]]; then
   exit
 fi
 
+export KIND_CLUSTER_CONFIG="${KIND_CLUSTER_CONFIG:-${local_dir}/kind/ci-cluster.yaml}"
+
 if kind get clusters | grep -Fxq "${CLUSTER_NAME}"; then
   printf 'ERROR: refusing to reuse or delete existing cluster %s.\n' "${CLUSTER_NAME}" >&2
   exit 1

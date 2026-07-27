@@ -4,6 +4,7 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOCAL_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_ROOT="$(cd "${LOCAL_DIR}/../.." && pwd)"
+cluster_config="${KIND_CLUSTER_CONFIG:-${LOCAL_DIR}/kind/cluster.yaml}"
 
 # shellcheck disable=SC1091
 source "${LOCAL_DIR}/versions.lock"
@@ -16,7 +17,7 @@ else
   printf 'Creating kind cluster %s with %s...\n' "${CLUSTER_NAME}" "${KIND_NODE_IMAGE}"
   kind create cluster \
     --name "${CLUSTER_NAME}" \
-    --config "${LOCAL_DIR}/kind/cluster.yaml" \
+    --config "${cluster_config}" \
     --image "${KIND_NODE_IMAGE}" \
     --wait 180s
 fi

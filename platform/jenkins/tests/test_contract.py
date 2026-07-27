@@ -115,6 +115,21 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertIn('JENKINS_COLIMA_MEMORY_GIB:-16', text)
         self.assertIn('colima delete "${profile}" --force --data', text)
 
+    def test_ps2_uses_a_bounded_multi_node_ci_cluster(self) -> None:
+        config = yaml.safe_load(
+            (ROOT / "platform" / "local" / "kind" / "ci-cluster.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            [node["role"] for node in config["nodes"]],
+            ["control-plane", "worker"],
+        )
+        text = (ROOT / "scripts" / "ci" / "presubmit-ps2.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("kind/ci-cluster.yaml", text)
+
 
 if __name__ == "__main__":
     unittest.main()
