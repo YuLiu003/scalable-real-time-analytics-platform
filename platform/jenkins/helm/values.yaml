@@ -63,6 +63,7 @@ controller:
     - github-branch-source:1967.1970.vd86979736546
     - matrix-auth:3.3
     - prometheus:856.vc9e3d6e4b_b_9e
+    - timestamper:1.30
   installLatestPlugins: false
   installLatestSpecifiedPlugins: false
   initializeOnce: false

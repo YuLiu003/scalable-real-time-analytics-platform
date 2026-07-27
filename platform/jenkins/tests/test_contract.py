@@ -35,6 +35,7 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertTrue(controller["disableRememberMe"])
         self.assertFalse(controller["installLatestPlugins"])
         self.assertFalse(controller["legacyRemotingSecurityEnabled"])
+        self.assertIn("timestamper:1.30", controller["installPlugins"])
         self.assertFalse(values["rbac"]["readSecrets"])
         self.assertFalse(values["serviceAccountAgent"]["automountServiceAccountToken"])
         self.assertTrue(values["networkPolicy"]["enabled"])
