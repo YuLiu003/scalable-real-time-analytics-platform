@@ -27,6 +27,7 @@ SECRET_MARKERS = (
 )
 STAGE_COMMANDS = {
     "PS1": (
+        ("make", "-C", "platform/jenkins", "quality"),
         ("make", "-C", "platform/local", "quality"),
         ("tools/codex-plugins/cloud-platform-engineering/scripts/quality.sh",),
         ("scripts/ci/presubmit-quality.sh",),
@@ -184,8 +185,12 @@ def check_jenkins_pipeline(paths: Sequence[str]) -> None:
     for forbidden in ("agent any", "withCredentials(", "credentials("):
         if forbidden in text:
             failures.append(f"Jenkinsfile: forbidden untrusted-PR construct: {forbidden}")
-    if "linux && ephemeral && untrusted" not in text:
-        failures.append("Jenkinsfile: build must use the isolated untrusted-agent label")
+    for label in ("jenkins-verify", "jenkins-integration"):
+        if label not in text:
+            failures.append(f"Jenkinsfile: missing static isolated agent label: {label}")
+    for forbidden in ("podTemplate(", "privileged:"):
+        if forbidden in text:
+            failures.append(f"Jenkinsfile: agent privilege must not be defined by repository code: {forbidden}")
     if failures:
         raise PresubmitError("\n".join(failures))
 

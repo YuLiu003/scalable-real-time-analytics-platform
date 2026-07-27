@@ -1,7 +1,5 @@
 pipeline {
-    agent {
-        label 'linux && ephemeral && untrusted'
-    }
+    agent none
 
     options {
         buildDiscarder(logRotator(numToKeepStr: '20'))
@@ -15,44 +13,58 @@ pipeline {
         CI = 'true'
         PYTHONDONTWRITEBYTECODE = '1'
         PRESUBMIT_REQUIRE_PR_CHECKLIST = 'false'
+        PRESUBMIT_BASE_REF = 'origin/main'
     }
 
     stages {
-        stage('Checkout') {
+        stage('PS0') {
+            agent {
+                label 'jenkins-verify'
+            }
             steps {
                 deleteDir()
                 checkout scm
-            }
-        }
-
-        stage('PS0') {
-            steps {
+                sh 'git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main'
                 sh 'python3 scripts/ci/presubmit.py PS0'
+            }
+            post {
+                always {
+                    deleteDir()
+                }
             }
         }
 
         stage('PS1') {
+            agent {
+                label 'jenkins-verify'
+            }
             steps {
+                deleteDir()
+                checkout scm
                 sh 'python3 scripts/ci/presubmit.py PS1'
+            }
+            post {
+                always {
+                    deleteDir()
+                }
             }
         }
 
         stage('PS2') {
-            when {
-                anyOf {
-                    changeRequest target: 'main'
-                    branch 'main'
-                }
+            agent {
+                label 'jenkins-integration'
             }
             steps {
+                deleteDir()
+                checkout scm
+                sh 'scripts/ci/wait-for-docker.sh'
                 sh 'python3 scripts/ci/presubmit.py PS2'
             }
-        }
-    }
-
-    post {
-        always {
-            deleteDir()
+            post {
+                always {
+                    deleteDir()
+                }
+            }
         }
     }
 }

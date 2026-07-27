@@ -186,13 +186,21 @@ class PresubmitTests(unittest.TestCase):
         presubmit.check_jenkins_pipeline(["README.md"])
         self.write(
             "Jenkinsfile",
-            "agent { label 'linux && ephemeral && untrusted' }\n"
+            "agent none\nlabel 'jenkins-verify'\nlabel 'jenkins-integration'\n"
             "stage('PS0') {}\nstage('PS1') {}\nstage('PS2') {}\n",
         )
         presubmit.check_jenkins_pipeline(["Jenkinsfile"])
 
         self.write("Jenkinsfile", "agent any\nstage('PS0') {}\nwithCredentials([]) {}\n")
         with self.assertRaisesRegex(presubmit.PresubmitError, "missing PS1"):
+            presubmit.check_jenkins_pipeline(["Jenkinsfile"])
+
+        self.write(
+            "Jenkinsfile",
+            "agent none\nlabel 'jenkins-verify'\nlabel 'jenkins-integration'\n"
+            "stage('PS0') {}\nstage('PS1') {}\nstage('PS2') {}\npodTemplate([]) {}\n",
+        )
+        with self.assertRaisesRegex(presubmit.PresubmitError, "agent privilege"):
             presubmit.check_jenkins_pipeline(["Jenkinsfile"])
 
     def test_pr_checklist_policy(self) -> None:
