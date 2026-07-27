@@ -188,10 +188,10 @@ agent:
             image: docker:29.1.5-dind
             alwaysPullImage: false
             privileged: true
-            resourceRequestCpu: "1"
-            resourceRequestMemory: "2Gi"
-            resourceLimitCpu: "3"
-            resourceLimitMemory: "5Gi"
+            resourceRequestCpu: "4"
+            resourceRequestMemory: "8Gi"
+            resourceLimitCpu: "6"
+            resourceLimitMemory: "10Gi"
             envVars:
               - envVar:
                   key: DOCKER_TLS_CERTDIR

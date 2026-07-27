@@ -23,6 +23,7 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertRegex(values["PYTHON_IMAGE"], r"@sha256:[0-9a-f]{64}$")
         self.assertRegex(values["DOCKER_CLI_AMD64_IMAGE"], r"@sha256:[0-9a-f]{64}$")
         self.assertRegex(values["DOCKER_CLI_ARM64_IMAGE"], r"@sha256:[0-9a-f]{64}$")
+        self.assertRegex(values["JENKINS_KIND_NODE_IMAGE"], r"@sha256:[0-9a-f]{64}$")
 
     def test_controller_and_agent_security(self) -> None:
         values = yaml.safe_load(
@@ -54,6 +55,8 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertIn("agentContainer: jnlp", templates["integration"])
         self.assertIn("automountServiceAccountToken: false", templates["verification"])
         self.assertIn("automountServiceAccountToken: false", templates["integration"])
+        self.assertIn('resourceRequestMemory: "8Gi"', templates["integration"])
+        self.assertIn('resourceLimitMemory: "10Gi"', templates["integration"])
 
     def test_jenkinsfile_uses_only_static_agent_labels(self) -> None:
         text = (ROOT / "Jenkinsfile").read_text(encoding="utf-8")
@@ -101,7 +104,16 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertIn("ARG PYTHON_IMAGE", lines[:first_from])
         self.assertIn("gcc git jq libc6-dev", text)
         self.assertIn('test "$(go env CGO_ENABLED)" = 1', text)
+        self.assertIn("procps ripgrep tar", text)
         self.assertIn("openjdk-21-jre-headless", text)
+
+    def test_ephemeral_vm_capacity_and_cleanup_are_explicit(self) -> None:
+        text = (JENKINS_DIR / "scripts" / "run-ephemeral.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('JENKINS_COLIMA_CPUS:-8', text)
+        self.assertIn('JENKINS_COLIMA_MEMORY_GIB:-16', text)
+        self.assertIn('colima delete "${profile}" --force --data', text)
 
 
 if __name__ == "__main__":

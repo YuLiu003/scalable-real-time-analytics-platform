@@ -34,8 +34,8 @@ docker_config="$(mktemp -d "${TMPDIR:-/tmp}/jenkins-docker-config.XXXXXX")"
 colima start "${profile}" \
   --activate=false \
   --runtime docker \
-  --cpus "${JENKINS_COLIMA_CPUS:-6}" \
-  --memory "${JENKINS_COLIMA_MEMORY_GIB:-12}" \
+  --cpus "${JENKINS_COLIMA_CPUS:-8}" \
+  --memory "${JENKINS_COLIMA_MEMORY_GIB:-16}" \
   --disk "${JENKINS_COLIMA_DISK_GIB:-50}"
 
 export DOCKER_HOST="unix://${HOME}/.colima/${profile}/docker.sock"

@@ -30,7 +30,7 @@ RUN set -eux; \
     apt-get update; \
     apt-get install --yes --no-install-recommends \
       bash ca-certificates curl gcc git jq libc6-dev make openjdk-21-jre-headless \
-      openssh-client procps tar unzip; \
+      openssh-client procps ripgrep tar unzip; \
     rm -rf /var/lib/apt/lists/*; \
     curl --fail --silent --show-error --location \
       "https://go.dev/dl/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" \
@@ -69,5 +69,5 @@ USER 10000:10000
 WORKDIR /home/jenkins/agent
 
 RUN java -version && python --version && go version && \
-    test "$(go env CGO_ENABLED)" = 1 && gcc --version && docker --version && \
+    test "$(go env CGO_ENABLED)" = 1 && gcc --version && rg --version && docker --version && \
     kind version && kubectl version --client=true && helm version --short && tofu version

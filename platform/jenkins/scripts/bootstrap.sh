@@ -19,6 +19,7 @@ fi
 kind create cluster \
   --name "${JENKINS_CLUSTER_NAME}" \
   --config "${jenkins_dir}/kind/cluster.yaml" \
+  --image "${JENKINS_KIND_NODE_IMAGE}" \
   --wait 180s
 kind load docker-image "${JENKINS_AGENT_IMAGE}" --name "${JENKINS_CLUSTER_NAME}"
 
