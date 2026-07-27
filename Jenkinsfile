@@ -23,8 +23,12 @@ pipeline {
             }
             steps {
                 deleteDir()
-                checkout scm
-                sh 'git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main'
+                retry(3) {
+                    checkout scm
+                }
+                retry(3) {
+                    sh 'git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main'
+                }
                 sh 'python3 scripts/ci/presubmit.py PS0'
             }
             post {
@@ -40,7 +44,9 @@ pipeline {
             }
             steps {
                 deleteDir()
-                checkout scm
+                retry(3) {
+                    checkout scm
+                }
                 sh 'python3 scripts/ci/presubmit.py PS1'
             }
             post {
@@ -56,7 +62,9 @@ pipeline {
             }
             steps {
                 deleteDir()
-                checkout scm
+                retry(3) {
+                    checkout scm
+                }
                 sh 'scripts/ci/wait-for-docker.sh'
                 sh 'python3 scripts/ci/presubmit.py PS2'
             }

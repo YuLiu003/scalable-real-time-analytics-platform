@@ -65,6 +65,7 @@ class JenkinsContractTests(unittest.TestCase):
             set(re.findall(r"stage\('(PS[0-2])'\)", text)),
             {"PS0", "PS1", "PS2"},
         )
+        self.assertEqual(text.count("retry(3)"), 4)
 
     def test_agent_build_uses_a_narrow_temporary_context(self) -> None:
         text = (JENKINS_DIR / "scripts" / "build-agent.sh").read_text(encoding="utf-8")
