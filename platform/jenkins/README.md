@@ -33,7 +33,10 @@ The ephemeral target creates a dedicated Colima VM, deploys Jenkins to kind,
 builds the immutable agent toolchain, runs PS0/PS1/PS2, then deletes the VM and
 all container data. It defaults to 8 CPUs and 16 GiB because PS2 creates a
 single-node nested functional-test cluster; `JENKINS_COLIMA_CPUS` and
-`JENKINS_COLIMA_MEMORY_GIB` can override those values.
+`JENKINS_COLIMA_MEMORY_GIB` can override those values. A clean run can take up
+to two hours on a slow connection because it downloads pinned infrastructure
+images and providers. The outer cluster preloads the integration-agent images
+before starting the bounded Jenkins build.
 
 The nested CI topology is deliberately smaller than the normal three-node local
 topology because it runs inside privileged DinD. Multi-node scheduling remains

@@ -183,7 +183,7 @@ agent:
         serviceAccount: jenkins-agent
         showRawYaml: false
         podRetention: never
-        activeDeadlineSeconds: 3600
+        activeDeadlineSeconds: 7200
         idleMinutes: 0
         containers:
           - name: jnlp

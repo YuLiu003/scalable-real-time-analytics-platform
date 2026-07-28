@@ -15,6 +15,7 @@ if kind get clusters | grep -Fxq "${JENKINS_CLUSTER_NAME}"; then
 fi
 
 "${script_dir}/build-agent.sh"
+docker pull "${DOCKER_DIND_IMAGE}"
 
 kind create cluster \
   --name "${JENKINS_CLUSTER_NAME}" \
@@ -22,6 +23,7 @@ kind create cluster \
   --image "${JENKINS_KIND_NODE_IMAGE}" \
   --wait 180s
 kind load docker-image "${JENKINS_AGENT_IMAGE}" --name "${JENKINS_CLUSTER_NAME}"
+kind load docker-image "${DOCKER_DIND_IMAGE}" --name "${JENKINS_CLUSTER_NAME}"
 
 kubectl --context "${JENKINS_CONTEXT}" create namespace "${JENKINS_NAMESPACE}"
 kubectl --context "${JENKINS_CONTEXT}" label namespace "${JENKINS_NAMESPACE}" \

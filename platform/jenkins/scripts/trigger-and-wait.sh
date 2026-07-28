@@ -96,10 +96,10 @@ if [[ ! "${build_number}" =~ ^[0-9]+$ ]]; then
 fi
 
 build_url="${base_url}/job/investment-platform-presubmit/${build_number}"
-build_timeout_seconds="${JENKINS_BUILD_TIMEOUT_SECONDS:-4200}"
+build_timeout_seconds="${JENKINS_BUILD_TIMEOUT_SECONDS:-7800}"
 if [[ ! "${build_timeout_seconds}" =~ ^[0-9]+$ ]] ||
-  (( build_timeout_seconds < 60 || build_timeout_seconds > 4200 )); then
-  printf 'ERROR: JENKINS_BUILD_TIMEOUT_SECONDS must be between 60 and 4200.\n' >&2
+  (( build_timeout_seconds < 60 || build_timeout_seconds > 9000 )); then
+  printf 'ERROR: JENKINS_BUILD_TIMEOUT_SECONDS must be between 60 and 9000.\n' >&2
   exit 2
 fi
 build_deadline=$((SECONDS + build_timeout_seconds))

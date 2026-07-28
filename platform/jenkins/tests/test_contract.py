@@ -57,6 +57,7 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertIn("automountServiceAccountToken: false", templates["integration"])
         self.assertIn('resourceRequestMemory: "8Gi"', templates["integration"])
         self.assertIn('resourceLimitMemory: "10Gi"', templates["integration"])
+        self.assertIn("activeDeadlineSeconds: 7200", templates["integration"])
 
     def test_jenkinsfile_uses_only_static_agent_labels(self) -> None:
         text = (ROOT / "Jenkinsfile").read_text(encoding="utf-8")
@@ -69,6 +70,7 @@ class JenkinsContractTests(unittest.TestCase):
             {"PS0", "PS1", "PS2"},
         )
         self.assertEqual(text.count("retry(3)"), 4)
+        self.assertIn("timeout(time: 120, unit: 'MINUTES')", text)
         self.assertIn(
             "git fetch --no-tags --unshallow origin +refs/heads/main:", text
         )
@@ -89,13 +91,14 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertIn("for attempt in 1 2 3", text)
         self.assertNotIn('  "${repo_root}"\n', text)
 
-    def test_bootstrap_loads_only_the_locally_built_agent(self) -> None:
+    def test_bootstrap_preloads_required_agent_images(self) -> None:
         text = (JENKINS_DIR / "scripts" / "bootstrap.sh").read_text(encoding="utf-8")
         self.assertIn('kind load docker-image "${JENKINS_AGENT_IMAGE}"', text)
+        self.assertIn('docker pull "${DOCKER_DIND_IMAGE}"', text)
+        self.assertIn('kind load docker-image "${DOCKER_DIND_IMAGE}"', text)
         self.assertIn("for attempt in 1 2", text)
         self.assertIn("if (( jenkins_ready == 0 ))", text)
         self.assertNotIn('kind load docker-image "${JENKINS_CONTROLLER_IMAGE}"', text)
-        self.assertNotIn('kind load docker-image "${DOCKER_DIND_IMAGE}"', text)
 
     def test_trigger_keeps_credentials_out_of_process_arguments(self) -> None:
         text = (JENKINS_DIR / "scripts" / "trigger-and-wait.sh").read_text(
@@ -107,7 +110,7 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertIn("/queue/item/", text)
         self.assertNotIn("/lastBuild/", text)
         self.assertNotIn('--user "admin:${admin_password}"', text)
-        self.assertIn('JENKINS_BUILD_TIMEOUT_SECONDS:-4200', text)
+        self.assertIn('JENKINS_BUILD_TIMEOUT_SECONDS:-7800', text)
         self.assertIn("while (( SECONDS < build_deadline ))", text)
 
     def test_agent_base_image_arguments_are_global(self) -> None:
