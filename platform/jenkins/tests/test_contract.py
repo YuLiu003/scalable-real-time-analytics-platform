@@ -80,6 +80,7 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertIn("noTags(true)", text)
         self.assertIn("depth(1)", text)
         self.assertIn("timeout(5)", text)
+        self.assertIn("honorRefspec(true)", text)
 
     def test_agent_build_uses_a_narrow_temporary_context(self) -> None:
         text = (JENKINS_DIR / "scripts" / "build-agent.sh").read_text(encoding="utf-8")
@@ -128,7 +129,7 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertIn('JENKINS_COLIMA_MEMORY_GIB:-16', text)
         self.assertIn('colima delete "${profile}" --force --data', text)
 
-    def test_ps2_uses_a_bounded_multi_node_ci_cluster(self) -> None:
+    def test_ps2_uses_a_bounded_single_node_ci_cluster(self) -> None:
         config = yaml.safe_load(
             (ROOT / "platform" / "local" / "kind" / "ci-cluster.yaml").read_text(
                 encoding="utf-8"
@@ -136,7 +137,16 @@ class JenkinsContractTests(unittest.TestCase):
         )
         self.assertEqual(
             [node["role"] for node in config["nodes"]],
-            ["control-plane", "worker"],
+            ["control-plane"],
+        )
+        local_config = yaml.safe_load(
+            (ROOT / "platform" / "local" / "kind" / "cluster.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            [node["role"] for node in local_config["nodes"]],
+            ["control-plane", "worker", "worker"],
         )
         text = (ROOT / "scripts" / "ci" / "presubmit-ps2.sh").read_text(
             encoding="utf-8"

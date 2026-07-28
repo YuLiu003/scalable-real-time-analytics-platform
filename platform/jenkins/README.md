@@ -32,8 +32,13 @@ make -C platform/jenkins e2e-ephemeral
 The ephemeral target creates a dedicated Colima VM, deploys Jenkins to kind,
 builds the immutable agent toolchain, runs PS0/PS1/PS2, then deletes the VM and
 all container data. It defaults to 8 CPUs and 16 GiB because PS2 creates a
-two-node nested kind cluster; `JENKINS_COLIMA_CPUS` and
+single-node nested functional-test cluster; `JENKINS_COLIMA_CPUS` and
 `JENKINS_COLIMA_MEMORY_GIB` can override those values.
+
+The nested CI topology is deliberately smaller than the normal three-node local
+topology because it runs inside privileged DinD. Multi-node scheduling remains
+available through `platform/local/kind/cluster.yaml`; the AWS OpenTofu tests
+independently enforce the three-zone cloud design.
 
 ## Production boundary
 

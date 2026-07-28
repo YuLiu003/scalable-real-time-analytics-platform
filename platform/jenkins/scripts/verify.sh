@@ -18,6 +18,21 @@ if [[ "${executors}" != "<numExecutors>0</numExecutors>" ]]; then
   exit 1
 fi
 
+job_config="$(kubectl --context "${JENKINS_CONTEXT}" \
+  --namespace "${JENKINS_NAMESPACE}" exec statefulset/jenkins -- \
+  cat /var/jenkins_home/jobs/investment-platform-presubmit/config.xml)"
+for expected_setting in \
+  '<shallow>true</shallow>' \
+  '<noTags>true</noTags>' \
+  '<honorRefspec>true</honorRefspec>' \
+  '<depth>1</depth>'; do
+  if [[ "${job_config}" != *"${expected_setting}"* ]]; then
+    printf 'ERROR: Jenkins job is missing SCM setting %s.\n' \
+      "${expected_setting}" >&2
+    exit 1
+  fi
+done
+
 kubectl --context "${JENKINS_CONTEXT}" --namespace "${JENKINS_NAMESPACE}" \
   get serviceaccount jenkins-agent \
   --output=jsonpath='{.automountServiceAccountToken}' | grep -Fxq false
