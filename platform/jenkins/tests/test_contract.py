@@ -69,6 +69,9 @@ class JenkinsContractTests(unittest.TestCase):
             {"PS0", "PS1", "PS2"},
         )
         self.assertEqual(text.count("retry(3)"), 4)
+        self.assertIn(
+            "git fetch --no-tags --unshallow origin +refs/heads/main:", text
+        )
 
     def test_job_scm_is_shallow_and_branch_bounded(self) -> None:
         text = (JENKINS_DIR / "helm" / "values.yaml").read_text(encoding="utf-8")

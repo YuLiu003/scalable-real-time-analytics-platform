@@ -27,7 +27,7 @@ pipeline {
                     checkout scm
                 }
                 retry(3) {
-                    sh 'git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main'
+                    sh 'git fetch --no-tags --unshallow origin +refs/heads/main:refs/remotes/origin/main'
                 }
                 sh 'python3 scripts/ci/presubmit.py PS0'
             }
