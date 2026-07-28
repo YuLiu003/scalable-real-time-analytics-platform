@@ -15,7 +15,22 @@ if kind get clusters | grep -Fxq "${JENKINS_CLUSTER_NAME}"; then
 fi
 
 "${script_dir}/build-agent.sh"
-docker pull "${DOCKER_DIND_IMAGE}"
+
+architecture="$(docker info --format '{{.Architecture}}')"
+case "${architecture}" in
+  aarch64 | arm64)
+    dind_source="${DOCKER_DIND_ARM64_SOURCE}"
+    ;;
+  x86_64 | amd64)
+    dind_source="${DOCKER_DIND_AMD64_SOURCE}"
+    ;;
+  *)
+    printf 'ERROR: unsupported Docker architecture %s.\n' "${architecture}" >&2
+    exit 1
+    ;;
+esac
+docker pull "${dind_source}"
+docker tag "${dind_source}" "${DOCKER_DIND_IMAGE}"
 
 kind create cluster \
   --name "${JENKINS_CLUSTER_NAME}" \

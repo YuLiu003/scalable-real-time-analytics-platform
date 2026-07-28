@@ -195,7 +195,7 @@ agent:
             resourceLimitCpu: "3"
             resourceLimitMemory: "5Gi"
           - name: dind
-            image: docker:29.1.5-dind
+            image: local/jenkins-dind:29.1.5
             alwaysPullImage: false
             privileged: true
             resourceRequestCpu: "4"

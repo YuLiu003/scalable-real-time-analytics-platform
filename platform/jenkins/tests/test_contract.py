@@ -23,6 +23,8 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertRegex(values["PYTHON_IMAGE"], r"@sha256:[0-9a-f]{64}$")
         self.assertRegex(values["DOCKER_CLI_AMD64_IMAGE"], r"@sha256:[0-9a-f]{64}$")
         self.assertRegex(values["DOCKER_CLI_ARM64_IMAGE"], r"@sha256:[0-9a-f]{64}$")
+        self.assertRegex(values["DOCKER_DIND_AMD64_SOURCE"], r"@sha256:[0-9a-f]{64}$")
+        self.assertRegex(values["DOCKER_DIND_ARM64_SOURCE"], r"@sha256:[0-9a-f]{64}$")
         self.assertRegex(values["JENKINS_KIND_NODE_IMAGE"], r"@sha256:[0-9a-f]{64}$")
 
     def test_controller_and_agent_security(self) -> None:
@@ -94,7 +96,10 @@ class JenkinsContractTests(unittest.TestCase):
     def test_bootstrap_preloads_required_agent_images(self) -> None:
         text = (JENKINS_DIR / "scripts" / "bootstrap.sh").read_text(encoding="utf-8")
         self.assertIn('kind load docker-image "${JENKINS_AGENT_IMAGE}"', text)
-        self.assertIn('docker pull "${DOCKER_DIND_IMAGE}"', text)
+        self.assertIn('dind_source="${DOCKER_DIND_ARM64_SOURCE}"', text)
+        self.assertIn('dind_source="${DOCKER_DIND_AMD64_SOURCE}"', text)
+        self.assertIn('docker pull "${dind_source}"', text)
+        self.assertIn('docker tag "${dind_source}" "${DOCKER_DIND_IMAGE}"', text)
         self.assertIn('kind load docker-image "${DOCKER_DIND_IMAGE}"', text)
         self.assertIn("for attempt in 1 2", text)
         self.assertIn("if (( jenkins_ready == 0 ))", text)
