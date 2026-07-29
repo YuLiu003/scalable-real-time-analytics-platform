@@ -1,0 +1,4 @@
+interface:
+  display_name: "Operate Kubernetes Safely"
+  short_description: "Diagnose and operate Kubernetes with guardrails"
+  default_prompt: "Use $operate-kubernetes-safely to diagnose this cluster issue and propose safe actions."

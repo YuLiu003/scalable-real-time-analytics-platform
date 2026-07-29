@@ -1,0 +1,281 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "kubernetes",
+      "name": "Kubernetes Documentation",
+      "provider": "cncf",
+      "topics": ["kubernetes", "workloads", "networking", "storage", "security", "scheduling", "autoscaling", "observability", "kubectl"],
+      "domains": ["kubernetes.io"],
+      "roots": ["https://kubernetes.io/docs/"],
+      "sitemaps": ["https://kubernetes.io/sitemap.xml"]
+    },
+    {
+      "id": "aws",
+      "name": "AWS Documentation and Architecture Center",
+      "provider": "aws",
+      "topics": ["aws", "well-architected", "iam", "vpc", "networking", "security", "reliability", "cost", "architecture", "ec2", "s3", "sqs", "sns", "lambda", "cloudwatch", "route53", "elb", "kms", "secrets-manager", "dynamodb", "rds", "msk", "eks", "ecr"],
+      "domains": ["docs.aws.amazon.com", "aws.amazon.com"],
+      "roots": ["https://docs.aws.amazon.com/", "https://aws.amazon.com/architecture/"]
+    },
+    {
+      "id": "aws-eks",
+      "name": "Amazon EKS Documentation",
+      "provider": "aws",
+      "topics": ["aws", "eks", "kubernetes", "karpenter", "vpc-cni", "irsa", "pod-identity", "autoscaling"],
+      "domains": ["docs.aws.amazon.com"],
+      "roots": ["https://docs.aws.amazon.com/eks/", "https://docs.aws.amazon.com/eks/latest/best-practices/"]
+    },
+    {
+      "id": "aws-msk",
+      "name": "Amazon MSK Documentation",
+      "provider": "aws",
+      "topics": ["aws", "msk", "kafka", "streaming", "connect", "replication"],
+      "domains": ["docs.aws.amazon.com"],
+      "roots": ["https://docs.aws.amazon.com/msk/"]
+    },
+    {
+      "id": "aws-rds",
+      "name": "Amazon RDS Documentation",
+      "provider": "aws",
+      "topics": ["aws", "rds", "postgresql", "database", "backup", "replication", "availability"],
+      "domains": ["docs.aws.amazon.com"],
+      "roots": ["https://docs.aws.amazon.com/rds/"]
+    },
+    {
+      "id": "gcp",
+      "name": "Google Cloud Documentation and Architecture Center",
+      "provider": "gcp",
+      "topics": ["gcp", "architecture", "iam", "vpc", "compute", "storage", "database", "messaging", "security", "reliability", "cost", "gce", "compute-engine", "gcs", "cloud-storage", "pubsub", "cloud-sql", "spanner", "bigquery", "cloud-run", "artifact-registry", "cloud-dns", "cloud-kms", "secret-manager", "cloud-monitoring"],
+      "domains": ["cloud.google.com", "docs.cloud.google.com"],
+      "roots": ["https://cloud.google.com/docs/", "https://cloud.google.com/architecture/", "https://docs.cloud.google.com/"]
+    },
+    {
+      "id": "gke",
+      "name": "Google Kubernetes Engine Documentation",
+      "provider": "gcp",
+      "topics": ["gcp", "gke", "kubernetes", "networking", "security", "reliability", "autoscaling", "workload-identity"],
+      "domains": ["cloud.google.com", "docs.cloud.google.com"],
+      "roots": ["https://cloud.google.com/kubernetes-engine/docs/", "https://docs.cloud.google.com/kubernetes-engine/docs/"]
+    },
+    {
+      "id": "azure",
+      "name": "Microsoft Azure Documentation and Architecture Center",
+      "provider": "azure",
+      "topics": ["azure", "architecture", "entra", "iam", "vnet", "compute", "storage", "database", "messaging", "security", "reliability", "cost", "virtual-machines", "blob-storage", "service-bus", "event-hubs", "azure-sql", "cosmos-db", "functions", "container-registry", "azure-monitor", "key-vault", "dns", "load-balancer"],
+      "domains": ["learn.microsoft.com"],
+      "roots": ["https://learn.microsoft.com/en-us/azure/", "https://learn.microsoft.com/en-us/azure/architecture/"]
+    },
+    {
+      "id": "aks",
+      "name": "Azure Kubernetes Service Documentation",
+      "provider": "azure",
+      "topics": ["azure", "aks", "kubernetes", "networking", "security", "reliability", "identity", "autoscaling"],
+      "domains": ["learn.microsoft.com"],
+      "roots": ["https://learn.microsoft.com/en-us/azure/aks/", "https://learn.microsoft.com/en-us/azure/reliability/reliability-aks"]
+    },
+    {
+      "id": "terraform",
+      "name": "Terraform Documentation",
+      "provider": "hashicorp",
+      "topics": ["terraform", "iac", "state", "modules", "providers", "testing", "cloud"],
+      "domains": ["developer.hashicorp.com", "registry.terraform.io"],
+      "roots": ["https://developer.hashicorp.com/terraform/", "https://registry.terraform.io/"]
+    },
+    {
+      "id": "opentofu",
+      "name": "OpenTofu Documentation",
+      "provider": "linux-foundation",
+      "topics": ["opentofu", "tofu", "iac", "state", "modules", "providers", "testing"],
+      "domains": ["opentofu.org"],
+      "roots": ["https://opentofu.org/docs/"],
+      "sitemaps": ["https://opentofu.org/sitemap.xml"]
+    },
+    {
+      "id": "helm",
+      "name": "Helm Documentation",
+      "provider": "cncf",
+      "topics": ["helm", "charts", "templates", "releases", "kubernetes", "packaging"],
+      "domains": ["helm.sh"],
+      "roots": ["https://helm.sh/docs/"],
+      "sitemaps": ["https://helm.sh/sitemap.xml"]
+    },
+    {
+      "id": "gateway-api",
+      "name": "Kubernetes Gateway API Documentation",
+      "provider": "kubernetes-sigs",
+      "topics": ["gateway-api", "gateway", "ingress", "routing", "traffic", "kubernetes", "networking"],
+      "domains": ["gateway-api.sigs.k8s.io"],
+      "roots": ["https://gateway-api.sigs.k8s.io/"]
+    },
+    {
+      "id": "argo-cd",
+      "name": "Argo CD Documentation",
+      "provider": "cncf",
+      "topics": ["argo", "argocd", "gitops", "deployment", "application-set", "kubernetes"],
+      "domains": ["argo-cd.readthedocs.io"],
+      "roots": ["https://argo-cd.readthedocs.io/en/stable/"]
+    },
+    {
+      "id": "flux",
+      "name": "Flux Documentation",
+      "provider": "cncf",
+      "topics": ["flux", "gitops", "deployment", "helm-controller", "kustomize-controller", "kubernetes"],
+      "domains": ["fluxcd.io"],
+      "roots": ["https://fluxcd.io/flux/"]
+    },
+    {
+      "id": "prometheus",
+      "name": "Prometheus Documentation",
+      "provider": "cncf",
+      "topics": ["prometheus", "metrics", "promql", "alerting", "monitoring", "observability"],
+      "domains": ["prometheus.io"],
+      "roots": ["https://prometheus.io/docs/"]
+    },
+    {
+      "id": "grafana",
+      "name": "Grafana Documentation",
+      "provider": "grafana-labs",
+      "topics": ["grafana", "dashboards", "loki", "tempo", "mimir", "prometheus", "observability"],
+      "domains": ["grafana.com"],
+      "roots": ["https://grafana.com/docs/"]
+    },
+    {
+      "id": "opentelemetry",
+      "name": "OpenTelemetry Documentation",
+      "provider": "cncf",
+      "topics": ["opentelemetry", "otel", "traces", "metrics", "logs", "collector", "observability"],
+      "domains": ["opentelemetry.io"],
+      "roots": ["https://opentelemetry.io/docs/"],
+      "sitemaps": ["https://opentelemetry.io/sitemap.xml"]
+    },
+    {
+      "id": "kafka",
+      "name": "Apache Kafka Documentation",
+      "provider": "apache",
+      "topics": ["kafka", "streaming", "consumer-groups", "partitions", "transactions", "delivery-semantics", "kraft"],
+      "domains": ["kafka.apache.org"],
+      "roots": ["https://kafka.apache.org/documentation/", "https://kafka.apache.org/42/"]
+    },
+    {
+      "id": "strimzi",
+      "name": "Strimzi Documentation",
+      "provider": "cncf",
+      "topics": ["strimzi", "kafka", "kubernetes", "operator", "kraft", "cruise-control"],
+      "domains": ["strimzi.io"],
+      "roots": ["https://strimzi.io/documentation/", "https://strimzi.io/docs/operators/latest/"]
+    },
+    {
+      "id": "keda",
+      "name": "KEDA Documentation",
+      "provider": "cncf",
+      "topics": ["keda", "autoscaling", "event-driven", "kafka", "kubernetes", "hpa"],
+      "domains": ["keda.sh"],
+      "roots": ["https://keda.sh/docs/latest/"]
+    },
+    {
+      "id": "cilium",
+      "name": "Cilium Documentation",
+      "provider": "cncf",
+      "topics": ["cilium", "ebpf", "cni", "network-policy", "gateway-api", "hubble", "security"],
+      "domains": ["docs.cilium.io"],
+      "roots": ["https://docs.cilium.io/en/stable/"]
+    },
+    {
+      "id": "istio",
+      "name": "Istio Documentation",
+      "provider": "cncf",
+      "topics": ["istio", "service-mesh", "mtls", "gateway", "traffic-management", "security"],
+      "domains": ["istio.io"],
+      "roots": ["https://istio.io/latest/docs/"]
+    },
+    {
+      "id": "cert-manager",
+      "name": "cert-manager Documentation",
+      "provider": "cncf",
+      "topics": ["cert-manager", "tls", "certificates", "acme", "pki", "kubernetes"],
+      "domains": ["cert-manager.io"],
+      "roots": ["https://cert-manager.io/docs/"]
+    },
+    {
+      "id": "external-secrets",
+      "name": "External Secrets Operator Documentation",
+      "provider": "cncf",
+      "topics": ["external-secrets", "secrets", "vault", "aws-secrets-manager", "kubernetes"],
+      "domains": ["external-secrets.io"],
+      "roots": ["https://external-secrets.io/latest/"]
+    },
+    {
+      "id": "vault",
+      "name": "Vault Documentation",
+      "provider": "hashicorp",
+      "topics": ["vault", "secrets", "pki", "kubernetes-auth", "encryption", "security"],
+      "domains": ["developer.hashicorp.com"],
+      "roots": ["https://developer.hashicorp.com/vault/"]
+    },
+    {
+      "id": "crossplane",
+      "name": "Crossplane Documentation",
+      "provider": "cncf",
+      "topics": ["crossplane", "control-plane", "platform-engineering", "composition", "cloud-resources", "kubernetes"],
+      "domains": ["docs.crossplane.io"],
+      "roots": ["https://docs.crossplane.io/latest/"]
+    },
+    {
+      "id": "docker",
+      "name": "Docker Documentation",
+      "provider": "docker",
+      "topics": ["docker", "containers", "images", "buildkit", "compose", "registry"],
+      "domains": ["docs.docker.com"],
+      "roots": ["https://docs.docker.com/"]
+    },
+    {
+      "id": "containerd",
+      "name": "containerd Documentation",
+      "provider": "cncf",
+      "topics": ["containerd", "runtime", "cri", "containers", "images", "kubernetes"],
+      "domains": ["containerd.io"],
+      "roots": ["https://containerd.io/docs/"]
+    },
+    {
+      "id": "opencontainers",
+      "name": "Open Container Initiative",
+      "provider": "linux-foundation",
+      "topics": ["oci", "containers", "images", "runtime", "distribution", "specification"],
+      "domains": ["opencontainers.org"],
+      "roots": ["https://opencontainers.org/"]
+    },
+    {
+      "id": "postgresql",
+      "name": "PostgreSQL Documentation",
+      "provider": "postgresql",
+      "topics": ["postgresql", "database", "transactions", "replication", "backup", "high-availability", "sql"],
+      "domains": ["postgresql.org"],
+      "roots": ["https://www.postgresql.org/docs/current/"]
+    },
+    {
+      "id": "cloudnative-pg",
+      "name": "CloudNativePG Documentation",
+      "provider": "cncf",
+      "topics": ["cloudnative-pg", "postgresql", "database", "operator", "backup", "recovery", "kubernetes"],
+      "domains": ["cloudnative-pg.io"],
+      "roots": ["https://cloudnative-pg.io/documentation/current/"]
+    },
+    {
+      "id": "opa",
+      "name": "Open Policy Agent Documentation",
+      "provider": "cncf",
+      "topics": ["opa", "gatekeeper", "policy", "rego", "authorization", "kubernetes", "security"],
+      "domains": ["openpolicyagent.org"],
+      "roots": ["https://www.openpolicyagent.org/docs/latest/"]
+    },
+    {
+      "id": "cncf",
+      "name": "Cloud Native Computing Foundation",
+      "provider": "cncf",
+      "topics": ["cncf", "cloud-native", "landscape", "projects", "platform-engineering", "security"],
+      "domains": ["cncf.io"],
+      "roots": ["https://www.cncf.io/", "https://www.cncf.io/projects/"]
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: synthetic-market-producer
+  namespace: analytics-apps
+  labels:
+    strimzi.io/cluster: market-kafka
+    app.kubernetes.io/part-of: investment-analytics-platform
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: market.prices
+          patternType: literal
+        operations:
+          - Describe
+          - Write
+      - resource:
+          type: cluster
+          name: kafka-cluster
+          patternType: literal
+        operations:
+          - IdempotentWrite
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: raw-event-archiver
+  namespace: analytics-apps
+  labels:
+    strimzi.io/cluster: market-kafka
+    app.kubernetes.io/part-of: investment-analytics-platform
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: market.prices
+          patternType: literal
+        operations:
+          - Describe
+          - Read
+      - resource:
+          type: topic
+          name: ingestion.quarantine
+          patternType: literal
+        operations:
+          - Describe
+          - Read
+          - Write
+      - resource:
+          type: group
+          name: raw-event-archiver
+          patternType: prefix
+        operations:
+          - Describe
+          - Read
+      - resource:
+          type: cluster
+          name: kafka-cluster
+          patternType: literal
+        operations:
+          - IdempotentWrite

@@ -1,5 +1,9 @@
 # Security Measures
 
+Pull-request security, authentication, data, infrastructure, and operational
+review requirements are defined in
+[Presubmit Gates](engineering/presubmit-gates.md).
+
 This document outlines the security measures implemented in the Real-Time Analytics Platform.
 
 ## API Authentication

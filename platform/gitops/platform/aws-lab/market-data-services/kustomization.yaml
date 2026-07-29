@@ -1,0 +1,92 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base/market-data-services
+  - storage-class.yaml
+
+patches:
+  - target:
+      group: kafka.strimzi.io
+      version: v1
+      kind: KafkaNodePool
+      name: dual-role
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+      - op: replace
+        path: /spec/storage/size
+        value: 20Gi
+      - op: add
+        path: /spec/storage/class
+        value: kafka-gp3
+      - op: replace
+        path: /spec/jvmOptions/-Xms
+        value: 512m
+      - op: replace
+        path: /spec/jvmOptions/-Xmx
+        value: 768m
+      - op: replace
+        path: /spec/resources/requests/cpu
+        value: 500m
+      - op: replace
+        path: /spec/resources/requests/memory
+        value: 1Gi
+      - op: replace
+        path: /spec/resources/limits/memory
+        value: 2Gi
+      - op: add
+        path: /spec/template/pod/affinity
+        value:
+          podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchLabels:
+                    strimzi.io/pool-name: dual-role
+                topologyKey: kubernetes.io/hostname
+      - op: add
+        path: /spec/template/pod/topologySpreadConstraints
+        value:
+          - maxSkew: 1
+            topologyKey: topology.kubernetes.io/zone
+            whenUnsatisfiable: DoNotSchedule
+            labelSelector:
+              matchLabels:
+                strimzi.io/cluster: market-kafka
+                strimzi.io/pool-name: dual-role
+  - target:
+      group: kafka.strimzi.io
+      version: v1
+      kind: Kafka
+      name: market-kafka
+    patch: |-
+      - op: add
+        path: /spec/kafka/rack
+        value:
+          topologyKey: topology.kubernetes.io/zone
+      - op: replace
+        path: /spec/kafka/config/default.replication.factor
+        value: 3
+      - op: replace
+        path: /spec/kafka/config/min.insync.replicas
+        value: 2
+      - op: replace
+        path: /spec/kafka/config/offsets.topic.replication.factor
+        value: 3
+      - op: replace
+        path: /spec/kafka/config/transaction.state.log.min.isr
+        value: 2
+      - op: replace
+        path: /spec/kafka/config/transaction.state.log.replication.factor
+        value: 3
+  - target:
+      group: kafka.strimzi.io
+      version: v1
+      kind: KafkaTopic
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 3
+      - op: replace
+        path: /spec/config/min.insync.replicas
+        value: 2

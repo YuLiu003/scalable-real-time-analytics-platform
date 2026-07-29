@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base/namespaces
+patches:
+  - target:
+      kind: Namespace
+    patch: |-
+      - op: add
+        path: /metadata/labels/platform.yuliu.dev~1environment
+        value: aws-lab
+  - target:
+      kind: ResourceQuota
+      name: local-data-budget
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: data-budget
+  - target:
+      kind: ResourceQuota
+      name: local-application-budget
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: application-budget

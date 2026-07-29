@@ -1,0 +1,41 @@
+{
+  "name": "cloud-platform-engineering",
+  "version": "0.1.0+codex.20260726051038",
+  "description": "Research, learn, design, provision, review, and operate cloud-native platforms and their software changes.",
+  "author": {
+    "name": "Yu Liu"
+  },
+  "homepage": "https://github.com/YuLiu003/real-time-analytics-platform",
+  "repository": "https://github.com/YuLiu003/real-time-analytics-platform",
+  "license": "MIT",
+  "keywords": [
+    "kubernetes",
+    "cloud",
+    "platform-engineering",
+    "terraform",
+    "kafka",
+    "sre",
+    "code-review",
+    "software-design"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Cloud Platform Engineering",
+    "shortDescription": "Build and operate cloud-native platforms from official guidance",
+    "longDescription": "Learn, design, provision, review, and safely operate Kubernetes platforms, cloud services, infrastructure as code, observability stacks, Kafka-based distributed systems, and the software changes that support them.",
+    "developerName": "Yu Liu",
+    "category": "Engineering",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Build a lab-based Kubernetes and cloud learning roadmap",
+      "Review this platform architecture against current official guidance",
+      "Research the right cloud-native service for this requirement",
+      "Implement or review a small, clear, and correct software change"
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}

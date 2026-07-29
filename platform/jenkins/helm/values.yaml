@@ -1,0 +1,261 @@
+fullnameOverride: jenkins
+
+controller:
+  image:
+    registry: docker.io
+    repository: jenkins/jenkins
+    tag: 2.568.1-jdk21
+    pullPolicy: IfNotPresent
+  numExecutors: 0
+  executorMode: EXCLUSIVE
+  disableRememberMe: true
+  serviceType: ClusterIP
+  agentListenerServiceType: ClusterIP
+  jenkinsUrl: http://jenkins.jenkins-system.svc.cluster.local:8080/
+  jenkinsAdminEmail: platform@example.invalid
+  legacyRemotingSecurityEnabled: false
+  csrf:
+    defaultCrumbIssuer:
+      enabled: true
+      proxyCompatability: false
+  admin:
+    createSecret: true
+    existingSecret: jenkins-admin
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 3Gi
+  podSecurityContextOverride:
+    runAsUser: 1000
+    runAsGroup: 1000
+    runAsNonRoot: true
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    runAsNonRoot: true
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+  healthProbes: true
+  podDisruptionBudget:
+    enabled: true
+    apiVersion: policy/v1
+    maxUnavailable: 0
+  installPlugins:
+    - kubernetes:4538.v5b_ce7f35b_257
+    - workflow-aggregator:608.v67378e9d3db_1
+    - git:5.10.1
+    - configuration-as-code:2103.vd6f93c3e714a_
+    - workflow-job:1546.v62a_c59c112dd
+    - pipeline-stage-step:322.vecffa_99f371c
+    - pipeline-model-definition:2.2277.v00573e73ddf1
+    - json-path-api:2.9.0-148.v22a_7ffe323ce
+    - job-dsl:3654.vdf58f53e2d15
+    - github-branch-source:1967.1970.vd86979736546
+    - matrix-auth:3.3
+    - prometheus:856.vc9e3d6e4b_b_9e
+    - timestamper:1.30
+  installLatestPlugins: false
+  installLatestSpecifiedPlugins: false
+  initializeOnce: false
+  overwritePlugins: true
+  overwritePluginsFromImage: true
+  sidecars:
+    configAutoReload:
+      enabled: false
+  JCasC:
+    defaultConfig: true
+    overwriteConfiguration: true
+    authorizationStrategy: |-
+      globalMatrix:
+        entries:
+        - user:
+            name: "${chart-admin-username}"
+            permissions:
+            - "Overall/Administer"
+    configScripts:
+      system-hardening: |-
+        jenkins:
+          systemMessage: "Investment Platform Jenkins - configuration managed by Git"
+          remotingSecurity:
+            enabled: true
+      seed-job: |-
+        jobs:
+        - script: >
+            pipelineJob('investment-platform-presubmit') {
+              description('Repository-owned PS0, PS1, and PS2 gates. Configuration managed by JCasC.')
+              logRotator {
+                numToKeep(20)
+              }
+              parameters {
+                stringParam('EXPECTED_COMMIT', '', 'Required 40-character PR head commit')
+              }
+              definition {
+                cpsScm {
+                  scm {
+                    git {
+                      remote {
+                        url('https://github.com/YuLiu003/scalable-real-time-analytics-platform.git')
+                        refspec('+refs/heads/feature/presubmit-quality-gates:refs/remotes/origin/feature/presubmit-quality-gates')
+                      }
+                      branch('*/feature/presubmit-quality-gates')
+                      extensions {
+                        cloneOptions {
+                          shallow(true)
+                          noTags(true)
+                          depth(1)
+                          timeout(5)
+                          honorRefspec(true)
+                        }
+                      }
+                    }
+                  }
+                  scriptPath('Jenkinsfile')
+                  lightweight(true)
+                }
+              }
+            }
+
+agent:
+  enabled: true
+  disableDefaultAgent: true
+  namespace: jenkins-system
+  containerCap: 2
+  podRetention: Never
+  garbageCollection:
+    enabled: true
+    timeout: 300
+  podTemplates:
+    verification: |
+      - name: verification
+        label: jenkins-verify
+        nodeUsageMode: EXCLUSIVE
+        agentContainer: jnlp
+        agentInjection: true
+        serviceAccount: jenkins-agent
+        showRawYaml: false
+        podRetention: never
+        activeDeadlineSeconds: 1800
+        idleMinutes: 0
+        containers:
+          - name: jnlp
+            image: local/jenkins-presubmit-agent:0.1.0
+            alwaysPullImage: false
+            workingDir: /home/jenkins/agent
+            resourceRequestCpu: "500m"
+            resourceRequestMemory: "1Gi"
+            resourceLimitCpu: "2"
+            resourceLimitMemory: "3Gi"
+        workspaceVolume:
+          emptyDirWorkspaceVolume:
+            memory: false
+        yaml: |-
+          apiVersion: v1
+          kind: Pod
+          spec:
+            automountServiceAccountToken: false
+            securityContext:
+              runAsUser: 10000
+              runAsGroup: 10000
+              runAsNonRoot: true
+              fsGroup: 10000
+              seccompProfile:
+                type: RuntimeDefault
+            containers:
+              - name: jnlp
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+    integration: |
+      - name: integration
+        label: jenkins-integration
+        nodeUsageMode: EXCLUSIVE
+        agentContainer: jnlp
+        agentInjection: true
+        serviceAccount: jenkins-agent
+        showRawYaml: false
+        podRetention: never
+        activeDeadlineSeconds: 7200
+        idleMinutes: 0
+        containers:
+          - name: jnlp
+            image: local/jenkins-presubmit-agent:0.1.0
+            alwaysPullImage: false
+            workingDir: /home/jenkins/agent
+            resourceRequestCpu: "1"
+            resourceRequestMemory: "2Gi"
+            resourceLimitCpu: "3"
+            resourceLimitMemory: "5Gi"
+          - name: dind
+            image: local/jenkins-dind:29.1.5
+            alwaysPullImage: false
+            privileged: true
+            resourceRequestCpu: "4"
+            resourceRequestMemory: "8Gi"
+            resourceLimitCpu: "6"
+            resourceLimitMemory: "10Gi"
+            envVars:
+              - envVar:
+                  key: DOCKER_TLS_CERTDIR
+                  value: ""
+        envVars:
+          - envVar:
+              key: DOCKER_HOST
+              value: "tcp://localhost:2375"
+        workspaceVolume:
+          emptyDirWorkspaceVolume:
+            memory: false
+        yaml: |-
+          apiVersion: v1
+          kind: Pod
+          spec:
+            automountServiceAccountToken: false
+            securityContext:
+              fsGroup: 10000
+            containers:
+              - name: jnlp
+                securityContext:
+                  runAsUser: 10000
+                  runAsGroup: 10000
+                  runAsNonRoot: true
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+
+persistence:
+  enabled: true
+  accessMode: ReadWriteOnce
+  size: 8Gi
+
+rbac:
+  create: true
+  readSecrets: false
+
+serviceAccount:
+  create: true
+  name: jenkins-controller
+  automountServiceAccountToken: true
+
+serviceAccountAgent:
+  create: true
+  name: jenkins-agent
+  automountServiceAccountToken: false
+
+networkPolicy:
+  enabled: true
+  internalAgents:
+    allowed: true
+  externalAgents:
+    ipCIDR:

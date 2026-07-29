@@ -1,0 +1,4 @@
+interface:
+  display_name: "Design Kubernetes Platforms"
+  short_description: "Design reliable Kubernetes platform architecture"
+  default_prompt: "Use $design-kubernetes-platforms to design and justify this Kubernetes platform."

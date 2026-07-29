@@ -2,11 +2,60 @@
 
 A comprehensive real-time analytics platform built with Go microservices, designed for high-throughput sensor data processing and visualization. The platform provides real-time data ingestion, stream processing, storage, and interactive visualization capabilities.
 
+## Proposed Project Direction
+
+The repository is evaluating a Kubernetes-first investment analytics workload as
+a focused cloud-platform engineering capstone. The proposal defines the goals,
+non-goals, target architecture, producer contract, delivery slices, failure
+tests, cloud milestones, and graduation criteria before implementation begins.
+
+Review the [Cloud-Native Investment Analytics Platform feature proposal](docs/features/cloud-native-investment-platform/README.md).
+
+The first implementation slice is the [reproducible local Kubernetes platform baseline](platform/local/README.md).
+
+The second slice implements a tested
+[canonical market-event-to-object-storage path](docs/features/cloud-native-investment-platform/slice-2-event-contract.md)
+on that Kubernetes baseline.
+
+The third slice turns retained bronze events into deterministic
+[portfolio-allocation analytics and a user-visible Go dashboard](docs/features/cloud-native-investment-platform/slice-3-analytics-contract.md),
+with exact replay evidence in the
+[Slice 3 verification record](platform/local/SLICE3-VERIFICATION.md).
+Its current QQQ, QQQM, FSELX, and S&P 500 values are explicitly synthetic
+fixtures; the dashboard does not claim to show live or personal account data.
+The feature's enforceable coverage, CI, kind acceptance, and image-delivery
+policy is defined in the
+[portfolio platform quality gates](docs/features/cloud-native-investment-platform/quality-gates.md).
+
+The first personally useful planning slice adds a tested
+[monthly and biweekly contribution projection](docs/features/cloud-native-investment-platform/contribution-projection-contract.md)
+with conservative, base, and optimistic outcomes, inflation-adjusted value,
+expense-ratio drag, and explicit hypothetical assumptions. The complete
+free-first sequence is tracked in [roadmap v2](docs/features/cloud-native-investment-platform/roadmap-v2.md).
+
+The next stacked slice adds a deployable, cost-guarded
+[AWS EKS platform lab](infra/opentofu/aws/README.md) with OpenTofu, Strimzi
+Kafka, EBS, encrypted S3, ECR, and EKS Pod Identity. It is statically validated;
+AWS runtime evidence requires a separately authorized billable apply.
+
+Routine development remains
+[free-first](docs/features/cloud-native-investment-platform/free-first-lab-strategy.md):
+the full kind environment can run in an automatically deleted Colima profile,
+while managed-cloud applies are optional, short-lived learning exercises.
+Pull requests use the
+[production-like disposable Jenkins platform](platform/jenkins/README.md) as
+the primary `PS0`/`PS1`/`PS2` executor and publish `jenkins / presubmit` as the
+merge gate.
+
 ## 🛡️ Status
-- **Build Status**: ✅ All services building successfully
-- **Security Score**: 9/9 (100%) - Production ready
-- **Platform Health**: 11/11 pods operational
-- **Documentation**: Complete and up-to-date
+- **Investment platform slices**: Local lifecycle, event archive, analytics,
+  projection, quality gates, and static AWS lab implemented
+- **Maturity**: Educational cloud-platform capstone; not a production brokerage
+  or financial-advice system
+- **Runtime evidence**: Linked from slice-specific verification records
+- **CI executor**: Disposable Jenkins controller and isolated Kubernetes agents;
+  see the [Jenkins verification record](platform/jenkins/VERIFICATION.md)
+- **Documentation**: Actively maintained as each roadmap slice graduates
 
 For detailed implementation status, see [Implementation Summary](IMPLEMENTATION_SUMMARY.md)
 

@@ -156,6 +156,8 @@ docker-compose.override.yml
 
 # Archive directories
 archive/
+!services/market-pipeline/internal/archive/
+!services/market-pipeline/internal/archive/**
 
 # Local development files
 *.dev.yaml
@@ -167,7 +169,11 @@ archive/
 
 # Temporary test files
 test_*.py
-!test/*/test_*.py  # Exclude actual test files in test directory
+# Test modules under a service's canonical test suite are source code. Keep the
+# broad temporary-file rule above without silently dropping real tests from CI.
+!services/**/tests/test_*.py
+!tools/**/test_*.py
+!scripts/ci/tests/test_*.py
 
 # Node.js (if any JavaScript is used in visualization)
 node_modules/
@@ -179,6 +185,9 @@ npm-debug.log
 *.tfstate
 *.tfstate.*
 *.tfvars
+*.tfplan
+crash.log
+crash.*.log
 
 # Skaffold local files
 .skaffold/
@@ -226,6 +235,8 @@ tenant-management-go/tenant-management-go
 *coverage.html
 *-coverage.html
 *.coverage.html
+.coverage
+.coverage.*
 
 # Backup files
 *.bak
@@ -238,6 +249,7 @@ tenant-management-go/tenant-management-go
 *.test
 *.out
 **/build_output.txt
+**/.build/
 
 # Test data files
 large_payload*.json
