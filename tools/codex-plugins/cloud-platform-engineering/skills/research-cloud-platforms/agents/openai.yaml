@@ -1,0 +1,4 @@
+interface:
+  display_name: "Research Cloud Platforms"
+  short_description: "Research current official cloud documentation"
+  default_prompt: "Use $research-cloud-platforms to research this topic from current official documentation."

@@ -1,5 +1,11 @@
 # Pre-Merge Quality Gates
 
+> This document describes the legacy eight-job workflow. The canonical,
+> repository-owned blocking contract is now `PS0`/`PS1`/`PS2`; see
+> [Presubmit Gates](engineering/presubmit-gates.md). Branch protection should
+> require `jenkins / presubmit`; the GitHub Actions `PSn` checks are independent
+> portability evidence, not the primary merge gate.
+
 This document describes the comprehensive pre-merge testing and quality gates system implemented for the Real-Time Analytics Platform. This system ensures that all code changes meet high standards for quality, security, and reliability before being merged into the main branch.
 
 ## Overview

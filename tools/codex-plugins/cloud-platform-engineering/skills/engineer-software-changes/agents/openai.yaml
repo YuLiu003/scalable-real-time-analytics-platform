@@ -1,0 +1,4 @@
+interface:
+  display_name: "Engineer Software Changes"
+  short_description: "Build and review small, maintainable changes"
+  default_prompt: "Use $engineer-software-changes to implement or review this change with the smallest clear, correct diff."

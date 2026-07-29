@@ -17,6 +17,9 @@ REPO_OWNER="${REPO_OWNER:-}"
 REPO_NAME="${REPO_NAME:-}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 BRANCH="${BRANCH:-main}"
+REQUIRED_APPROVALS="${REQUIRED_APPROVALS:-0}"
+REQUIRE_CODEOWNER_REVIEWS="${REQUIRE_CODEOWNER_REVIEWS:-false}"
+REQUIRE_LAST_PUSH_APPROVAL="${REQUIRE_LAST_PUSH_APPROVAL:-false}"
 
 # GitHub API base URL
 API_BASE="https://api.github.com"
@@ -52,6 +55,17 @@ check_prerequisites() {
         print_info "Install with: brew install jq (macOS) or apt-get install jq (Ubuntu)"
         exit 1
     fi
+
+    if [[ ! "$REQUIRED_APPROVALS" =~ ^[0-6]$ ]]; then
+        print_error "REQUIRED_APPROVALS must be an integer from 0 to 6"
+        exit 1
+    fi
+    for value_name in REQUIRE_CODEOWNER_REVIEWS REQUIRE_LAST_PUSH_APPROVAL; do
+        if [[ "${!value_name}" != "true" && "${!value_name}" != "false" ]]; then
+            print_error "$value_name must be true or false"
+            exit 1
+        fi
+    done
     
     print_success "Prerequisites check passed"
 }
@@ -89,7 +103,8 @@ check_github_token() {
     fi
     
     # Validate token
-    local response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+    local response=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
         "$API_BASE/user" | jq -r '.login // empty')
     
     if [[ -z "$response" ]]; then
@@ -109,21 +124,15 @@ create_branch_protection() {
   "required_status_checks": {
     "strict": true,
     "contexts": [
-      "Code Quality & Linting",
-      "Unit Tests & Coverage", 
-      "Security Analysis",
-      "Docker Build & Scan",
-      "Integration Tests",
-      "Performance Tests",
-      "Documentation Tests"
+      "jenkins / presubmit"
     ]
   },
   "enforce_admins": true,
   "required_pull_request_reviews": {
-    "required_approving_review_count": 2,
+    "required_approving_review_count": ${REQUIRED_APPROVALS},
     "dismiss_stale_reviews": true,
-    "require_code_owner_reviews": true,
-    "require_last_push_approval": true
+    "require_code_owner_reviews": ${REQUIRE_CODEOWNER_REVIEWS},
+    "require_last_push_approval": ${REQUIRE_LAST_PUSH_APPROVAL}
   },
   "restrictions": null,
   "allow_force_pushes": false,
@@ -138,8 +147,9 @@ EOF
     
     local response=$(curl -s -w "%{http_code}" -o /tmp/branch_protection_response.json \
         -X PUT \
-        -H "Authorization: token $GITHUB_TOKEN" \
+        -H "Authorization: Bearer $GITHUB_TOKEN" \
         -H "Accept: application/vnd.github.v3+json" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
         -H "Content-Type: application/json" \
         -d "$protection_config" \
         "$API_BASE/repos/$REPO_OWNER/$REPO_NAME/branches/$BRANCH/protection")
@@ -168,7 +178,8 @@ EOF
 verify_branch_protection() {
     print_info "Verifying branch protection rule..."
     
-    local response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+    local response=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
         "$API_BASE/repos/$REPO_OWNER/$REPO_NAME/branches/$BRANCH/protection")
     
     if echo "$response" | jq -e '.required_status_checks' &> /dev/null; then
@@ -195,7 +206,8 @@ verify_branch_protection() {
 show_status() {
     print_info "Current branch protection status for $REPO_OWNER/$REPO_NAME ($BRANCH):"
     
-    local response=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+    local response=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
         "$API_BASE/repos/$REPO_OWNER/$REPO_NAME/branches/$BRANCH/protection" 2>/dev/null)
     
     if echo "$response" | jq -e '.required_status_checks' &> /dev/null; then

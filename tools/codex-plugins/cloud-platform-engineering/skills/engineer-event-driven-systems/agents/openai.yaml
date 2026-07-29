@@ -1,0 +1,4 @@
+interface:
+  display_name: "Engineer Event-Driven Systems"
+  short_description: "Design correct Kafka and streaming systems"
+  default_prompt: "Use $engineer-event-driven-systems to design or review this event-driven workflow."

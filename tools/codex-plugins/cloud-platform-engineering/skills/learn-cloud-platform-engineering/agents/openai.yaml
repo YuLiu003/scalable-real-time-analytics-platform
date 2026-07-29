@@ -1,0 +1,4 @@
+interface:
+  display_name: "Learn Cloud Platform Engineering"
+  short_description: "Build practical cloud platform learning paths"
+  default_prompt: "Use $learn-cloud-platform-engineering to turn this goal into a practical lab-based curriculum."

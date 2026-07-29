@@ -1,0 +1,249 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: portfolio-analytics-baseline
+  namespace: analytics-apps
+  labels:
+    app.kubernetes.io/name: portfolio-analytics
+    app.kubernetes.io/component: baseline
+    app.kubernetes.io/part-of: investment-analytics-platform
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: portfolio-analytics
+        app.kubernetes.io/component: baseline
+    spec:
+      serviceAccountName: portfolio-analytics
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: analytics
+          image: local/portfolio-analytics:slice3
+          imagePullPolicy: Never
+          envFrom:
+            - secretRef:
+                name: market-archive-credentials
+          env:
+            - name: HOLDINGS_FILE
+              value: /config/holdings.json
+            - name: WORK_ROOT
+              value: /work
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: holdings
+              mountPath: /config
+              readOnly: true
+            - name: work
+              mountPath: /work
+      volumes:
+        - name: holdings
+          configMap:
+            name: demo-portfolio-holdings
+        - name: work
+          emptyDir:
+            sizeLimit: 512Mi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: portfolio-analytics-query
+  namespace: analytics-apps
+  labels:
+    app.kubernetes.io/name: portfolio-analytics
+    app.kubernetes.io/component: parquet-query-proof
+    app.kubernetes.io/part-of: investment-analytics-platform
+spec:
+  suspend: true
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: portfolio-analytics
+        app.kubernetes.io/component: parquet-query-proof
+    spec:
+      serviceAccountName: portfolio-analytics
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: query
+          image: local/portfolio-analytics:slice3
+          imagePullPolicy: Never
+          command:
+            - python
+            - -m
+            - portfolio_analytics.query_products
+          envFrom:
+            - secretRef:
+                name: market-archive-credentials
+          env:
+            - name: PORTFOLIO_ID
+              value: demo
+            - name: EXPECTED_TOTAL
+              value: "6200.00000000"
+            - name: WORK_ROOT
+              value: /work
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: work
+              mountPath: /work
+      volumes:
+        - name: work
+          emptyDir:
+            sizeLimit: 512Mi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: portfolio-analytics-replay-reset
+  namespace: analytics-apps
+  labels:
+    app.kubernetes.io/name: portfolio-analytics
+    app.kubernetes.io/component: replay-reset
+    app.kubernetes.io/part-of: investment-analytics-platform
+spec:
+  suspend: true
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: portfolio-analytics
+        app.kubernetes.io/component: replay-reset
+    spec:
+      serviceAccountName: portfolio-analytics
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: reset
+          image: local/portfolio-api:slice3
+          imagePullPolicy: Never
+          command:
+            - /derived-reset
+          envFrom:
+            - secretRef:
+                name: market-archive-credentials
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: portfolio-analytics-replay
+  namespace: analytics-apps
+  labels:
+    app.kubernetes.io/name: portfolio-analytics
+    app.kubernetes.io/component: replay
+    app.kubernetes.io/part-of: investment-analytics-platform
+spec:
+  suspend: true
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: portfolio-analytics
+        app.kubernetes.io/component: replay
+    spec:
+      serviceAccountName: portfolio-analytics
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: analytics
+          image: local/portfolio-analytics:slice3
+          imagePullPolicy: Never
+          envFrom:
+            - secretRef:
+                name: market-archive-credentials
+          env:
+            - name: HOLDINGS_FILE
+              value: /config/holdings.json
+            - name: WORK_ROOT
+              value: /work
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: holdings
+              mountPath: /config
+              readOnly: true
+            - name: work
+              mountPath: /work
+      volumes:
+        - name: holdings
+          configMap:
+            name: demo-portfolio-holdings
+        - name: work
+          emptyDir:
+            sizeLimit: 512Mi

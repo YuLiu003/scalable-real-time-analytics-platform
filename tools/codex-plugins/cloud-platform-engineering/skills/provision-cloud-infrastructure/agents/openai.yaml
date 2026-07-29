@@ -1,0 +1,4 @@
+interface:
+  display_name: "Provision Cloud Infrastructure"
+  short_description: "Build and review secure cloud infrastructure"
+  default_prompt: "Use $provision-cloud-infrastructure to plan and implement this infrastructure change."

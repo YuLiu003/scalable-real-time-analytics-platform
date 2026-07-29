@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: unauthorized-s3-probe
+  namespace: analytics-apps
+  labels:
+    app.kubernetes.io/name: unauthorized-s3-probe
+    app.kubernetes.io/part-of: investment-analytics-platform
+automountServiceAccountToken: false
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: unauthorized-s3-probe
+  namespace: analytics-apps
+  labels:
+    app.kubernetes.io/name: unauthorized-s3-probe
+    app.kubernetes.io/component: identity-negative-test
+    app.kubernetes.io/part-of: investment-analytics-platform
+spec:
+  suspend: true
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: unauthorized-s3-probe
+        app.kubernetes.io/component: identity-negative-test
+    spec:
+      serviceAccountName: unauthorized-s3-probe
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: probe
+          image: local/market-pipeline:slice2
+          imagePullPolicy: IfNotPresent
+          command:
+            - /archive-inspector
+          args:
+            - -prefix=bronze/
+          envFrom:
+            - configMapRef:
+                name: aws-runtime
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
