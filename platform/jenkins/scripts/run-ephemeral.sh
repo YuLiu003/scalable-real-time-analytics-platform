@@ -17,8 +17,8 @@ if colima list 2>/dev/null | awk 'NR > 1 { print $1 }' | grep -Fxq "${profile}";
 fi
 
 cleanup() {
-  status=$?
-  trap - EXIT
+  status="${1:-$?}"
+  trap - EXIT HUP INT TERM
   if (( profile_reserved != 0 )); then
     colima delete "${profile}" --force --data || status=1
   fi
@@ -27,7 +27,10 @@ cleanup() {
   fi
   exit "${status}"
 }
-trap cleanup EXIT
+trap 'cleanup $?' EXIT
+trap 'cleanup 129' HUP
+trap 'cleanup 130' INT
+trap 'cleanup 143' TERM
 
 profile_reserved=1
 docker_config="$(mktemp -d "${TMPDIR:-/tmp}/jenkins-docker-config.XXXXXX")"

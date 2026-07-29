@@ -136,6 +136,9 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertIn('JENKINS_COLIMA_CPUS:-8', text)
         self.assertIn('JENKINS_COLIMA_MEMORY_GIB:-16', text)
         self.assertIn('colima delete "${profile}" --force --data', text)
+        self.assertIn("trap 'cleanup 129' HUP", text)
+        self.assertIn("trap 'cleanup 130' INT", text)
+        self.assertIn("trap 'cleanup 143' TERM", text)
 
     def test_ps2_uses_a_bounded_single_node_ci_cluster(self) -> None:
         config = yaml.safe_load(
