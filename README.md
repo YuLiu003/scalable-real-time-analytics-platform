@@ -42,6 +42,10 @@ Routine development remains
 [free-first](docs/features/cloud-native-investment-platform/free-first-lab-strategy.md):
 the full kind environment can run in an automatically deleted Colima profile,
 while managed-cloud applies are optional, short-lived learning exercises.
+Pull requests use the
+[production-like disposable Jenkins platform](platform/jenkins/README.md) as
+the primary `PS0`/`PS1`/`PS2` executor and publish `jenkins / presubmit` as the
+merge gate.
 
 ## 🛡️ Status
 - **Investment platform slices**: Local lifecycle, event archive, analytics,
@@ -49,6 +53,8 @@ while managed-cloud applies are optional, short-lived learning exercises.
 - **Maturity**: Educational cloud-platform capstone; not a production brokerage
   or financial-advice system
 - **Runtime evidence**: Linked from slice-specific verification records
+- **CI executor**: Disposable Jenkins controller and isolated Kubernetes agents;
+  see the [Jenkins verification record](platform/jenkins/VERIFICATION.md)
 - **Documentation**: Actively maintained as each roadmap slice graduates
 
 For detailed implementation status, see [Implementation Summary](IMPLEMENTATION_SUMMARY.md)

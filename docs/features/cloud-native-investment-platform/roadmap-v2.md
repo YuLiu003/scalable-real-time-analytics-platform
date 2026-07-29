@@ -35,7 +35,7 @@ Each slice must leave the repository usable and must attach executable proof.
 | 4 | `feature/aws-ecs-runtime-contracts` | Existing API image, ECS task/service definitions, IAM and health contracts | Static OpenTofu tests plus process replacement and graceful-stop evidence | Not started |
 | 5 | `feature/kafka-scale-lab` | Adjustable producers and partition-aware consumers | Measured throughput, p95 latency, lag, backpressure, and bounded recovery | Not started |
 | 6 | `feature/platform-observability-rollback` | OpenTelemetry, actionable alerts, Argo CD reconciliation, rollback | Trace across the event path and a detected, rolled-back bad release | Not started |
-| 7 | `feature/jenkins-pipeline-adapter` | Credential-free Jenkins Pipeline calling repository-owned `PS0`/`PS1`/`PS2` targets | Isolated agent, gated pipeline, retained evidence, automatic cleanup | Adapter implemented; disposable controller remains |
+| 7 | `feature/presubmit-quality-gates` | Credential-free Jenkins Pipeline calling repository-owned `PS0`/`PS1`/`PS2` targets | Isolated agents, exact-commit gate, GitHub status, automatic cleanup | Implemented; per-head proof is `jenkins / presubmit` |
 | 8 | `feature/free-cloud-provider-contracts` | AWS/GCP/Azure IaC mocks and provider responsibility comparison | Validated configuration and documented emulator gaps; no paid apply | Not started |
 
 ## Required free boundary

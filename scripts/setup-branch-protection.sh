@@ -124,9 +124,7 @@ create_branch_protection() {
   "required_status_checks": {
     "strict": true,
     "contexts": [
-      "presubmit / PS0",
-      "presubmit / PS1",
-      "presubmit / PS2"
+      "jenkins / presubmit"
     ]
   },
   "enforce_admins": true,

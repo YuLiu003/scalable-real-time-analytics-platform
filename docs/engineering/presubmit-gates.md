@@ -54,11 +54,13 @@ the truth of the attestation, so review and CODEOWNERS remain separate controls.
 
 ## Required `main` protection
 
-Require these exact, unique GitHub checks:
+Require the Jenkins aggregate status:
 
-- `presubmit / PS0`
-- `presubmit / PS1`
-- `presubmit / PS2`
+- `jenkins / presubmit`
+
+GitHub Actions continues to run `presubmit / PS0`, `presubmit / PS1`, and
+`presubmit / PS2` as independent portability evidence, but Jenkins is the
+primary merge gate.
 
 Also require a pull request, conversation resolution, strict up-to-date checks
 or a merge queue, no force pushes or deletions, and no administrator bypass.
@@ -93,6 +95,17 @@ Configure Jenkins as follows:
   only inside the trusted stage that needs it.
 - Use an LTS controller, pinned plugins, bounded build retention, ephemeral
   agents, and workspace deletion after every run.
+- Bind each build to the PR head SHA in trusted job input, and make every stage
+  reject a checkout that differs from it.
+
+The free lab uses `platform/jenkins/scripts/report-github-status.py` after the
+disposable run exits successfully. It verifies the exact open PR head, ordered
+PS0/PS1/PS2 success, and VM deletion before publishing
+`jenkins / presubmit`. This operator workflow is production-like evidence, not
+a substitute for a continuously available controller. Production should use
+GitHub Branch Source with a GitHub App held by the controller plugin, retain
+logs externally, and never expose that credential to PR-controlled Pipeline
+steps.
 
 Jenkins documents that masking only reduces accidental disclosure and that an
 untrusted Pipeline can still capture credentials. It also recommends

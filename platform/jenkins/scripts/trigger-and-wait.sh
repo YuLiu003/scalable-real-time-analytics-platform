@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 jenkins_dir="$(cd "${script_dir}/.." && pwd)"
+repo_root="$(cd "${jenkins_dir}/../.." && pwd)"
 
 # shellcheck disable=SC1091
 source "${jenkins_dir}/versions.lock"
@@ -56,12 +57,19 @@ crumb_json="$(curl "${curl_args[@]}" \
 crumb_field="$(printf '%s' "${crumb_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["crumbRequestField"])')"
 crumb_value="$(printf '%s' "${crumb_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["crumb"])')"
 
+expected_commit="${JENKINS_EXPECTED_COMMIT:-$(git -C "${repo_root}" rev-parse HEAD)}"
+if [[ ! "${expected_commit}" =~ ^[0-9a-f]{40}$ ]]; then
+  printf 'ERROR: expected commit must be a 40-character lowercase SHA.\n' >&2
+  exit 2
+fi
+
 curl "${curl_args[@]}" \
   --header "${crumb_field}: ${crumb_value}" \
   --dump-header "${headers_file}" \
   --output /dev/null \
   --request POST \
-  "${base_url}/job/investment-platform-presubmit/build"
+  --data-urlencode "EXPECTED_COMMIT=${expected_commit}" \
+  "${base_url}/job/investment-platform-presubmit/buildWithParameters"
 
 queue_url="$(awk 'BEGIN { IGNORECASE=1 } /^Location:/ { print $2 }' "${headers_file}" |
   tr -d '\r' | tail -n 1)"
@@ -109,7 +117,8 @@ while (( SECONDS < build_deadline )); do
     python3 -c 'import json,sys; print(json.load(sys.stdin).get("result") or "RUNNING")')"
   case "${result}" in
     SUCCESS)
-      printf 'Jenkins PS0, PS1, and PS2 pipeline passed.\n'
+      printf 'Jenkins PS0, PS1, and PS2 pipeline passed for %s.\n' \
+        "${expected_commit}"
       exit 0
       ;;
     RUNNING)

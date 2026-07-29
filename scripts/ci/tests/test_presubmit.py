@@ -187,12 +187,21 @@ class PresubmitTests(unittest.TestCase):
         self.write(
             "Jenkinsfile",
             "agent none\nlabel 'jenkins-verify'\nlabel 'jenkins-integration'\n"
-            "stage('PS0') {}\nstage('PS1') {}\nstage('PS2') {}\n",
+            "stage('PS0') {}\nstage('PS1') {}\nstage('PS2') {}\n"
+            + 'test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"\n' * 3,
         )
         presubmit.check_jenkins_pipeline(["Jenkinsfile"])
 
         self.write("Jenkinsfile", "agent any\nstage('PS0') {}\nwithCredentials([]) {}\n")
         with self.assertRaisesRegex(presubmit.PresubmitError, "missing PS1"):
+            presubmit.check_jenkins_pipeline(["Jenkinsfile"])
+
+        self.write(
+            "Jenkinsfile",
+            "agent none\nlabel 'jenkins-verify'\nlabel 'jenkins-integration'\n"
+            "stage('PS0') {}\nstage('PS1') {}\nstage('PS2') {}\n",
+        )
+        with self.assertRaisesRegex(presubmit.PresubmitError, "expected commit"):
             presubmit.check_jenkins_pipeline(["Jenkinsfile"])
 
         self.write(

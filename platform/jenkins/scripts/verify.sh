@@ -25,7 +25,8 @@ for expected_setting in \
   '<shallow>true</shallow>' \
   '<noTags>true</noTags>' \
   '<honorRefspec>true</honorRefspec>' \
-  '<depth>1</depth>'; do
+  '<depth>1</depth>' \
+  '<name>EXPECTED_COMMIT</name>'; do
   if [[ "${job_config}" != *"${expected_setting}"* ]]; then
     printf 'ERROR: Jenkins job is missing SCM setting %s.\n' \
       "${expected_setting}" >&2

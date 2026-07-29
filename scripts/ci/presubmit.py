@@ -191,6 +191,9 @@ def check_jenkins_pipeline(paths: Sequence[str]) -> None:
     for forbidden in ("podTemplate(", "privileged:"):
         if forbidden in text:
             failures.append(f"Jenkinsfile: agent privilege must not be defined by repository code: {forbidden}")
+    commit_check = 'test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"'
+    if text.count(commit_check) != len(STAGES):
+        failures.append("Jenkinsfile: every stage must verify the trusted expected commit")
     if failures:
         raise PresubmitError("\n".join(failures))
 

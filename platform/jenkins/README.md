@@ -21,12 +21,18 @@ Kubernetes agents without claiming that a local lab is a production deployment.
 - GitHub remains the merge authority. A production Jenkins installation should
   use a GitHub App on the trusted controller for webhook delivery and commit
   status reporting. Tokens are never bound into an untrusted PR Pipeline.
+- The lab publishes `jenkins / presubmit` only from a trusted host-side
+  reporter after it verifies the exact PR head, ordered success evidence, and
+  VM deletion. The reporter token is never available to the Pipeline.
 
 ## Run
 
 ```bash
 make -C platform/jenkins quality
 make -C platform/jenkins e2e-ephemeral
+platform/jenkins/scripts/report-github-status.py \
+  --pr 29 \
+  --log /absolute/path/to/retained-operator.log
 ```
 
 The ephemeral target creates a dedicated Colima VM, deploys Jenkins to kind,
@@ -38,6 +44,11 @@ to two hours on a slow connection because it downloads pinned infrastructure
 images and providers. The outer cluster preloads the integration-agent images
 before starting the bounded Jenkins build.
 
+The trigger binds the build to the exact 40-character commit expected by the
+trusted operator. Every stage fails if its checkout differs. The status
+reporter creates or updates a PR evidence comment, then points the
+`jenkins / presubmit` commit status to that comment.
+
 The nested CI topology is deliberately smaller than the normal three-node local
 topology because it runs inside privileged DinD. Multi-node scheduling remains
 available through `platform/local/kind/cluster.yaml`; the AWS OpenTofu tests
@@ -46,10 +57,12 @@ independently enforce the three-zone cloud design.
 ## Production boundary
 
 For a real deployment, replace local images with registry digests, use OIDC for
-administrators, install a GitHub App on the controller, put integration agents
-in an isolated autoscaled node pool, use CSI snapshots or a backup controller
-for the PVC, and scrape `/prometheus/`. Target RTO is 60 minutes from Helm,
-JCasC, and the latest backup; target RPO is 24 hours for build history.
+administrators, replace the operator reporter with GitHub Branch Source and a
+GitHub App on the trusted controller, put integration agents in an isolated
+autoscaled node pool, use CSI snapshots or a backup controller for the PVC,
+retain console logs and artifacts outside the disposable cluster, and scrape
+`/prometheus/`. Target RTO is 60 minutes from Helm, JCasC, and the latest
+backup; target RPO is 24 hours for build history.
 
 Official design sources:
 

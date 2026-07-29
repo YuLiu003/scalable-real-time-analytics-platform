@@ -73,6 +73,10 @@ class JenkinsContractTests(unittest.TestCase):
         )
         self.assertEqual(text.count("retry(3)"), 4)
         self.assertIn("timeout(time: 120, unit: 'MINUTES')", text)
+        self.assertEqual(
+            text.count('test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"'),
+            3,
+        )
         self.assertIn(
             "git fetch --no-tags --unshallow origin +refs/heads/main:", text
         )
@@ -85,6 +89,7 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertIn("depth(1)", text)
         self.assertIn("timeout(5)", text)
         self.assertIn("honorRefspec(true)", text)
+        self.assertIn("stringParam('EXPECTED_COMMIT'", text)
 
     def test_agent_build_uses_a_narrow_temporary_context(self) -> None:
         text = (JENKINS_DIR / "scripts" / "build-agent.sh").read_text(encoding="utf-8")
@@ -115,6 +120,9 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertIn("/queue/item/", text)
         self.assertNotIn("/lastBuild/", text)
         self.assertNotIn('--user "admin:${admin_password}"', text)
+        self.assertIn("buildWithParameters", text)
+        self.assertIn('--data-urlencode "EXPECTED_COMMIT=${expected_commit}"', text)
+        self.assertIn("pipeline passed for %s", text)
         self.assertIn('JENKINS_BUILD_TIMEOUT_SECONDS:-7800', text)
         self.assertIn("while (( SECONDS < build_deadline ))", text)
 

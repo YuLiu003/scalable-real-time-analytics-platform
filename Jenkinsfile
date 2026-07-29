@@ -26,6 +26,7 @@ pipeline {
                 retry(3) {
                     checkout scm
                 }
+                sh 'test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"'
                 retry(3) {
                     sh 'git fetch --no-tags --unshallow origin +refs/heads/main:refs/remotes/origin/main'
                 }
@@ -47,6 +48,7 @@ pipeline {
                 retry(3) {
                     checkout scm
                 }
+                sh 'test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"'
                 sh 'python3 scripts/ci/presubmit.py PS1'
             }
             post {
@@ -65,6 +67,7 @@ pipeline {
                 retry(3) {
                     checkout scm
                 }
+                sh 'test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"'
                 sh 'scripts/ci/wait-for-docker.sh'
                 sh 'python3 scripts/ci/presubmit.py PS2'
             }
