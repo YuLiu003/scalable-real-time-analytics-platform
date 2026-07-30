@@ -62,6 +62,12 @@ if [[ ! "${expected_commit}" =~ ^[0-9a-f]{40}$ ]]; then
   printf 'ERROR: expected commit must be a 40-character lowercase SHA.\n' >&2
   exit 2
 fi
+source_branch="${JENKINS_SOURCE_BRANCH:-$(git -C "${repo_root}" branch --show-current)}"
+if [[ -z "${source_branch}" ]] ||
+  ! git -C "${repo_root}" check-ref-format --branch "${source_branch}" >/dev/null; then
+  printf 'ERROR: source branch must be a valid branch name.\n' >&2
+  exit 2
+fi
 
 curl "${curl_args[@]}" \
   --header "${crumb_field}: ${crumb_value}" \
@@ -69,6 +75,7 @@ curl "${curl_args[@]}" \
   --output /dev/null \
   --request POST \
   --data-urlencode "EXPECTED_COMMIT=${expected_commit}" \
+  --data-urlencode "SOURCE_BRANCH=${source_branch}" \
   "${base_url}/job/investment-platform-presubmit/buildWithParameters"
 
 queue_url="$(awk 'BEGIN { IGNORECASE=1 } /^Location:/ { print $2 }' "${headers_file}" |

@@ -2,12 +2,11 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Implemented on stacked quality branch |
-| Branch | `feature/portfolio-analytics-quality-gates` |
-| Parent | `feature/portfolio-analytics-slice3` at `e4920ae` |
+| Status | Implemented |
 | Coverage threshold | 100% in every measured application scope |
-| CI workflow | `Portfolio Platform Quality` |
-| Last verified | 2026-07-21 |
+| CI workflows | `Presubmit` and `Portfolio Platform Quality` |
+| Required merge check | `jenkins / presubmit` |
+| Last verified | 2026-07-29 |
 
 ## Policy
 
@@ -128,18 +127,15 @@ result_sha256=ee62de5a28a25c34b67cf9df59deaf810a657a2994d78c416ff28f6cb08c99d6
 
 ## Repository enforcement
 
-After this workflow has run on GitHub, protect `main` and require these unique
-checks:
+The `main` ruleset requires the single `jenkins / presubmit` result. Jenkins
+runs the same repository-owned PS0, PS1, and PS2 commands and publishes success
+only after verifying the exact pull-request head and disposable-VM cleanup.
 
-- `portfolio / 100% application coverage`
-- `portfolio / container build`
-- `portfolio / kind end-to-end`
-- `portfolio / aws infrastructure`
-
-GitHub documents that required checks must pass before a protected branch can
-merge. The workflow uses least-privilege default permissions and grants
-`packages: write` only to the delivery job. All referenced actions are pinned
-to full commit SHAs, following GitHub's secure-use guidance.
+GitHub Actions independently reports coverage, container-build, kind
+end-to-end, and AWS infrastructure results. They remain visible review evidence
+without duplicating the required-status policy. Workflows use least-privilege
+permissions, grant `packages: write` only to delivery, and pin third-party
+actions to full commit SHAs.
 
 Authoritative references, retrieved 2026-07-21:
 

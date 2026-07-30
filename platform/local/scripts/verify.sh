@@ -81,19 +81,29 @@ kubectl --context "${KUBERNETES_CONTEXT}" \
   --namespace "${OBSERVABILITY_NAMESPACE}" \
   get service monitoring-grafana monitoring-kube-prometheus-prometheus >/dev/null
 
-if ! kubectl --context "${KUBERNETES_CONTEXT}" get --raw \
-  "/api/v1/namespaces/${OBSERVABILITY_NAMESPACE}/services/http:monitoring-grafana:80/proxy/api/health" \
-  | grep -Eq '"database"[[:space:]]*:[[:space:]]*"ok"'; then
-  printf 'ERROR: Grafana health endpoint did not report a healthy database.\n' >&2
-  exit 1
-fi
+wait_for_monitoring_api() {
+  local name="$1"
+  local path="$2"
+  local expected="$3"
+  local response
 
-prometheus_readiness="$(kubectl --context "${KUBERNETES_CONTEXT}" get --raw \
-  "/api/v1/namespaces/${OBSERVABILITY_NAMESPACE}/services/http:monitoring-kube-prometheus-prometheus:9090/proxy/-/ready")"
-if [[ "${prometheus_readiness}" != *"Prometheus Server is Ready."* ]]; then
-  printf 'ERROR: Prometheus readiness endpoint did not report Ready.\n' >&2
-  exit 1
-fi
+  for _ in {1..60}; do
+    if response="$(kubectl --context "${KUBERNETES_CONTEXT}" get --raw "${path}" 2>/dev/null)" &&
+      grep -Eq "${expected}" <<<"${response}"; then
+      return
+    fi
+    sleep 2
+  done
+  printf 'ERROR: %s did not become ready within 120 seconds.\n' "${name}" >&2
+  return 1
+}
+
+wait_for_monitoring_api "Grafana health endpoint" \
+  "/api/v1/namespaces/${OBSERVABILITY_NAMESPACE}/services/http:monitoring-grafana:80/proxy/api/health" \
+  '"database"[[:space:]]*:[[:space:]]*"ok"'
+wait_for_monitoring_api "Prometheus readiness endpoint" \
+  "/api/v1/namespaces/${OBSERVABILITY_NAMESPACE}/services/http:monitoring-kube-prometheus-prometheus:9090/proxy/-/ready" \
+  "Prometheus Server is Ready\\."
 
 printf '\nLocal platform verification passed.\n'
 kubectl --context "${KUBERNETES_CONTEXT}" get nodes -o wide

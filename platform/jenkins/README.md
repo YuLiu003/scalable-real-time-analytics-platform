@@ -31,7 +31,7 @@ Kubernetes agents without claiming that a local lab is a production deployment.
 make -C platform/jenkins quality
 make -C platform/jenkins e2e-ephemeral
 platform/jenkins/scripts/report-github-status.py \
-  --pr 29 \
+  --pr "$PR_NUMBER" \
   --log /absolute/path/to/retained-operator.log
 ```
 
@@ -44,8 +44,8 @@ to two hours on a slow connection because it downloads pinned infrastructure
 images and providers. The outer cluster preloads the integration-agent images
 before starting the bounded Jenkins build.
 
-The trigger binds the build to the exact 40-character commit expected by the
-trusted operator. Every stage fails if its checkout differs. The status
+The trigger selects the current source branch and binds the build to its exact
+40-character commit. Every stage fails if its checkout differs. The status
 reporter creates or updates a PR evidence comment, then points the
 `jenkins / presubmit` commit status to that comment.
 
