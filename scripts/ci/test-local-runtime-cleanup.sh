@@ -5,9 +5,12 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/runtime-cleanup-test.XXXXXX")"
 fake_bin="${test_root}/bin"
 fake_home="${test_root}/home"
+fake_tmp="${test_root}/tmp"
 log_file="${test_root}/commands.log"
 trap 'rm -rf "${test_root}"' EXIT
-mkdir -p "${fake_bin}" "${fake_home}"
+mkdir -p "${fake_bin}" "${fake_home}/.docker" "${fake_home}/.kube" "${fake_tmp}"
+printf 'caller-docker-config\n' >"${fake_home}/.docker/config.json"
+printf 'caller-kubeconfig\n' >"${fake_home}/.kube/config"
 
 cat >"${fake_bin}/fake-command" <<'FAKE'
 #!/usr/bin/env bash
@@ -21,8 +24,24 @@ case "${command_name}" in
       if [[ "${FAKE_PROFILE_PRESENT:-0}" == "1" ]]; then
         printf '%s Running aarch64 4 8GiB 30GiB docker -\n' "${FAKE_PROFILE_NAME}"
       fi
-    elif [[ "${1:-}" == "start" && "${FAKE_FAIL_COLIMA_START:-0}" == "1" ]]; then
-      exit 1
+    elif [[ "${1:-}" == "start" ]]; then
+      if [[ -n "${DOCKER_CONTEXT:-}" || -n "${DOCKER_HOST:-}" ]]; then
+        printf 'inherited Docker override reached Colima start\n' >&2
+        exit 1
+      fi
+      docker_config="${DOCKER_CONFIG:-${HOME}/.docker}"
+      kubeconfig="${KUBECONFIG:-${HOME}/.kube/config}"
+      if [[ "${docker_config}" == "${HOME}/.docker" ||
+        "${kubeconfig}" == "${HOME}/.kube/config" ]]; then
+        printf 'ephemeral runtime used caller configuration\n' >&2
+        exit 1
+      fi
+      mkdir -p "${docker_config}" "$(dirname "${kubeconfig}")"
+      printf 'generated-colima-context\n' >"${docker_config}/colima-context"
+      printf 'runtime-config %s %s\n' "${docker_config}" "${kubeconfig}" >>"${FAKE_LOG}"
+      if [[ "${FAKE_FAIL_COLIMA_START:-0}" == "1" ]]; then
+        exit 1
+      fi
     fi
     ;;
   docker)
@@ -37,6 +56,11 @@ case "${command_name}" in
     ;;
   make)
     target="${3:-}"
+    if [[ "${target}" == "bootstrap" ]]; then
+      kubeconfig="${KUBECONFIG:-${HOME}/.kube/config}"
+      mkdir -p "$(dirname "${kubeconfig}")"
+      printf 'generated-kind-context\n' >"${kubeconfig}"
+    fi
     if [[ -n "${FAKE_FAIL_TARGET:-}" && "${target}" == "${FAKE_FAIL_TARGET}" ]]; then
       exit 1
     fi
@@ -50,8 +74,25 @@ done
 
 export PATH="${fake_bin}:${PATH}"
 export HOME="${fake_home}"
+export TMPDIR="${fake_tmp}"
 export FAKE_LOG="${log_file}"
 export FAKE_PROFILE_NAME=investment-platform
+unset DOCKER_CONFIG KUBECONFIG
+
+assert_runtime_config_isolated_and_removed() {
+  local record docker_config kubeconfig runtime_config_dir
+  record="$(grep '^runtime-config ' "${log_file}" | tail -n 1)"
+  read -r _ docker_config kubeconfig <<<"${record}"
+  runtime_config_dir="$(dirname "${docker_config}")"
+
+  [[ "${runtime_config_dir}" == "${TMPDIR}/"* ]]
+  [[ "${docker_config}" == "${runtime_config_dir}/docker" ]]
+  [[ "${kubeconfig}" == "${runtime_config_dir}/kubeconfig" ]]
+  [[ ! -e "${runtime_config_dir}" ]]
+  grep -Fxq 'caller-docker-config' "${HOME}/.docker/config.json"
+  grep -Fxq 'caller-kubeconfig' "${HOME}/.kube/config"
+  [[ ! -e "${HOME}/.docker/colima-context" ]]
+}
 
 if CONFIRM_RUNTIME_CLEANUP= FAKE_PROFILE_PRESENT=1 \
   "${repo_root}/platform/local/scripts/cleanup-runtime.sh" </dev/null 2>/dev/null; then
@@ -80,18 +121,23 @@ grep -q '^colima delete investment-platform --force --data$' "${log_file}"
 FAKE_PROFILE_NAME=investment-platform-ephemeral \
 FAKE_PROFILE_PRESENT=0 \
 FAKE_CLUSTER_PRESENT=1 \
+DOCKER_CONTEXT=caller-context \
+DOCKER_HOST=unix:///caller/docker.sock \
   "${repo_root}/platform/local/scripts/run-ephemeral.sh" >/dev/null
 grep -q '^make -C .*/platform/local bootstrap$' "${log_file}"
 grep -q '^make -C .*/platform/local bootstrap-data-path$' "${log_file}"
 grep -q '^make -C .*/platform/local bootstrap-analytics$' "${log_file}"
 grep -q '^kind delete cluster --name investment-platform$' "${log_file}"
 grep -q '^colima delete investment-platform-ephemeral --force --data$' "${log_file}"
+assert_runtime_config_isolated_and_removed
 
 : >"${log_file}"
 if FAKE_PROFILE_NAME=investment-platform-ephemeral \
   FAKE_PROFILE_PRESENT=0 \
   FAKE_CLUSTER_PRESENT=1 \
   FAKE_FAIL_TARGET=bootstrap-data-path \
+  DOCKER_CONTEXT=caller-context \
+  DOCKER_HOST=unix:///caller/docker.sock \
     "${repo_root}/platform/local/scripts/run-ephemeral.sh" >/dev/null 2>&1; then
   printf 'run-ephemeral ignored a failed platform phase\n' >&2
   exit 1
@@ -102,6 +148,7 @@ if grep -q '^make -C .*/platform/local bootstrap-analytics$' "${log_file}"; then
 fi
 grep -q '^make -C .*/platform/local diagnose$' "${log_file}"
 grep -q '^colima delete investment-platform-ephemeral --force --data$' "${log_file}"
+assert_runtime_config_isolated_and_removed
 
 : >"${log_file}"
 if FAKE_PROFILE_NAME=investment-platform-ephemeral \
@@ -120,6 +167,8 @@ if FAKE_PROFILE_NAME=investment-platform-ephemeral \
   FAKE_PROFILE_PRESENT=0 \
   FAKE_CLUSTER_PRESENT=1 \
   FAKE_FAIL_COLIMA_START=1 \
+  DOCKER_CONTEXT=caller-context \
+  DOCKER_HOST=unix:///caller/docker.sock \
     "${repo_root}/platform/local/scripts/run-ephemeral.sh" >/dev/null 2>&1; then
   printf 'run-ephemeral ignored a failed Colima start\n' >&2
   exit 1
@@ -129,5 +178,30 @@ if grep -q '^kind delete ' "${log_file}"; then
   exit 1
 fi
 grep -q '^colima delete investment-platform-ephemeral --force --data$' "${log_file}"
+assert_runtime_config_isolated_and_removed
 
-printf 'Local ephemeral-runtime lifecycle tests passed.\n'
+: >"${log_file}"
+FAKE_PROFILE_NAME=investment-platform-jenkins-ephemeral \
+FAKE_PROFILE_PRESENT=0 \
+DOCKER_CONTEXT=caller-context \
+DOCKER_HOST=unix:///caller/docker.sock \
+  "${repo_root}/platform/jenkins/scripts/run-ephemeral.sh" >/dev/null
+grep -q '^make -C .*/platform/jenkins bootstrap$' "${log_file}"
+grep -q '^make -C .*/platform/jenkins trigger$' "${log_file}"
+grep -q '^colima delete investment-platform-jenkins-ephemeral --force --data$' "${log_file}"
+assert_runtime_config_isolated_and_removed
+
+: >"${log_file}"
+if FAKE_PROFILE_NAME=investment-platform-jenkins-ephemeral \
+  FAKE_PROFILE_PRESENT=0 \
+  FAKE_FAIL_TARGET=trigger \
+  DOCKER_CONTEXT=caller-context \
+  DOCKER_HOST=unix:///caller/docker.sock \
+    "${repo_root}/platform/jenkins/scripts/run-ephemeral.sh" >/dev/null 2>&1; then
+  printf 'Jenkins run-ephemeral ignored a failed phase\n' >&2
+  exit 1
+fi
+grep -q '^colima delete investment-platform-jenkins-ephemeral --force --data$' "${log_file}"
+assert_runtime_config_isolated_and_removed
+
+printf 'Ephemeral-runtime lifecycle and context-isolation tests passed.\n'

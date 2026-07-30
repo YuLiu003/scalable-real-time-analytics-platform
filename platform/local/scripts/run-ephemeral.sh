@@ -13,7 +13,7 @@ memory_gib="${EPHEMERAL_COLIMA_MEMORY_GIB:-8}"
 disk_gib="${EPHEMERAL_COLIMA_DISK_GIB:-30}"
 profile_reserved=0
 runtime_ready=0
-docker_config=""
+runtime_config_dir=""
 
 if [[ ! "${profile}" =~ ^investment-platform-[a-z0-9][a-z0-9-]*$ ]]; then
   printf 'ERROR: EPHEMERAL_COLIMA_PROFILE must start with investment-platform- and contain lowercase letters, digits, or hyphens.\n' >&2
@@ -53,8 +53,8 @@ cleanup() {
     fi
   fi
 
-  if [[ -n "${docker_config}" ]]; then
-    rm -rf "${docker_config}"
+  if [[ -n "${runtime_config_dir}" ]]; then
+    rm -rf "${runtime_config_dir}"
   fi
   if (( original_status == 0 && cleanup_status != 0 )); then
     original_status=${cleanup_status}
@@ -69,8 +69,13 @@ if profile_exists; then
   exit 1
 fi
 
+runtime_config_dir="$(mktemp -d "${TMPDIR:-/tmp}/investment-platform-runtime-config.XXXXXX")"
+export DOCKER_CONFIG="${runtime_config_dir}/docker"
+export KUBECONFIG="${runtime_config_dir}/kubeconfig"
+mkdir -p "${DOCKER_CONFIG}"
+unset DOCKER_CONTEXT DOCKER_HOST
+
 profile_reserved=1
-docker_config="$(mktemp -d "${TMPDIR:-/tmp}/investment-platform-docker-config.XXXXXX")"
 colima start "${profile}" \
   --activate=false \
   --runtime docker \
@@ -79,7 +84,6 @@ colima start "${profile}" \
   --disk "${disk_gib}"
 
 export DOCKER_HOST="unix://${HOME}/.colima/${profile}/docker.sock"
-export DOCKER_CONFIG="${docker_config}"
 runtime_ready=1
 
 run_complete_platform() {
