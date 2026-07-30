@@ -31,7 +31,7 @@ Kubernetes agents without claiming that a local lab is a production deployment.
 make -C platform/jenkins quality
 make -C platform/jenkins e2e-ephemeral
 platform/jenkins/scripts/report-github-status.py \
-  --pr 29 \
+  --pr "$PR_NUMBER" \
   --log /absolute/path/to/retained-operator.log
 ```
 
