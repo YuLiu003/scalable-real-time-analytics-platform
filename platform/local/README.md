@@ -20,9 +20,9 @@ stateless Go API with an embedded portfolio-allocation dashboard. Its exact
 calculation, publication, readiness, and replay semantics are defined in the
 [`Slice 3 contract`](../../docs/features/cloud-native-investment-platform/slice-3-analytics-contract.md).
 
-The baseline is intentionally separate from the legacy Minikube, raw-manifest,
-and incomplete Helm deployment paths. Those paths remain untouched until a
-later migration proposal defines their disposition.
+The current baseline replaces the retired Minikube, raw-manifest, and incomplete
+Helm paths. Supported local workflows use kind through the targets documented
+here.
 
 ## Local quality gate
 
@@ -125,7 +125,9 @@ This command creates the reserved `investment-platform-ephemeral` Colima
 profile, bootstraps and verifies all three slices, writes failure diagnostics
 to the host or CI log before cleanup, deletes the kind cluster, and finally
 runs `colima delete --force --data`. It refuses to reuse or delete a
-pre-existing profile.
+pre-existing profile. Temporary Docker and Kubernetes configuration prevents
+the run from changing the caller's active contexts or retaining generated
+context records.
 The tradeoff is that images and charts must be downloaded again on the next
 run; CI is therefore the preferred place for frequent full end-to-end tests.
 

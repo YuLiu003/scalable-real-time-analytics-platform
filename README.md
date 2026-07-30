@@ -94,9 +94,10 @@ Run the complete platform in a disposable Colima VM:
 make -C platform/local e2e-ephemeral
 ```
 
-The command deletes the VM and all container data on success or failure. Use
-the persistent development workflow in the local-platform runbook only when you
-need to inspect a running cluster.
+The command isolates Docker and Kubernetes contexts, then deletes the VM and
+all container data on success or failure. Use the persistent development
+workflow in the local-platform runbook only when you need to inspect a running
+cluster.
 
 Run the production-like Jenkins path:
 
