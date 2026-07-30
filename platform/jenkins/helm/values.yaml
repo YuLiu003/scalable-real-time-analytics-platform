@@ -98,6 +98,7 @@ controller:
               }
               parameters {
                 stringParam('EXPECTED_COMMIT', '', 'Required 40-character PR head commit')
+                stringParam('SOURCE_BRANCH', 'main', 'Required repository branch containing EXPECTED_COMMIT')
               }
               definition {
                 cpsScm {
@@ -105,9 +106,9 @@ controller:
                     git {
                       remote {
                         url('https://github.com/YuLiu003/scalable-real-time-analytics-platform.git')
-                        refspec('+refs/heads/feature/presubmit-quality-gates:refs/remotes/origin/feature/presubmit-quality-gates')
+                        refspec('+refs/heads/' + '$' + '{SOURCE_BRANCH}:refs/remotes/origin/' + '$' + '{SOURCE_BRANCH}')
                       }
-                      branch('*/feature/presubmit-quality-gates')
+                      branch('*/' + '$' + '{SOURCE_BRANCH}')
                       extensions {
                         cloneOptions {
                           shallow(true)
