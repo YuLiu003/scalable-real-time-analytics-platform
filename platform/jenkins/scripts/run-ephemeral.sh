@@ -11,6 +11,12 @@ if [[ ! "${profile}" =~ ^investment-platform-jenkins-[a-z0-9][a-z0-9-]*$ ]]; the
   printf 'ERROR: invalid Jenkins Colima profile name.\n' >&2
   exit 2
 fi
+for command_name in colima curl docker git kind kubectl helm make openssl python3; do
+  if ! command -v "${command_name}" >/dev/null 2>&1; then
+    printf 'ERROR: required command %s was not found.\n' "${command_name}" >&2
+    exit 1
+  fi
+done
 if colima list 2>/dev/null | awk 'NR > 1 { print $1 }' | grep -Fxq "${profile}"; then
   printf 'ERROR: refusing to reuse or delete existing profile %s.\n' "${profile}" >&2
   exit 1

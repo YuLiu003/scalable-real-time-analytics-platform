@@ -75,24 +75,38 @@ one physical machine and are not independent availability zones.
 
 ## Prerequisites
 
-- Docker with a reachable daemon
+- Docker CLI
 - kind at the exact version in `versions.lock`
 - kubectl compatible with the pinned Kubernetes version
 - Helm 3
+- Go `1.25.12`
+- Make
 - OpenSSL
-- Approximately 6 GiB of free memory for the three nodes and monitoring stack
+- Python 3 for the local quality gate
+
+The recommended disposable workflow additionally requires macOS and Colima. It
+does not require a running Docker daemon before invocation because it creates
+its own Colima VM. The default VM reserves 4 CPUs, 8 GiB of memory, and 30 GiB
+of disk.
+
+Persistent development mode requires a reachable Docker-compatible daemon.
+Approximately 6 GiB of free memory is needed for the three kind nodes and
+monitoring stack.
 
 The full platform is intentionally heavyweight: kind stores each node's
 containerd data in a Docker volume, and a persistent Colima VM retains that
 data until explicitly deleted. On a developer Mac, prefer the ephemeral path
 below instead of leaving the cluster running between sessions.
 
-The bootstrap does not install host tools automatically. Run the preflight to
-receive actionable missing-tool or version errors:
+The bootstrap does not install host tools automatically. For persistent mode,
+start the Docker-compatible daemon and run:
 
 ```bash
 make -C platform/local preflight
 ```
+
+The disposable command checks its host tools before creating the VM and runs
+the remaining preflight checks after its isolated daemon starts.
 
 If preflight reports a missing Docker credential helper after Docker Desktop was
 removed, do not weaken or overwrite the global Docker config just for this lab.
