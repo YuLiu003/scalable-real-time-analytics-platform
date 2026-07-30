@@ -1,287 +1,91 @@
-# Kubernetes secrets and configs
-*secrets.yaml
-*sensitive*.yaml
-k8s/dev-*.yaml
-!k8s/SECURITY_SECRETS.md
-!k8s/*SECURITY*.md
-
-# Production and development credentials
-production-secrets/
-dev-secrets/
-*.credentials
-credentials.*
-secure_credentials.*
-*-secure.*
-
-# API keys and tokens
-*.apikey
-*.token
-*.key.json
-auth-keys.*
-oauth.*
-
-# Backup files containing sensitive data
-*.backup
-*.bak
-*.old
-
-# Environment files
+# Credentials and local configuration
 .env
 .env.*
-*.local
+*.apikey
+*.cer
+*.cert
+*.credentials
+*.crt
+*.key
+*.key.json
+*.p12
+*.pfx
+*.pem
+*.token
+auth-keys.*
+credentials.*
+oauth.*
+secure_credentials.*
+/k8s/secrets*.yaml
+/production-secrets/
+/dev-secrets/
+/.secrets/
 
-# Logs
-logs/
-*.log
-npm-debug.log*
+# Build and test output
+**/.build/
+build/
+dist/
+target/
+*.coverage.html
+*.out
+*.test
+.coverage
+.coverage.*
+coverage.out
+*-coverage.out
 
-# Dependencies
+# Language caches and dependencies
+__pycache__/
+*.py[cod]
+.venv/
+venv/
 node_modules/
 vendor/
-.venv/
-__pycache__/
-*.py[cod]
 
-# Build files
-dist/
-build/
-target/
-*.exe
-*.dll
-*.so
-*.dylib
-
-# SQLite databases
-*.db
-*.sqlite
-*.sqlite3
-
-# Certificates
-*.pem
-*.key
-*.crt
-*.cer
-*.ca-bundle
-
-# macOS
-.DS_Store
-.AppleDouble
-.LSOverride
-
-# IDEs and editors
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-.project
-.classpath
-.settings/
-
-# Temporary files
-tmp/
-temp/
-.tmp/
-*.tmp
-*.bak
-
-# Python files
-*.env
-*.pem
-*.key
-*.cert
-*.crt
-*secret*
-*Secret*
-*SECRET*
-
-# Python files
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Testing directories
-auth-test/
-secure-api/
-
-# Backup files
-*.bak
-*.old
-*~
-*.swp
-
-# Temporary deployments
-k8s/temp/
-k8s/generated/
-
-# Local testing configs
-*test-local*
-*local-test*
-
-# IDE files
-.idea/
-.vscode/
-*.sublime-workspace
-*.sublime-project
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Docker
-.docker/
-docker-compose.override.yml
-
-# Archive directories
-archive/
-!services/market-pipeline/internal/archive/
-!services/market-pipeline/internal/archive/**
-
-# Local development files
-*.dev.yaml
-*.local.yaml
-*.dev.yml
-*.local.yml
-*.dev.env
-*.local.env
-
-# Temporary test files
-test_*.py
-# Test modules under a service's canonical test suite are source code. Keep the
-# broad temporary-file rule above without silently dropping real tests from CI.
-!services/**/tests/test_*.py
-!tools/**/test_*.py
-!scripts/ci/tests/test_*.py
-
-# Node.js (if any JavaScript is used in visualization)
-node_modules/
-package-lock.json
-npm-debug.log
-
-# Terraform local state
-.terraform/
+# Infrastructure state
+**/.terraform/
+*.tfplan
 *.tfstate
 *.tfstate.*
 *.tfvars
-*.tfplan
 crash.log
 crash.*.log
-
-# Skaffold local files
+.docker/
+.minikube/
 .skaffold/
 
-# Minikube generated files
-.minikube/
-
-# Generated documentation
-docs/generated/
-
-# Secrets directory
-.secrets/
-
-# Specific Kubernetes secret files
-k8s/kafka-secrets.yaml
-k8s/api-keys.yaml
-k8s/grafana-secret.yaml
-secure_credentials.txt
-
-# Python virtual environments
-**/.*venv*/
-**/venv/
-**/.venv/
-
-venv/
-
-# Archived Python components
-archive/python-components/
-# Archived files from Go migration
-archive/redundant-files/
-
-# Go compiled binaries and build artifacts (specific binaries, not directories)
-data-ingestion-go/data-ingestion
-clean-ingestion-go/clean-ingestion
-processing-engine-go/processing-engine-go
-processing-engine-go/processing-engine-go-new
-processing-engine-go/processing-engine
-visualization-go/visualization-go
-visualization-go/visualization
-admin-ui-go/admin-ui-go
-storage-layer-go/storage-layer
-tenant-management-go/tenant-management-go
-
-# Coverage files
-*coverage.html
-*-coverage.html
-*.coverage.html
-.coverage
-.coverage.*
-
-# Backup files
-*.bak
-*.bak2
-*.bak3
+# Logs and temporary files
+logs/
+*.log
 *.backup
+*.bak
+*.old
+*.swp
+*.tmp
 *~
+tmp/
+temp/
 
-# Go build outputs
-*.test
-*.out
-**/build_output.txt
-**/.build/
+# Generated or private local documentation
+/archive/
+/docs/archive/
+/docs/generated/
+/docs/github-secrets.md
+/scripts/generate-secure-secrets.sh
+/scripts/setup-complete.sh
+/scripts/setup-github-secrets-helper.sh
+/scripts/setup-secrets.sh
 
-# Test data files
-large_payload*.json
-*payload*.json
-test-data.json
-recent_logs.txt
+# Local binaries from the retired sensor stack
+/clean-ingestion-go/clean-ingestion
+/data-ingestion-go/data-ingestion
+/processing-engine-go/processing-engine
+/storage-layer-go/storage-layer
+/tenant-management-go/tenant-management-go
 
-# CRITICAL SECURITY ITEMS REMOVED (May 25, 2025)
-
-# ❌ IMMEDIATE SECURITY FIXES APPLIED:
-k8s/secrets-secure.yaml
-
-# Additional security patterns
-*secrets-secure*
-*production-secrets*
-*.env.production
-*.env.prod
-*prod-secrets*
-*staging-secrets*
-
-# Private key patterns
-*private*key*
-*id_rsa*
-*id_ed25519*
-*.p12
-*.pfx
-
-# Database dumps and sensitive data
-*.sql.gz
-*.dump
-*backup*.sql
-
-# Configuration with secrets
-*config.prod*
-*settings.production*
+# Editor and operating-system files
+.DS_Store
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace

@@ -81,15 +81,21 @@ class JenkinsContractTests(unittest.TestCase):
             "git fetch --no-tags --unshallow origin +refs/heads/main:", text
         )
 
-    def test_job_scm_is_shallow_and_branch_bounded(self) -> None:
+    def test_job_scm_is_shallow_and_source_branch_bounded(self) -> None:
         text = (JENKINS_DIR / "helm" / "values.yaml").read_text(encoding="utf-8")
-        self.assertIn("refspec('+refs/heads/feature/presubmit-quality-gates:", text)
+        self.assertIn(
+            "refspec('+refs/heads/' + '$' + '{SOURCE_BRANCH}:"
+            "refs/remotes/origin/' + '$' + '{SOURCE_BRANCH}')",
+            text,
+        )
+        self.assertIn("branch('*/' + '$' + '{SOURCE_BRANCH}')", text)
         self.assertIn("shallow(true)", text)
         self.assertIn("noTags(true)", text)
         self.assertIn("depth(1)", text)
         self.assertIn("timeout(5)", text)
         self.assertIn("honorRefspec(true)", text)
         self.assertIn("stringParam('EXPECTED_COMMIT'", text)
+        self.assertIn("stringParam('SOURCE_BRANCH'", text)
 
     def test_agent_build_uses_a_narrow_temporary_context(self) -> None:
         text = (JENKINS_DIR / "scripts" / "build-agent.sh").read_text(encoding="utf-8")
@@ -122,6 +128,8 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertNotIn('--user "admin:${admin_password}"', text)
         self.assertIn("buildWithParameters", text)
         self.assertIn('--data-urlencode "EXPECTED_COMMIT=${expected_commit}"', text)
+        self.assertIn('--data-urlencode "SOURCE_BRANCH=${source_branch}"', text)
+        self.assertIn("check-ref-format --branch", text)
         self.assertIn("pipeline passed for %s", text)
         self.assertIn('JENKINS_BUILD_TIMEOUT_SECONDS:-7800', text)
         self.assertIn("while (( SECONDS < build_deadline ))", text)
