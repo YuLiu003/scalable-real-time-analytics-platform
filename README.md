@@ -57,7 +57,10 @@ merge gate.
   see the [Jenkins verification record](platform/jenkins/VERIFICATION.md)
 - **Documentation**: Actively maintained as each roadmap slice graduates
 
-For detailed implementation status, see [Implementation Summary](IMPLEMENTATION_SUMMARY.md)
+For current delivery status, see the
+[roadmap](docs/features/cloud-native-investment-platform/roadmap-v2.md),
+[presubmit contract](docs/engineering/presubmit-gates.md), and
+[Jenkins verification record](platform/jenkins/VERIFICATION.md).
 
 ## 🏗️ Architecture Overview
 
@@ -658,44 +661,3 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 ## License
 
 [MIT](LICENSE)
-
-## 🎯 Quality Gates Status
-
-### Current Implementation Status: ✅ COMPLETE
-
-All quality gates have been successfully implemented and validated:
-
-✅ **GitHub Repository Configuration**
-- Branch protection rules active on `main` branch
-- Required status checks: 7/7 enforced
-- Minimum 2 reviewers required
-- CODEOWNERS file configured
-
-✅ **Authentication & Testing Issues Resolved**
-- Data ingestion API key authentication: FIXED
-- Processing engine device statistics: FIXED
-- Storage layer build issues: FIXED
-- All unit and integration tests: PASSING
-
-## 📚 Documentation
-
-### **Essential Documentation**
-- [Implementation Summary](IMPLEMENTATION_SUMMARY.md) - Complete project status and achievements
-- [Quality Gates](docs/QUALITY_GATES.md) - CI/CD pipeline and testing framework
-- [Security Guide](docs/SECURITY.md) - Authentication, secrets, and security measures
-- [Troubleshooting](docs/troubleshooting.md) - Common issues and solutions
-
-### **Setup & Configuration**
-- [Docker Hub Setup](docs/DOCKER_HUB_SETUP.md) - Docker registry configuration
-- [GitHub Actions Guide](docs/GITHUB_ACTIONS_TESTING_GUIDE.md) - CI/CD workflow setup
-- [Kafka KRaft Guide](docs/kafka-kraft-guide.md) - Kafka configuration and setup
-- [Vault Integration](docs/vault-integration.md) - External secret management
-
-### **Development Resources**
-- [API Documentation](docs/api/) - REST API specifications
-- [GitHub Secrets](docs/github-secrets.md) - Repository secret configuration
-- [Naming Conventions](docs/naming-conventions.md) - Project naming standards
-
----
-
-🚀 **Status**: Production-ready platform with enterprise-grade security and comprehensive CI/CD pipeline.
