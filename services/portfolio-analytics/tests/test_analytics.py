@@ -40,30 +40,30 @@ HOLDINGS = json.dumps(
         "base_currency": "USD",
         "positions": [
             {
-                "instrument": "QQQ",
-                "display_name": "Invesco QQQ",
+                "instrument": "DEMO-ASSET-A",
+                "display_name": "Synthetic Asset A",
                 "asset_type": "etf",
                 "valuation_type": "market_price",
-                "quantity": "4.00000000",
+                "quantity": "1.00000000",
             },
             {
-                "instrument": "QQQM",
-                "display_name": "Invesco NASDAQ 100 ETF",
+                "instrument": "DEMO-ASSET-B",
+                "display_name": "Synthetic Asset B",
                 "asset_type": "etf",
                 "valuation_type": "market_price",
-                "quantity": "8.00000000",
+                "quantity": "2.00000000",
             },
             {
-                "instrument": "FSELX",
-                "display_name": "Fidelity Select Semiconductors Portfolio",
+                "instrument": "DEMO-ASSET-C",
+                "display_name": "Synthetic Asset C",
                 "asset_type": "mutual_fund",
                 "valuation_type": "nav",
-                "quantity": "30.00000000",
+                "quantity": "3.00000000",
             },
         ],
         "benchmark": {
-            "instrument": "SP500",
-            "display_name": "S&P 500 Index",
+            "instrument": "DEMO-BENCH-D",
+            "display_name": "Synthetic Benchmark D",
             "asset_type": "index",
             "valuation_type": "index_level",
         },
@@ -75,10 +75,10 @@ HOLDINGS = json.dumps(
 
 def bronze() -> list[BronzeObject]:
     return [
-        BronzeObject("bronze/qqq.json", event("QQQ", "600.0000", 1, "2026-07-21T00:00:00Z")),
-        BronzeObject("bronze/qqqm.json", event("QQQM", "250.0000", 2, "2026-07-21T00:00:02Z")),
-        BronzeObject("bronze/fselx.json", event("FSELX", "60.0000", 100, "2026-07-21T00:01:00Z")),
-        BronzeObject("bronze/sp500.json", event("SP500", "6500.0000", 101, "2026-07-21T00:01:30Z")),
+        BronzeObject("bronze/demo-asset-a.json", event("DEMO-ASSET-A", "100.0000", 1, "2026-07-21T00:00:00Z")),
+        BronzeObject("bronze/demo-asset-b.json", event("DEMO-ASSET-B", "100.0000", 2, "2026-07-21T00:00:02Z")),
+        BronzeObject("bronze/demo-asset-c.json", event("DEMO-ASSET-C", "100.0000", 100, "2026-07-21T00:01:00Z")),
+        BronzeObject("bronze/demo-bench-d.json", event("DEMO-BENCH-D", "1000.0000", 101, "2026-07-21T00:01:30Z")),
     ]
 
 
@@ -87,11 +87,11 @@ class AnalyticsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as first_directory, tempfile.TemporaryDirectory() as second_directory:
             products = build_products(bronze(), HOLDINGS, Path(first_directory))
             replayed = build_products(list(reversed(bronze())), HOLDINGS, Path(second_directory))
-            self.assertEqual(products["result"]["total_market_value"], "6200.00000000")
+            self.assertEqual(products["result"]["total_market_value"], "600.00000000")
             self.assertEqual(len(products["result"]["positions"]), 3)
             allocations = {item["instrument"]: item["allocation_pct"] for item in products["result"]["positions"]}
-            self.assertEqual(allocations, {"FSELX": "29.0323", "QQQ": "38.7097", "QQQM": "32.2581"})
-            self.assertEqual(products["result"]["benchmark"]["instrument"], "SP500")
+            self.assertEqual(allocations, {"DEMO-ASSET-C": "50.0000", "DEMO-ASSET-A": "16.6667", "DEMO-ASSET-B": "33.3333"})
+            self.assertEqual(products["result"]["benchmark"]["instrument"], "DEMO-BENCH-D")
             self.assertEqual(products["result"]["benchmark"]["valuation_type"], "index_level")
             self.assertEqual(products["latest_bytes"], replayed["latest_bytes"])
             self.assertEqual(products["silver_file"].read_bytes(), replayed["silver_file"].read_bytes())
@@ -111,13 +111,13 @@ class AnalyticsTests(unittest.TestCase):
 
     def test_missing_price_fails_without_a_partial_result(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(ValueError, "SP500"):
+            with self.assertRaisesRegex(ValueError, "DEMO-BENCH-D"):
                 build_products(bronze()[:-1], HOLDINGS, Path(directory))
 
     def test_holdings_reject_duplicate_instrument(self) -> None:
         value = json.loads(HOLDINGS)
         value["positions"].append(value["positions"][0])
-        with self.assertRaisesRegex(ValueError, "duplicate instrument QQQ"):
+        with self.assertRaisesRegex(ValueError, "duplicate instrument DEMO-ASSET-A"):
             parse_portfolio(json.dumps(value).encode())
 
     def test_cross_tenant_bronze_fails_closed(self) -> None:

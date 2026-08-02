@@ -9,7 +9,7 @@ contract is documented in the
 [`contribution projection contract`](../../docs/features/cloud-native-investment-platform/contribution-projection-contract.md).
 
 The current dashboard is API-driven and clearly labeled as synthetic. It shows
-QQQ, QQQM, and FSELX as illustrative holdings and SP500 as a benchmark. The
+DEMO-ASSET-A, DEMO-ASSET-B, and DEMO-ASSET-C as illustrative holdings and DEMO-BENCH-D as a benchmark. The
 result contract distinguishes ETF market prices, mutual-fund NAV, and an index
 level instead of presenting all four values as equivalent tradable positions.
 

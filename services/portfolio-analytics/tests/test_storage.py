@@ -61,15 +61,28 @@ class StorageTests(unittest.TestCase):
         body.read.return_value = b"payload"
         client = Mock()
         client.get_paginator.return_value.paginate.return_value = [
-            {"Contents": [{"Key": "z.json"}, {"Key": "a.json"}]},
+            {
+                "Contents": [
+                    {"Key": "bronze/date=2026-07-21/source=synthetic/z.json"},
+                    {"Key": "bronze/date=2026-07-30/source=scale.run/a.json"},
+                    {"Key": "bronze/date=2026-07-21/source=synthetic/a.json"},
+                ]
+            },
             {},
         ]
         client.get_object.return_value = {"Body": body}
         store = object.__new__(ObjectStore)
         store.bucket = "analytics"
         store.client = client
-        objects = store.list_objects("bronze/")
-        self.assertEqual([item.key for item in objects], ["a.json", "z.json"])
+        objects = store.list_objects("bronze/", "/source=synthetic/")
+        self.assertEqual(
+            [item.key for item in objects],
+            [
+                "bronze/date=2026-07-21/source=synthetic/a.json",
+                "bronze/date=2026-07-21/source=synthetic/z.json",
+            ],
+        )
+        self.assertEqual(client.get_object.call_count, 2)
         self.assertEqual(store.get("latest.json"), b"payload")
 
     def test_put_immutable_creates_duplicate_and_rejects_collisions(self) -> None:

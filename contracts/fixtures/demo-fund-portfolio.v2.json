@@ -5,30 +5,30 @@
   "base_currency": "USD",
   "positions": [
     {
-      "instrument": "QQQ",
-      "display_name": "Invesco QQQ",
+      "instrument": "DEMO-ASSET-A",
+      "display_name": "Synthetic Asset A",
       "asset_type": "etf",
       "valuation_type": "market_price",
-      "quantity": "4.00000000"
+      "quantity": "1.00000000"
     },
     {
-      "instrument": "QQQM",
-      "display_name": "Invesco NASDAQ 100 ETF",
+      "instrument": "DEMO-ASSET-B",
+      "display_name": "Synthetic Asset B",
       "asset_type": "etf",
       "valuation_type": "market_price",
-      "quantity": "8.00000000"
+      "quantity": "2.00000000"
     },
     {
-      "instrument": "FSELX",
-      "display_name": "Fidelity Select Semiconductors Portfolio",
+      "instrument": "DEMO-ASSET-C",
+      "display_name": "Synthetic Asset C",
       "asset_type": "mutual_fund",
       "valuation_type": "nav",
-      "quantity": "30.00000000"
+      "quantity": "3.00000000"
     }
   ],
   "benchmark": {
-    "instrument": "SP500",
-    "display_name": "S&P 500 Index",
+    "instrument": "DEMO-BENCH-D",
+    "display_name": "Synthetic Benchmark D",
     "asset_type": "index",
     "valuation_type": "index_level"
   }

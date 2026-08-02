@@ -33,6 +33,7 @@ target/
 .coverage.*
 coverage.out
 *-coverage.out
+/artifacts/
 
 # Language caches and dependencies
 __pycache__/

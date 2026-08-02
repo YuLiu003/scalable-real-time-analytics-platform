@@ -165,8 +165,8 @@ export CONFIRM_AWS_LAB_DEPLOY="${EKS_CLUSTER_NAME}"
 ```
 
 The deployment installs Strimzi, reconciles a three-node Kafka cluster, copies
-only the public broker CA into the application namespace, runs QQQ, QQQM,
-FSELX, and S&P 500 fixtures through Kafka and S3, builds the analytics result,
+only the public broker CA into the application namespace, runs DEMO-ASSET-A, DEMO-ASSET-B,
+DEMO-ASSET-C, and DEMO-BENCH-D fixtures through Kafka and S3, builds the analytics result,
 waits for API readiness, and requires an unassociated service account's S3
 probe to fail.
 

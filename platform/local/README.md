@@ -1,6 +1,6 @@
 # Local Kubernetes Platform Baseline
 
-This directory implements Slice 1 and the local runtime for Slices 2 and 3 of the
+This directory implements Slice 1 and the local runtime for Slices 2, 3, and 5 of the
 [Cloud-Native Investment Analytics Platform proposal](../../docs/features/cloud-native-investment-platform/README.md).
 It creates a disposable, multi-node Kubernetes environment with explicit
 namespace ownership, local resource guardrails, Prometheus, and Grafana.
@@ -20,6 +20,12 @@ stateless Go API with an embedded portfolio-allocation dashboard. Its exact
 calculation, publication, readiness, and replay semantics are defined in the
 [`Slice 3 contract`](../../docs/features/cloud-native-investment-platform/slice-3-analytics-contract.md).
 
+Slice 5 adds an isolated Kafka scale topic, streaming load and replay Jobs,
+KEDA lag autoscaling, aggregate Prometheus metrics, ordering validation, and a
+machine-readable report. Its privacy and measurement boundaries are defined in
+the
+[`Kafka scale lab contract`](../../docs/features/cloud-native-investment-platform/kafka-scale-lab-contract.md).
+
 The current baseline replaces the retired Minikube, raw-manifest, and incomplete
 Helm paths. Supported local workflows use kind through the targets documented
 here.
@@ -33,7 +39,7 @@ then run the same coverage and race-test gate used by CI:
 python3 -m venv .venv
 .venv/bin/python -m pip install \
   --requirement services/portfolio-analytics/requirements-dev.txt
-PYTHON_BIN=.venv/bin/python make -C platform/local quality
+PYTHON_BIN="$PWD/.venv/bin/python" make -C platform/local quality
 ```
 
 The command fails below 100% measured application coverage. Its exact scope,
@@ -53,10 +59,13 @@ documented in the
   without rerunning a producer or reading Kafka.
 - A stateless API can expose a user-visible result while separating process
   liveness from result-dependent readiness.
+- Kafka lag can scale an isolated consumer group from one to the three-partition
+  concurrency ceiling and prove that a replacement consumer receives a Kafka
+  partition assignment.
 
 It does not prove cloud-zone availability, durable monitoring retention,
-production security, disaster recovery, historical portfolio performance, or
-concurrent analytical publication.
+production security, disaster recovery, historical portfolio performance,
+concurrent analytical publication, or production/AWS throughput.
 
 ## Pinned baseline
 
@@ -68,6 +77,7 @@ The initial pins come from the official
 [kind v0.31.0 release](https://github.com/kubernetes-sigs/kind/releases/tag/v0.31.0)
 and the published
 [kube-prometheus-stack chart](https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack).
+KEDA is pinned independently in `versions.lock`.
 
 The cluster uses one control-plane node and two worker nodes. Worker labels model
 two local failure domains for scheduling exercises, but they are containers on
@@ -90,8 +100,8 @@ its own Colima VM. The default VM reserves 4 CPUs, 8 GiB of memory, and 30 GiB
 of disk.
 
 Persistent development mode requires a reachable Docker-compatible daemon.
-Approximately 6 GiB of free memory is needed for the three kind nodes and
-monitoring stack.
+Approximately 8 GiB of free memory is recommended for the three kind nodes,
+monitoring stack, Kafka, Garage, KEDA, analytics, and scale consumers.
 
 The full platform is intentionally heavyweight: kind stores each node's
 containerd data in a Docker volume, and a persistent Colima VM retains that
@@ -136,7 +146,7 @@ make -C platform/local e2e-ephemeral
 ```
 
 This command creates the reserved `investment-platform-ephemeral` Colima
-profile, bootstraps and verifies all three slices, writes failure diagnostics
+profile, bootstraps and verifies the implemented slices, writes failure diagnostics
 to the host or CI log before cleanup, deletes the kind cluster, and finally
 runs `colima delete --force --data`. It refuses to reuse or delete a
 pre-existing profile. Temporary Docker and Kubernetes configuration prevents
@@ -207,6 +217,45 @@ This local topology has one Kafka broker and one Garage replica. It tests API,
 identity, persistence, and failure boundaries but does not claim broker or
 object-store availability.
 
+## Kafka scale, replay, and recovery
+
+After the data path is running, execute the bounded scale acceptance:
+
+```bash
+make -C platform/local verify-scale-lab
+```
+
+The default publishes 1,200 fictional events with enough injected archive work
+to keep lag visible across the HPA observation window. The verifier first
+rejects unfinished prior producers and requires a present zero-lag metric with
+one ready replica. It then scales the dedicated archiver to three replicas,
+pins that replica count while replacing one consumer, validates its Kafka group
+assignment and ordering, and replays byte-identical values.
+Replay must produce exactly 1,200 duplicates with no creates, quarantines, or
+errors. Evidence is written to the ignored
+`artifacts/kafka-scale/report.json` path. Per-sample state and a bounded failure
+snapshot make unsuccessful CI/Jenkins runs diagnosable without exposing event
+payloads.
+
+For a larger explicit experiment:
+
+```bash
+SCALE_EVENT_COUNT=10000 \
+SCALE_ARCHIVER_DELAY_MS=15 \
+SCALE_PHASE_TIMEOUT_SECONDS=900 \
+  make -C platform/local verify-scale-lab
+```
+
+Custom event-count and delay values must retain at least 35 seconds of injected
+work per partition. A longer phase timeout cannot compensate for a lag signal
+that drains before HPA samples it.
+
+Never place a personal watchlist in the scale Job. The committed identifiers
+are fictional, and metrics/reporting intentionally omit instrument labels. For
+large runs, prefer `e2e-ephemeral` so the VM, Kafka records, object data, images,
+and volumes are deleted after verification. That complete workflow also
+rebuilds analytics after the scale phase to prove source isolation.
+
 ## Analytics and portfolio dashboard
 
 With the Slice 2 data path running, build silver/gold products, deploy the API,
@@ -243,8 +292,8 @@ make -C platform/local portfolio-dashboard PORTFOLIO_DASHBOARD_PORT=18080
 ```
 
 The dashboard labels its source-controlled quantities and prices as synthetic.
-It models QQQ and QQQM as ETFs using market prices, FSELX as a mutual fund using
-daily NAV, and the S&P 500 as a benchmark index level rather than a holding.
+It models DEMO-ASSET-A and DEMO-ASSET-B as ETFs using market prices, DEMO-ASSET-C as a mutual fund using
+daily NAV, and DEMO-BENCH-D as a synthetic benchmark level rather than a holding.
 
 Delete only the Slice 3 workloads and derived silver/gold products. Bronze,
 Kafka, Garage, and all Slice 2 resources remain intact:
@@ -327,6 +376,7 @@ with `investment-platform`.
 | `platform-observability` | Platform | Prometheus, Grafana, and future telemetry controllers |
 | `analytics-data` | Data platform | Kafka, object storage, and other explicitly stateful services |
 | `analytics-apps` | Application | Producers, processors, APIs, and dashboards |
+| `keda` | Platform | Local event-driven autoscaling controller and metrics adapter |
 
 Pod Security Admission is enforced at `restricted` for application workloads
 and `baseline` for stateful-data workloads. The dedicated observability

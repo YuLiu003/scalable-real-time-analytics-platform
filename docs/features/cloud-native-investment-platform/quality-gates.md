@@ -6,7 +6,7 @@
 | Coverage threshold | 100% in every measured application scope |
 | CI workflows | `Presubmit` and `Portfolio Platform Quality` |
 | Required merge check | `jenkins / presubmit` |
-| Last verified | 2026-07-29 |
+| Last verified | 2026-07-30 |
 
 ## Policy
 
@@ -23,9 +23,9 @@ producer/consumer failures, and a clean kind deployment.
 
 | Scope | Metric | Required | Current evidence |
 | --- | --- | ---: | ---: |
-| `portfolio_analytics` Python package | Statements and branches | 100% | 352/352 statements; 92/92 branches |
+| `portfolio_analytics` Python package | Statements and branches | 100% | 358/358 statements; 96/96 branches |
 | Portfolio API `internal/...` packages | Go statements with `-race` | 100% | 100.0% |
-| Market `internal/event` and `internal/synthetic` | Go statements with `-race` | 100% | 100.0% |
+| Market `internal/event`, `internal/synthetic`, `internal/archivemetrics`, and `internal/scale` | Go statements with `-race` | 100% | 100.0% |
 
 The Python denominator contains the analytical model, transformation, S3
 adapter, build command, and independent Parquet query command. Only structural
@@ -33,13 +33,13 @@ adapter, build command, and independent Parquet query command. Only structural
 are called by tests and their real module entrypoints run in Kubernetes.
 
 The Go denominator contains the portfolio API's HTTP, result-validation, and S3
-packages plus the market event and synthetic-fixture domain packages. Thin Go
-process entrypoints, Kafka/S3 SDK wiring from the prior slice, generated
-artifacts, Kubernetes YAML, shell, and embedded HTML are not mislabeled as
-unit-covered statements. They are still built, race-tested where applicable,
-rendered, and exercised by the end-to-end gate. New domain logic must live in a
-measured package; moving logic into an entrypoint to evade coverage violates
-this policy.
+packages plus the market event, synthetic-fixture, archive-metrics, and scale
+verification domain packages. Thin Go process entrypoints, Kafka/S3 SDK wiring
+from the prior slice, generated artifacts, Kubernetes YAML, shell, and embedded
+HTML are not mislabeled as unit-covered statements. They are still built,
+race-tested where applicable, rendered, and exercised by the end-to-end gate.
+New domain logic must live in a measured package; moving logic into an
+entrypoint to evade coverage violates this policy.
 
 Run the local gate after installing the pinned development dependencies:
 
@@ -47,7 +47,7 @@ Run the local gate after installing the pinned development dependencies:
 python3 -m venv .venv
 .venv/bin/python -m pip install \
   --requirement services/portfolio-analytics/requirements-dev.txt
-PYTHON_BIN=.venv/bin/python make -C platform/local quality
+PYTHON_BIN="$PWD/.venv/bin/python" make -C platform/local quality
 ```
 
 Coverage files are written outside the repository by default so generated
@@ -95,9 +95,9 @@ rollback procedure, and GitOps reconciliation target.
 
 ## Verification record
 
-The local-equivalent gate completed with 352/352 Python statements, 92/92
+The local-equivalent gate completed with 358/358 Python statements, 96/96
 Python branches, and 100.0% Go statement coverage in both measured profiles.
-All three production images built, and all 27 analytics tests passed again from
+All three production images built, and all 28 analytics tests passed again from
 inside the non-root production image.
 
 The AWS static gate validated both OpenTofu roots with AWS provider 6.55.0,
@@ -107,23 +107,27 @@ schema dry-run for the replicated Kafka resources. This is implementation
 evidence only; AWS runtime, failure, cost, and teardown evidence remains pending
 an explicitly authorized billable apply.
 
-A clean scoped kind rebuild then reproduced the exact Slice 2 terminal state of
-7 market records, 1 quarantine record, and 4 immutable bronze objects. The
-first run exposed a race in the test itself: its deletion trigger accepted any
-event's post-write delay marker. The verifier was corrected to match the exact
-SP500 event before deletion and its exact durable `duplicate` record after
-restart. A second clean rebuild passed the producer-acknowledgement and consumer
-redelivery injections.
-
-Slice 3 then passed its independent DuckDB query, readiness-loss boundary, and
-bronze-only replay with the same deterministic result:
+A clean disposable run on 2026-07-30 reproduced the Slice 2 and Slice 3
+boundaries with the neutral fixture:
 
 ```text
-total_market_value=6200.00000000
+total_market_value=600.00000000
 positions=3
-input_set_sha256=4faafb293f811f8475712b858e6c22109dca5a7dfccdf2fe9ddcacd63a1799e1
-result_sha256=ee62de5a28a25c34b67cf9df59deaf810a657a2994d78c416ff28f6cb08c99d6
+input_set_sha256=907e5275a884a446285cdff7023638f3bbc0a66660ee9b0a8bf53c3777c8405f
+result_sha256=a3756ba641c48a7518bbf5cfd8338d85338d882bb62648a40a8c0547a0b3bae2
 ```
+
+Per-head PS2 runs now require lag to remain observable across the HPA sampling
+window, KEDA to reach the three-partition consumer ceiling, and three consumers
+to remain pinned while a deleted pod is replaced. The replacement must join a
+stable three-member group with all partitions assigned; replay must produce
+only duplicate effects; lag must drain; and the Deployment must return to one
+ready replica. Aggregate samples and a failure snapshot are retained with the
+run, while exact measurements remain generated evidence rather than committed
+capacity claims.
+
+This is `local_kind_synthetic` evidence, not AWS runtime, provider-data,
+availability, or production-capacity evidence.
 
 ## Repository enforcement
 

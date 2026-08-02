@@ -37,7 +37,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: probe
-          image: local/market-pipeline:slice2
+          image: local/market-pipeline:slice5
           imagePullPolicy: IfNotPresent
           command:
             - /archive-inspector

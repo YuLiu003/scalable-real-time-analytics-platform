@@ -2,7 +2,8 @@
 
 This repository is a free, production-like learning platform for Kubernetes,
 event-driven systems, cloud infrastructure, and long-term investment analytics.
-It processes deterministic market events for QQQ, QQQM, FSELX, and the S&P 500,
+It processes deterministic events for three synthetic assets and one synthetic
+benchmark,
 builds portfolio products, and exposes contribution projections through a Go
 API and dashboard.
 
@@ -15,6 +16,7 @@ observability, and cloud-platform engineering.
 
 - The complete local platform runs on disposable `kind` clusters.
 - Kafka uses Strimzi in KRaft mode.
+- KEDA scales an isolated archive consumer group from Kafka lag.
 - Garage provides the local S3-compatible object-storage contract.
 - Python and DuckDB build deterministic Parquet analytics products.
 - The Go portfolio API serves holdings and contribution projections.
@@ -47,6 +49,14 @@ Synthetic market producer
                                       |
                                       v
                          Go portfolio API + dashboard
+
+Synthetic scale producer --> isolated Kafka scale topic
+                                      |
+                                      v
+                            KEDA-scaled archivers
+                                      |
+                                      v
+                             aggregate evidence
 ```
 
 The acceptance path injects ambiguous producer acknowledgements, consumer
@@ -88,7 +98,7 @@ Run the fast source and correctness gates:
 
 ```bash
 make presubmit-ps0
-PYTHON_BIN=.venv/bin/python make presubmit-ps1
+PYTHON_BIN="$PWD/.venv/bin/python" make presubmit-ps1
 ```
 
 Run the complete platform in a disposable Colima VM:
@@ -98,7 +108,8 @@ make -C platform/local e2e-ephemeral
 ```
 
 The command isolates Docker and Kubernetes contexts, then deletes the VM and
-all container data on success or failure. Use the persistent development
+all container data on success or failure. It also runs the Kafka scale,
+autoscaling, replay, and recovery acceptance. Use the persistent development
 workflow in the local-platform runbook only when you need to inspect a running
 cluster.
 
@@ -130,6 +141,7 @@ operations. A paid apply is outside the required definition of done.
 - [Architecture and feature scope](docs/features/cloud-native-investment-platform/README.md)
 - [Roadmap](docs/features/cloud-native-investment-platform/roadmap-v2.md)
 - [Quality gates](docs/features/cloud-native-investment-platform/quality-gates.md)
+- [Kafka scale lab](docs/features/cloud-native-investment-platform/kafka-scale-lab-contract.md)
 - [Local Kubernetes runbook](platform/local/README.md)
 - [Jenkins platform](platform/jenkins/README.md)
 - [AWS OpenTofu lab](infra/opentofu/aws/README.md)

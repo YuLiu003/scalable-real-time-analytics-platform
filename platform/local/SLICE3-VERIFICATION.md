@@ -2,10 +2,31 @@
 
 | Field | Value |
 | --- | --- |
-| Date | 2026-07-21 |
-| Branch | `feature/portfolio-analytics-slice3` |
-| Status | Deterministic analytics, API, and exact replay passed; Slice 3 complete |
-| Final state | Slice 3 running on context `kind-investment-platform` |
+| Date | Historical run 2026-07-21; current revalidation 2026-07-30 |
+| Historical branch | `feature/portfolio-analytics-slice3` |
+| Current revalidation | `feature/kafka-scale-lab` working tree based on `5ae7dd3` |
+| Status | Current disposable runtime revalidation passed |
+| Final state | kind and Colima deleted after successful verification |
+
+> Evidence integrity notice: this record was captured before the public
+> fixtures were replaced with neutral identities and values. Identifiers in
+> this copy are fictional replacements, and the prior digests are intentionally
+> absent. Treat the detailed narrative as historical design context. The
+> current revalidation below uses only fictional public fixtures.
+
+## Current revalidation
+
+The 2026-07-30 disposable run built and replayed the configured `synthetic`
+source both before and after 1,200 scale objects were archived. Both builds read
+exactly 4 portfolio inputs and reproduced:
+
+```text
+input_set_sha256=907e5275a884a446285cdff7023638f3bbc0a66660ee9b0a8bf53c3777c8405f
+result_sha256=a3756ba641c48a7518bbf5cfd8338d85338d882bb62648a40a8c0547a0b3bae2
+```
+
+This is local deterministic evidence, not historical market-performance or
+cloud-availability evidence.
 
 ## Tested boundary
 
@@ -50,16 +71,16 @@ bronze objects. It then produced and inspected this exact result:
 
 ```text
 portfolio=demo
-total=6200.00000000
+total=600.00000000
 positions=3
 input_objects=4
 silver_objects=1
 gold_objects=2
-input_set_sha256=4faafb293f811f8475712b858e6c22109dca5a7dfccdf2fe9ddcacd63a1799e1
-result_sha256=ee62de5a28a25c34b67cf9df59deaf810a657a2994d78c416ff28f6cb08c99d6
+input_set_sha256=<historical digest omitted>
+result_sha256=<historical digest omitted>
 ```
 
-The API returned three fund positions, the separate SP500 benchmark, and the
+The API returned three fund positions, the separate DEMO-BENCH-D benchmark, and the
 embedded dashboard HTML. The dashboard response includes an explicit synthetic,
 non-live-data disclosure. Screenshot-level browser QA was not available in the
 verification session because no in-app or Chrome browser was connected.
@@ -70,7 +91,7 @@ An independent DuckDB query opened the live silver and gold Parquet files and
 reported:
 
 ```json
-{"event":"DuckDB Parquet query passed","gold_rows":3,"silver_rows":4,"total_market_value":"6200.00000000"}
+{"event":"DuckDB Parquet query passed","gold_rows":3,"silver_rows":4,"total_market_value":"600.00000000"}
 ```
 
 ## Replay and failure-boundary evidence
@@ -89,15 +110,10 @@ readiness-probe HTTP 503 during that interval; the API process did not restart.
 
 The replay Job then read the same four bronze objects and the versioned holdings
 fixture without invoking a producer or Kafka. It recreated one silver and two
-gold objects, the exact `6200.00000000` total, the same input-set identity, and
-the same canonical result SHA-256:
+gold objects under the historical fixture.
 
-```text
-ee62de5a28a25c34b67cf9df59deaf810a657a2994d78c416ff28f6cb08c99d6
-```
-
-All four Slice 3 Jobs were Complete and the portfolio API Deployment settled at
-`1/1` Ready with zero restarts.
+The prior fixture digests remain omitted; the current neutral-fixture digests
+are recorded above.
 
 ## Scoped lifecycle evidence
 
@@ -111,16 +127,16 @@ make -C platform/local bootstrap-analytics
 
 Teardown removed the API, analytics Jobs, service accounts, Service, generated
 holdings ConfigMap, and derived silver/gold products. It preserved the Slice 2
-Kafka, Garage, archiver, topics, identities, and four bronze objects. The clean
-rebuild and complete acceptance workflow finished in `34.59s` and reproduced
-the hashes above.
+Kafka, Garage, archiver, topics, identities, and four bronze objects. The
+historical clean rebuild finished in `34.59s` and reproduced digests that are
+not retained in this anonymized copy.
 
 An interruption was then simulated after the Parquet query and derived reset
 Jobs completed but while the replay Job remained suspended. At that checkpoint
 the API Deployment was intentionally `0/1` Ready, the process remained live,
 and bronze remained present. Re-running `verify-analytics` detected the Job
 state, skipped the impossible pre-replay readiness wait, resumed the replay, and
-returned the API to `1/1` Ready with the exact result hash above.
+returned the API to `1/1` Ready with the historical result identity.
 
 ## Failures found and durable corrections
 
@@ -154,10 +170,10 @@ payloads, portfolio result contents, kubeconfigs, and credentials.
 
 ## Conclusion
 
-Slice 3 proves a complete user-visible analytical path from retained immutable
-events through fixed-point DuckDB computation and Parquet products to a
-stateless Go API/dashboard. Exact replay demonstrates reconstruction rather than
-database dependence. Transaction and cash-flow contracts, performance returns,
-historical corrections, concurrent publication, table-format transactions,
-observability, GitOps rollback, node failure, and cloud-managed equivalents
-remain later work.
+The current revalidation and historical Slice 3 run cover the user-visible
+analytical path from
+retained immutable events through fixed-point DuckDB computation and Parquet
+products to a stateless Go API/dashboard. Transaction and cash-flow contracts,
+performance returns, historical corrections, concurrent publication,
+table-format transactions, observability, GitOps rollback, node failure, and
+cloud-managed equivalents remain later work.

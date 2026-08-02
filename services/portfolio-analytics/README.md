@@ -5,8 +5,8 @@ objects into normalized silver Parquet and a deterministic gold portfolio
 allocation. Its replay and consistency boundary is documented in the
 [`Slice 3 analytics contract`](../../docs/features/cloud-native-investment-platform/slice-3-analytics-contract.md).
 
-The versioned v2 fixture models QQQ and QQQM as ETF market-price holdings,
-FSELX as a mutual-fund NAV holding, and SP500 as a non-position benchmark index
+The versioned v2 fixture models DEMO-ASSET-A and DEMO-ASSET-B as ETF market-price holdings,
+DEMO-ASSET-C as a mutual-fund NAV holding, and DEMO-BENCH-D as a non-position benchmark index
 level. All quantities and values are synthetic test data.
 
 The Job deliberately downloads bronze objects through the S3 API and runs

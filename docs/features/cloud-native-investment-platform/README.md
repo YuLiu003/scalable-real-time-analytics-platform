@@ -6,7 +6,7 @@
 | Product goal | Transparent long-term portfolio analysis and contribution planning |
 | Engineering goal | Observable and recoverable Kubernetes and event-driven system |
 | Cost boundary | Required work runs locally or in included CI without a paid cloud apply |
-| Instruments | QQQ, QQQM, FSELX, and S&P 500 benchmark fixtures |
+| Instruments | Three synthetic asset fixtures and one synthetic benchmark fixture |
 
 ## Why this project exists
 
@@ -33,6 +33,11 @@ market producer
     -> deterministic analytics job
     -> Parquet portfolio products
     -> portfolio API and dashboard
+
+non-personal load producer
+    -> isolated Kafka scale topic
+    -> lag-scaled archive consumers
+    -> aggregate scale evidence
 ```
 
 The same application and Kubernetes contracts run locally and inform the AWS
@@ -60,6 +65,9 @@ design. Provider-specific control planes remain separate:
 - Holdings and contribution-projection APIs with transparent timing, return,
   expense, and inflation assumptions.
 - Local Kubernetes readiness, diagnostics, monitoring, and automatic cleanup.
+- Isolated Kafka load/replay traffic, KEDA lag autoscaling, bounded consumer
+  group recovery, exact replay outcomes, ordering checks, and machine-readable
+  scale evidence.
 - AWS EKS, network, identity, encryption, registry, storage, observability, and
   budget contracts validated without an account apply.
 - PS0, PS1, and PS2 gates shared by local development, GitHub, and Jenkins.
@@ -98,8 +106,9 @@ cannot fit the existing one.
   transactional, cache, or analytical requirement justifies them.
 - Local S3 and workload identity contracts do not prove cloud IAM behavior.
 - GCP and Azure are comparison milestones after the AWS learning path.
-- Live market-data licensing and brokerage integrations are outside the current
-  scope.
+- A private live market-data adapter is a later product slice. Provider
+  credentials and user-selected instruments remain runtime-only; synthetic
+  traffic remains the capacity source.
 
 ## Roadmap and evidence
 
@@ -108,6 +117,7 @@ cannot fit the existing one.
 - [Market event contract](slice-2-event-contract.md)
 - [Analytics contract](slice-3-analytics-contract.md)
 - [Contribution projection contract](contribution-projection-contract.md)
+- [Kafka scale lab contract](kafka-scale-lab-contract.md)
 - [AWS streaming decision](aws-streaming-decision.md)
 - [Free-first lab strategy](free-first-lab-strategy.md)
 - [Local Kubernetes runbook](../../../platform/local/README.md)

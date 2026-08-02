@@ -190,6 +190,16 @@ jobs:
           make -C platform/local bootstrap
           make -C platform/local bootstrap-data-path
           make -C platform/local bootstrap-analytics
+          make -C platform/local verify-scale-lab
+
+      - name: Preserve scale evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: kafka-scale-${{ github.run_id }}
+          path: artifacts/kafka-scale
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Collect failure diagnostics
         if: failure()

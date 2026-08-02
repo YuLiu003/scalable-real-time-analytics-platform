@@ -21,8 +21,8 @@ func validSnapshot() Snapshot {
 		GoldParquetObject:   "gold/portfolio_allocations/v2/portfolio=demo/run=" + testSHA + "/allocation.parquet",
 		TotalMarketValue:    "10.00000000",
 		Positions: []Position{{
-			Instrument:    "QQQ",
-			DisplayName:   "Invesco QQQ",
+			Instrument:    "DEMO-ASSET-A",
+			DisplayName:   "Synthetic Asset A",
 			AssetType:     "etf",
 			ValuationType: "market_price",
 			Quantity:      "10.00000000",
@@ -32,11 +32,11 @@ func validSnapshot() Snapshot {
 			PriceAsOf:     "2026-07-21T00:00:00Z",
 		}},
 		Benchmark: Benchmark{
-			Instrument:    "SP500",
-			DisplayName:   "S&P 500 Index",
+			Instrument:    "DEMO-BENCH-D",
+			DisplayName:   "Synthetic Benchmark D",
 			AssetType:     "index",
 			ValuationType: "index_level",
-			Price:         "6500.00000000",
+			Price:         "1000.00000000",
 			PriceAsOf:     "2026-07-21T00:01:30Z",
 		},
 	}
@@ -87,7 +87,7 @@ func TestValidateRejectsEveryInvalidResultClass(t *testing.T) {
 		{name: "position timestamp", mutate: func(s *Snapshot) { s.Positions[0].PriceAsOf = "invalid" }},
 		{name: "duplicate position", mutate: func(s *Snapshot) { s.Positions = append(s.Positions, s.Positions[0]) }},
 		{name: "benchmark fields", mutate: func(s *Snapshot) { s.Benchmark.AssetType = "etf" }},
-		{name: "benchmark position collision", mutate: func(s *Snapshot) { s.Benchmark.Instrument = "QQQ" }},
+		{name: "benchmark position collision", mutate: func(s *Snapshot) { s.Benchmark.Instrument = "DEMO-ASSET-A" }},
 		{name: "benchmark timestamp", mutate: func(s *Snapshot) { s.Benchmark.PriceAsOf = "invalid" }},
 	}
 	for _, tt := range tests {
@@ -107,7 +107,7 @@ func TestDisplayNameAndPositionSemanticsValidation(t *testing.T) {
 			t.Fatalf("validDisplayName(%q) = true", name)
 		}
 	}
-	if !validDisplayName("S&P 500 Index") {
+	if !validDisplayName("Synthetic Benchmark D") {
 		t.Fatal("validDisplayName() rejected a valid name")
 	}
 	if !validPositionSemantics("etf", "market_price") || !validPositionSemantics("mutual_fund", "nav") {

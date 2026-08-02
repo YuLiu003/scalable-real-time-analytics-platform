@@ -18,14 +18,17 @@ capture() {
 }
 
 capture helm-status.txt helm status "${STRIMZI_RELEASE}" --kube-context "${KUBERNETES_CONTEXT}" --namespace "${DATA_NAMESPACE}"
+capture keda-helm-status.txt helm status "${KEDA_RELEASE}" --kube-context "${KUBERNETES_CONTEXT}" --namespace "${KEDA_NAMESPACE}"
+capture keda-resources.txt kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${KEDA_NAMESPACE}" get deployment,pod,service -o wide
 capture data-resources.txt kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${DATA_NAMESPACE}" get kafka,kafkanodepool,kafkatopic,statefulset,pod,persistentvolumeclaim -o wide
-capture app-resources.txt kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${APPLICATION_NAMESPACE}" get kafkauser,deployment,job,pod -o wide
+capture app-resources.txt kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${APPLICATION_NAMESPACE}" get kafkauser,deployment,job,cronjob,pod,scaledobject,horizontalpodautoscaler -o wide
 capture data-events.txt kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${DATA_NAMESPACE}" get events --sort-by=.lastTimestamp
 capture app-events.txt kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${APPLICATION_NAMESPACE}" get events --sort-by=.lastTimestamp
 capture kafka-status.txt kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${DATA_NAMESPACE}" describe kafka "${KAFKA_CLUSTER_NAME}"
 capture garage-status.txt kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${DATA_NAMESPACE}" exec garage-0 -- /garage status
 capture archiver-logs.txt kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${APPLICATION_NAMESPACE}" logs deployment/raw-event-archiver
-capture archive-keys.txt kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${APPLICATION_NAMESPACE}" exec deployment/raw-event-archiver -- /archive-inspector --prefix bronze/
+capture scale-archiver-logs.txt kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${APPLICATION_NAMESPACE}" logs deployment/scale-event-archiver --all-pods=true
+capture archive-count.txt kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${APPLICATION_NAMESPACE}" exec deployment/raw-event-archiver -- /archive-inspector --prefix bronze/
 
 printf 'Data-path diagnostics written to %s\n' "${output_dir}"
-printf 'Secret objects, Secret values, and archived object contents were intentionally excluded.\n'
+printf 'Secret objects, values, archive keys, and archived object contents were intentionally excluded.\n'

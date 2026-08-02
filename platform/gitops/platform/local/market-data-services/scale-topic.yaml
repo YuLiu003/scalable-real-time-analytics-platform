@@ -1,0 +1,16 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: market-prices-scale
+  namespace: analytics-data
+  labels:
+    strimzi.io/cluster: market-kafka
+    app.kubernetes.io/component: scale-lab
+spec:
+  topicName: market.prices.scale
+  partitions: 3
+  replicas: 1
+  config:
+    cleanup.policy: delete
+    retention.ms: 3600000
+    min.insync.replicas: 1
