@@ -70,15 +70,18 @@ from silently changing a result.
 
 ## Run locally
 
-Prerequisites and pinned versions are documented in
-[`platform/local/README.md`](platform/local/README.md).
+Run commands from the repository root. Host prerequisites and pinned versions
+are documented in the
+[`local platform runbook`](platform/local/README.md) and
+[`Jenkins runbook`](platform/jenkins/README.md).
 
 Install the Python test dependencies once:
 
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install \
-  --requirement services/portfolio-analytics/requirements-dev.txt
+  --requirement services/portfolio-analytics/requirements-dev.txt \
+  --requirement tools/codex-plugins/cloud-platform-engineering/mcp/requirements-dev.txt
 ```
 
 Run the fast source and correctness gates:

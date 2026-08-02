@@ -27,7 +27,7 @@ for value_name in cpus memory_gib disk_gib; do
   fi
 done
 
-for command_name in colima docker kind kubectl helm make; do
+for command_name in colima docker kind kubectl helm go make openssl; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     printf 'ERROR: required command %s was not found.\n' "${command_name}" >&2
     exit 1
