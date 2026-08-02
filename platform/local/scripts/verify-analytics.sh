@@ -32,7 +32,7 @@ inspect_result() {
   kubectl --context "${context}" --namespace "${namespace}" exec deployment/portfolio-api -- \
     /portfolio-inspector \
     --portfolio "${PORTFOLIO_ID}" \
-    --expected-total 6200.00000000 \
+    --expected-total 600.00000000 \
     --expected-positions 3 \
     --expected-silver-objects 1 \
     --expected-gold-objects 2 \
@@ -50,8 +50,8 @@ fi
 verify_user_visible_result() {
   local api_result dashboard projection_request projection_result
   api_result="$(kubectl --context "${context}" get --raw "${service_proxy}/api/v1/portfolios/${PORTFOLIO_ID}/allocation")"
-  if [[ "${api_result}" != *'"total_market_value":"6200.00000000"'* ]] || \
-    [[ "${api_result}" != *'"instrument":"SP500"'* ]] || [[ "${api_result}" != *'"positions":['* ]]; then
+  if [[ "${api_result}" != *'"total_market_value":"600.00000000"'* ]] || \
+    [[ "${api_result}" != *'"instrument":"DEMO-BENCH-D"'* ]] || [[ "${api_result}" != *'"positions":['* ]]; then
     printf 'ERROR: user-visible allocation API did not return the expected result.\n' >&2
     exit 1
   fi

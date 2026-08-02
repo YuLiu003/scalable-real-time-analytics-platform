@@ -13,7 +13,7 @@ from .storage import ObjectStore, S3Settings
 
 def main() -> None:
     portfolio = os.environ.get("PORTFOLIO_ID", "demo")
-    expected_total = os.environ.get("EXPECTED_TOTAL", "6200.00000000")
+    expected_total = os.environ.get("EXPECTED_TOTAL", "600.00000000")
     store = ObjectStore(S3Settings.from_environment())
     latest_key = f"gold/portfolio_allocations/v2/portfolio={portfolio}/latest.json"
     result = json.loads(store.get(latest_key))

@@ -29,10 +29,9 @@ func main() {
 		fatal(err)
 	}
 	result := struct {
-		Prefix string   `json:"prefix"`
-		Count  int      `json:"count"`
-		Keys   []string `json:"keys"`
-	}{Prefix: *prefix, Count: len(keys), Keys: keys}
+		Prefix string `json:"prefix"`
+		Count  int    `json:"count"`
+	}{Prefix: *prefix, Count: len(keys)}
 	encoded, _ := json.Marshal(result)
 	fmt.Println(string(encoded))
 	if *expected >= 0 && len(keys) != *expected {

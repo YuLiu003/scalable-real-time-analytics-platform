@@ -2,10 +2,26 @@
 
 | Field | Value |
 | --- | --- |
-| Date | 2026-07-21 |
-| Branch | `feature/market-events-to-object-storage` |
-| Status | Runtime contract and scoped lifecycle passed; Slice 2 complete |
-| Final state | Data path running on context `kind-investment-platform` |
+| Date | Historical run 2026-07-21; current revalidation 2026-07-30 |
+| Historical branch | `feature/market-events-to-object-storage` |
+| Current revalidation | `feature/kafka-scale-lab` working tree based on `5ae7dd3` |
+| Status | Current disposable runtime revalidation passed |
+| Final state | kind and Colima deleted after successful verification |
+
+> Evidence integrity notice: this record was captured before the public
+> fixtures and operational logs were anonymized. Identifiers in this copy are
+> fictional replacements, not the literal values observed on 2026-07-21.
+> Treat the detailed narrative as historical design context. The current
+> revalidation below uses only fictional public fixtures.
+
+## Current revalidation
+
+`make -C platform/local e2e-ephemeral` reproduced 7 market records, 1
+quarantine record, and 4 immutable baseline objects. The acknowledgement retry,
+post-write consumer crash, idempotent duplicate recovery, and exact terminal
+counts passed. Operational logs used one-way event references, archive
+inspection emitted counts without keys, and the disposable kind cluster and
+Colima data were deleted afterward.
 
 ## Tested boundary
 
@@ -46,7 +62,7 @@ topic=ingestion.quarantine records=1 partitions=1
 bronze object count=4
 ```
 
-The four keys were the deterministic QQQ, QQQM, FSELX, and SP500 objects under:
+The four keys were the deterministic DEMO-ASSET-A, DEMO-ASSET-B, DEMO-ASSET-C, and DEMO-BENCH-D objects under:
 
 ```text
 bronze/market.price.observed/v1/date=2026-07-21/source=synthetic/
@@ -64,12 +80,12 @@ Observed controller and workload state:
   acknowledged.
 
 The producer failure log recorded the broker acknowledgement for
-`synthetic:price:fselx:ack-unknown-001` immediately before the injected failure.
+`synthetic:price:demo-asset-c:ack-unknown-001` immediately before the injected failure.
 The retry then sent the same stable event ID, resulting in two Kafka records but
-one FSELX archive object.
+one DEMO-ASSET-C archive object.
 
 For the consumer boundary, the verifier inserted a 30-second delay after the
-SP500 S3 write, observed the `post-write failure window open` marker, deleted that
+DEMO-BENCH-D S3 write, observed the `post-write failure window open` marker, deleted that
 archiver pod, and waited for its replacement to log the same event with
 `result=duplicate`. Only then did verification restore the normal Deployment.
 This demonstrates the intended post-effect/pre-offset redelivery outcome without
@@ -110,8 +126,8 @@ restarts. This is consistent with a laptop-hosted control plane becoming
 unavailable and is not treated as cloud availability evidence.
 
 The later fund-fixture refresh performed another complete scoped rebuild in
-`148.59s` and reached the same 7/1/4 record state with QQQ, QQQM, FSELX, and
-SP500 as the four archived objects.
+`148.59s` and reached the same 7/1/4 record state with DEMO-ASSET-A, DEMO-ASSET-B, DEMO-ASSET-C, and
+DEMO-BENCH-D as the four archived objects.
 
 ## Failures found and durable corrections
 
@@ -136,9 +152,9 @@ SP500 as the four archived objects.
    while Kafka and its Topic Operator are still available.
 7. The consumer-crash verifier originally accepted any event's post-write delay
    marker before deleting the archiver. A queued earlier event could therefore
-   satisfy the wait before SP500 was archived, making the recovered consumer
+   satisfy the wait before DEMO-BENCH-D was archived, making the recovered consumer
    correctly report `created` instead of the expected replay `duplicate`. Both
-   waits now match the exact SP500 event and durable duplicate log record.
+   waits now match the exact DEMO-BENCH-D event and durable duplicate log record.
 
 ## Evidence handling
 
@@ -148,16 +164,15 @@ The final diagnostic bundle was written to:
 ${TMPDIR}/market-data-path-diagnostics-20260721T233934Z
 ```
 
-The diagnostic script excludes Secret objects, Secret values, archive object
-contents, kubeconfigs, and credentials. Synthetic event IDs and deterministic
-object keys are safe test fixtures.
+The current diagnostic script excludes Secret objects, Secret values, event
+IDs, archive keys and contents, kubeconfigs, and credentials.
 
 ## Conclusion
 
-Slice 2 proves the first canonical producer-to-storage vertical path with an
-explicit schema, per-workload mutual-TLS identities and ACLs, at-least-once
-delivery, idempotent raw archive effects, malformed-record quarantine, producer
-acknowledgement uncertainty, consumer crash recovery, and scoped teardown. Raw
-object backup/restore, node failure, multi-replica stateful availability,
-metrics/traces/alerts, schema registry, and cloud workload identity remain later
+The current revalidation and historical Slice 2 run cover the canonical
+producer-to-storage path,
+mutual-TLS identities and ACLs, at-least-once delivery, idempotent archive
+effects, quarantine, acknowledgement uncertainty, crash recovery, and scoped
+teardown. Raw backup/restore, node failure, multi-replica stateful availability,
+traces/alerts, schema registry, and cloud workload identity remain later
 slices.

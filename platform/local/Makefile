@@ -3,6 +3,7 @@ PORTFOLIO_DASHBOARD_PORT ?= 8080
 
 .PHONY: preflight bootstrap verify diagnose destroy e2e-ephemeral reclaim-runtime grafana prometheus \
 	build-data-path bootstrap-data-path verify-data-path diagnose-data-path destroy-data-path \
+	verify-scale-lab \
 	build-analytics bootstrap-analytics verify-analytics diagnose-analytics destroy-analytics portfolio-dashboard \
 	quality
 
@@ -46,6 +47,9 @@ bootstrap-data-path:
 
 verify-data-path:
 	./scripts/verify-data-path.sh
+
+verify-scale-lab:
+	./scripts/verify-scale-lab.sh
 
 diagnose-data-path:
 	./scripts/diagnose-data-path.sh

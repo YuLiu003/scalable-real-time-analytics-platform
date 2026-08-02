@@ -30,10 +30,14 @@ spec:
           type: RuntimeDefault
       containers:
         - name: archiver
-          image: local/market-pipeline:slice2
+          image: local/market-pipeline:slice5
           imagePullPolicy: Never
           command:
             - /raw-event-archiver
+          ports:
+            - name: metrics
+              containerPort: 8081
+              protocol: TCP
           envFrom:
             - secretRef:
                 name: market-archive-credentials
@@ -46,6 +50,10 @@ spec:
               value: ingestion.quarantine
             - name: KAFKA_CONSUMER_GROUP
               value: raw-event-archiver-v1
+            - name: ARCHIVER_METRICS_SCOPE
+              value: baseline
+            - name: ARCHIVER_LOG_EVERY
+              value: "1"
             - name: KAFKA_TLS_CA_FILE
               value: /etc/kafka-cluster-ca/ca.crt
             - name: KAFKA_TLS_CERT_FILE
@@ -73,3 +81,19 @@ spec:
         - name: kafka-user
           secret:
             secretName: raw-event-archiver
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: raw-event-archiver
+  namespace: analytics-apps
+  labels:
+    app.kubernetes.io/name: raw-event-archiver
+    app.kubernetes.io/part-of: investment-analytics-platform
+spec:
+  selector:
+    app.kubernetes.io/name: raw-event-archiver
+  ports:
+    - name: metrics
+      port: 8081
+      targetPort: metrics

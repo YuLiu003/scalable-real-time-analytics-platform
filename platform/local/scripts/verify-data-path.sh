@@ -14,18 +14,28 @@ context="${KUBERNETES_CONTEXT}"
 
 printf 'Verifying Strimzi, Kafka, topics, Garage, and application identities...\n'
 helm status "${STRIMZI_RELEASE}" --kube-context "${context}" --namespace "${DATA_NAMESPACE}" >/dev/null
+helm status "${KEDA_RELEASE}" --kube-context "${context}" --namespace "${KEDA_NAMESPACE}" >/dev/null
 kubectl --context "${context}" --namespace "${DATA_NAMESPACE}" \
   wait kafka/"${KAFKA_CLUSTER_NAME}" --for=condition=Ready --timeout=120s
 kubectl --context "${context}" --namespace "${DATA_NAMESPACE}" \
-  wait kafkatopic/market-prices kafkatopic/ingestion-quarantine --for=condition=Ready --timeout=120s
+  wait kafkatopic/market-prices kafkatopic/ingestion-quarantine kafkatopic/market-prices-scale \
+  --for=condition=Ready --timeout=120s
 kubectl --context "${context}" --namespace "${DATA_NAMESPACE}" \
   rollout status statefulset/garage --timeout=120s
 kubectl --context "${context}" --namespace "${namespace}" \
-  wait kafkauser/synthetic-market-producer kafkauser/raw-event-archiver --for=condition=Ready --timeout=120s
+  wait kafkauser/synthetic-market-producer kafkauser/raw-event-archiver \
+  kafkauser/scale-load-producer kafkauser/scale-event-archiver \
+  --for=condition=Ready --timeout=120s
 kubectl --context "${context}" --namespace "${namespace}" \
   get configmap "${KAFKA_CLUSTER_NAME}-cluster-ca" >/dev/null
 kubectl --context "${context}" --namespace "${namespace}" \
   rollout status deployment/raw-event-archiver --timeout=120s
+kubectl --context "${context}" --namespace "${namespace}" \
+  rollout status deployment/scale-event-archiver --timeout=120s
+kubectl --context "${context}" --namespace "${namespace}" \
+  wait scaledobject/scale-event-archiver --for=condition=Ready --timeout=120s
+kubectl --context "${context}" --namespace "${namespace}" \
+  get horizontalpodautoscaler/keda-hpa-scale-event-archiver >/dev/null
 kubectl --context "${context}" --namespace "${namespace}" \
   wait job/synthetic-market-producer-baseline --for=condition=Complete --timeout=120s
 
@@ -55,6 +65,28 @@ wait_for_log() {
   return 1
 }
 
+wait_for_replacement_pod() {
+  local replaced_pod="$1"
+  local attempts=60
+  while (( attempts > 0 )); do
+    while IFS= read -r candidate; do
+      if [[ -n "${candidate}" && "${candidate}" != "${replaced_pod}" ]] &&
+        [[ -z "$(kubectl --context "${context}" --namespace "${namespace}" \
+          get pod "${candidate}" --output=jsonpath='{.metadata.deletionTimestamp}')" ]] &&
+        [[ "$(kubectl --context "${context}" --namespace "${namespace}" \
+          get pod "${candidate}" --output=jsonpath='{.status.conditions[?(@.type=="Ready")].status}')" == "True" ]]; then
+        printf '%s\n' "${candidate}"
+        return 0
+      fi
+    done < <(kubectl --context "${context}" --namespace "${namespace}" get pod \
+      -l app.kubernetes.io/name=raw-event-archiver --output=name | sed 's#^pod/##')
+    attempts=$((attempts - 1))
+    sleep 2
+  done
+  printf 'ERROR: no ready replacement appeared for pod %s.\n' "${replaced_pod}" >&2
+  return 1
+}
+
 restore_archiver() {
   kubectl --context "${context}" --namespace "${namespace}" \
     set env deployment/raw-event-archiver ARCHIVER_POST_WRITE_DELAY- >/dev/null 2>&1 || true
@@ -80,6 +112,7 @@ fi
 
 if job_is_suspended synthetic-market-producer-consumer-crash; then
   printf 'Testing consumer crash after S3 write and before offset marking...\n'
+  crash_event_ref="$(printf '%s' 'synthetic:price:demo-bench-d:consumer-crash-001' | openssl dgst -sha256 | awk '{print $NF}')"
   trap restore_archiver EXIT
   kubectl --context "${context}" --namespace "${namespace}" \
     set env deployment/raw-event-archiver ARCHIVER_POST_WRITE_DELAY=30s >/dev/null
@@ -93,14 +126,13 @@ if job_is_suspended synthetic-market-producer-consumer-crash; then
   kubectl --context "${context}" --namespace "${namespace}" \
     wait job/synthetic-market-producer-consumer-crash --for=condition=Complete --timeout=120s
   wait_for_log "${crash_pod}" \
-    '"msg":"post-write failure window open","event_id":"synthetic:price:sp500:consumer-crash-001"'
+    "\"msg\":\"post-write failure window open\",\"event_ref\":\"${crash_event_ref}\""
   kubectl --context "${context}" --namespace "${namespace}" delete pod "${crash_pod}" --wait=false >/dev/null
   kubectl --context "${context}" --namespace "${namespace}" \
     rollout status deployment/raw-event-archiver --timeout=120s >/dev/null
-  recovered_pod="$(kubectl --context "${context}" --namespace "${namespace}" get pod \
-    -l app.kubernetes.io/name=raw-event-archiver --output=jsonpath='{.items[0].metadata.name}')"
+  recovered_pod="$(wait_for_replacement_pod "${crash_pod}")"
   wait_for_log "${recovered_pod}" \
-    '"msg":"archive effect durable","event_id":"synthetic:price:sp500:consumer-crash-001","result":"duplicate"'
+    "\"msg\":\"archive effect durable\",\"event_ref\":\"${crash_event_ref}\",\"result\":\"duplicate\""
   printf 'Observed consumer redelivery as an idempotent duplicate after the injected crash.\n'
   restore_archiver
   trap - EXIT
@@ -120,8 +152,10 @@ kubectl --context "${context}" --namespace "${namespace}" exec deployment/raw-ev
 kubectl --context "${context}" --namespace "${namespace}" exec deployment/raw-event-archiver -- \
   /topic-inspector --topic ingestion.quarantine --expected 1 --timeout 20s
 kubectl --context "${context}" --namespace "${namespace}" exec deployment/raw-event-archiver -- \
-  /archive-inspector --prefix bronze/ --expected 4
+  /archive-inspector \
+  --prefix bronze/market.price.observed/v1/date=2026-07-21/source=synthetic/ \
+  --expected 4
 
 printf '\nSlice 2 producer-to-storage verification passed.\n'
 kubectl --context "${context}" --namespace "${DATA_NAMESPACE}" get kafka,kafkanodepool,kafkatopic
-kubectl --context "${context}" --namespace "${namespace}" get kafkauser,deployment,job
+kubectl --context "${context}" --namespace "${namespace}" get kafkauser,deployment,job,cronjob,scaledobject,horizontalpodautoscaler

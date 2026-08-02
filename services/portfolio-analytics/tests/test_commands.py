@@ -19,8 +19,9 @@ class FakeStore:
         self.immutable_writes: list[str] = []
         self.latest_writes: list[str] = []
 
-    def list_objects(self, prefix: str):
+    def list_objects(self, prefix: str, required_key_segment: str = ""):
         self.prefix = prefix
+        self.required_key_segment = required_key_segment
         return bronze()
 
     def get(self, key: str) -> bytes:
@@ -61,8 +62,15 @@ class BuilderCommandTests(unittest.TestCase):
         result = json.loads(output.getvalue())
         self.assertEqual(result["event"], "portfolio analytics build complete")
         self.assertEqual(store.prefix, "bronze/custom/")
+        self.assertEqual(store.required_key_segment, "/source=synthetic/")
         self.assertEqual(store.immutable_writes, [products["silver_key"], products["gold_key"]])
         self.assertEqual(store.latest_writes, [products["latest_key"]])
+
+    def test_main_rejects_invalid_bronze_source(self) -> None:
+        with patch.dict("os.environ", {"BRONZE_SOURCE": "PRIVATE/SOURCE"}, clear=True), self.assertRaisesRegex(
+            ValueError, "BRONZE_SOURCE"
+        ):
+            builder.main()
 
 
 class QueryCommandTests(unittest.TestCase):
@@ -80,7 +88,7 @@ class QueryCommandTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def run_query(self, *, result: dict | None = None, expected_total: str = "6200.00000000") -> str:
+    def run_query(self, *, result: dict | None = None, expected_total: str = "600.00000000") -> str:
         objects = dict(self.objects)
         if result is not None:
             objects["gold/portfolio_allocations/v2/portfolio=demo/latest.json"] = json.dumps(result).encode()
@@ -98,7 +106,7 @@ class QueryCommandTests(unittest.TestCase):
 
     def test_main_queries_both_parquet_products(self) -> None:
         output = json.loads(self.run_query())
-        self.assertEqual(output, {"event": "DuckDB Parquet query passed", "gold_rows": 3, "silver_rows": 4, "total_market_value": "6200.00000000"})
+        self.assertEqual(output, {"event": "DuckDB Parquet query passed", "gold_rows": 3, "silver_rows": 4, "total_market_value": "600.00000000"})
 
     def test_main_rejects_each_row_count_mismatch(self) -> None:
         for field in ["input_object_count", "positions"]:

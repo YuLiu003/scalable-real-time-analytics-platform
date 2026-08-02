@@ -126,7 +126,12 @@ DOCKER_HOST=unix:///caller/docker.sock \
   "${repo_root}/platform/local/scripts/run-ephemeral.sh" >/dev/null
 grep -q '^make -C .*/platform/local bootstrap$' "${log_file}"
 grep -q '^make -C .*/platform/local bootstrap-data-path$' "${log_file}"
-grep -q '^make -C .*/platform/local bootstrap-analytics$' "${log_file}"
+if [[ "$(grep -c '^make -C .*/platform/local bootstrap-analytics$' "${log_file}")" != "2" ]]; then
+  printf 'run-ephemeral did not rebuild analytics after the scale phase\n' >&2
+  exit 1
+fi
+grep -q '^make -C .*/platform/local verify-scale-lab$' "${log_file}"
+grep -q '^make -C .*/platform/local destroy-analytics$' "${log_file}"
 grep -q '^kind delete cluster --name investment-platform$' "${log_file}"
 grep -q '^colima delete investment-platform-ephemeral --force --data$' "${log_file}"
 assert_runtime_config_isolated_and_removed
@@ -146,7 +151,53 @@ if grep -q '^make -C .*/platform/local bootstrap-analytics$' "${log_file}"; then
   printf 'run-ephemeral continued after a failed platform phase\n' >&2
   exit 1
 fi
+if grep -q '^make -C .*/platform/local verify-scale-lab$' "${log_file}"; then
+  printf 'run-ephemeral continued to the scale lab after a failed platform phase\n' >&2
+  exit 1
+fi
 grep -q '^make -C .*/platform/local diagnose$' "${log_file}"
+grep -q '^colima delete investment-platform-ephemeral --force --data$' "${log_file}"
+assert_runtime_config_isolated_and_removed
+
+: >"${log_file}"
+if FAKE_PROFILE_NAME=investment-platform-ephemeral \
+  FAKE_PROFILE_PRESENT=0 \
+  FAKE_CLUSTER_PRESENT=1 \
+  FAKE_FAIL_TARGET=verify-scale-lab \
+  DOCKER_CONTEXT=caller-context \
+  DOCKER_HOST=unix:///caller/docker.sock \
+    "${repo_root}/platform/local/scripts/run-ephemeral.sh" >/dev/null 2>&1; then
+  printf 'run-ephemeral ignored a failed scale verification phase\n' >&2
+  exit 1
+fi
+grep -q '^make -C .*/platform/local verify-scale-lab$' "${log_file}"
+if grep -q '^make -C .*/platform/local destroy-analytics$' "${log_file}"; then
+  printf 'run-ephemeral continued after a failed scale verification phase\n' >&2
+  exit 1
+fi
+grep -q '^make -C .*/platform/local diagnose-data-path$' "${log_file}"
+grep -q '^kind delete cluster --name investment-platform$' "${log_file}"
+grep -q '^colima delete investment-platform-ephemeral --force --data$' "${log_file}"
+assert_runtime_config_isolated_and_removed
+
+: >"${log_file}"
+if FAKE_PROFILE_NAME=investment-platform-ephemeral \
+  FAKE_PROFILE_PRESENT=0 \
+  FAKE_CLUSTER_PRESENT=1 \
+  FAKE_FAIL_TARGET=destroy-analytics \
+  DOCKER_CONTEXT=caller-context \
+  DOCKER_HOST=unix:///caller/docker.sock \
+    "${repo_root}/platform/local/scripts/run-ephemeral.sh" >/dev/null 2>&1; then
+  printf 'run-ephemeral ignored a failed analytics isolation phase\n' >&2
+  exit 1
+fi
+grep -q '^make -C .*/platform/local verify-scale-lab$' "${log_file}"
+grep -q '^make -C .*/platform/local destroy-analytics$' "${log_file}"
+if [[ "$(grep -c '^make -C .*/platform/local bootstrap-analytics$' "${log_file}")" != "1" ]]; then
+  printf 'run-ephemeral continued after analytics isolation failed\n' >&2
+  exit 1
+fi
+grep -q '^make -C .*/platform/local diagnose-analytics$' "${log_file}"
 grep -q '^colima delete investment-platform-ephemeral --force --data$' "${log_file}"
 assert_runtime_config_isolated_and_removed
 

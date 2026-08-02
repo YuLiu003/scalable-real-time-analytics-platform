@@ -22,7 +22,7 @@ from test_analytics import HOLDINGS, event
 
 
 def event_value() -> dict:
-    return json.loads(event("QQQ", "600.0000", 1, "2026-07-21T00:00:00Z"))
+    return json.loads(event("DEMO-ASSET-A", "100.0000", 1, "2026-07-21T00:00:00Z"))
 
 
 def holdings_value() -> dict:
@@ -54,12 +54,12 @@ class ModelHelperTests(unittest.TestCase):
         for value in [1, " padded", "control\nname"]:
             with self.subTest(display=value), self.assertRaisesRegex(ValueError, "invalid"):
                 _display_name(value, "display")
-        self.assertEqual(_display_name("S&P 500 Index", "display"), "S&P 500 Index")
+        self.assertEqual(_display_name("Synthetic Benchmark D", "display"), "Synthetic Benchmark D")
 
         for value in [1, "lowercase", "TOO-LONG-INSTRUMENT"]:
             with self.subTest(instrument=value), self.assertRaisesRegex(ValueError, "invalid"):
                 _instrument(value, "instrument")
-        self.assertEqual(_instrument("SP500", "instrument"), "SP500")
+        self.assertEqual(_instrument("DEMO-BENCH-D", "instrument"), "DEMO-BENCH-D")
 
     def test_canonical_json_is_sorted_ascii_and_newline_terminated(self) -> None:
         self.assertEqual(canonical_json({"z": "é", "a": 1}), b'{"a":1,"z":"\\u00e9"}\n')
@@ -74,8 +74,8 @@ class PriceContractTests(unittest.TestCase):
             parse_price(BronzeObject("bronze/event.json", json.dumps(value).encode()))
 
     def test_parse_price_accepts_canonical_event(self) -> None:
-        observed = parse_price(BronzeObject("bronze/event.json", event("QQQ", "600.0000", 1, "2026-07-21T00:00:00Z")))
-        self.assertEqual((observed.instrument, observed.price, observed.provider_sequence), ("QQQ", Decimal("600.0000"), 1))
+        observed = parse_price(BronzeObject("bronze/event.json", event("DEMO-ASSET-A", "100.0000", 1, "2026-07-21T00:00:00Z")))
+        self.assertEqual((observed.instrument, observed.price, observed.provider_sequence), ("DEMO-ASSET-A", Decimal("100.0000"), 1))
 
     def test_parse_price_rejects_invalid_json_and_shapes(self) -> None:
         for data in [b"{", b"\xff"]:
@@ -111,7 +111,7 @@ class PriceContractTests(unittest.TestCase):
         mutations = [
             (lambda value: value["payload"].__setitem__("instrument", 1), "instrument"),
             (lambda value: value["payload"].__setitem__("instrument", "lower"), "instrument"),
-            (lambda value: value.__setitem__("partition_key", "SP500"), "partition_key"),
+            (lambda value: value.__setitem__("partition_key", "DEMO-BENCH-D"), "partition_key"),
             (lambda value: value["payload"].__setitem__("currency", 1), "currency"),
             (lambda value: value["payload"].__setitem__("currency", "usd"), "currency"),
             (lambda value: value["payload"].__setitem__("provider_sequence", "1"), "provider_sequence"),
@@ -138,8 +138,11 @@ class PortfolioContractTests(unittest.TestCase):
 
     def test_parse_portfolio_accepts_and_sorts_canonical_fixture(self) -> None:
         portfolio = parse_portfolio(HOLDINGS)
-        self.assertEqual([position.instrument for position in portfolio.positions], ["FSELX", "QQQ", "QQQM"])
-        self.assertEqual(portfolio.benchmark.instrument, "SP500")
+        self.assertEqual(
+            [position.instrument for position in portfolio.positions],
+            ["DEMO-ASSET-A", "DEMO-ASSET-B", "DEMO-ASSET-C"],
+        )
+        self.assertEqual(portfolio.benchmark.instrument, "DEMO-BENCH-D")
 
     def test_parse_portfolio_rejects_invalid_json_and_shape(self) -> None:
         for data in [b"{", b"\xff"]:
@@ -184,7 +187,7 @@ class PortfolioContractTests(unittest.TestCase):
             (lambda value: value.__setitem__("benchmark", []), "JSON object"),
             (lambda value: value["benchmark"].update({"unknown": True}), "fields mismatch"),
             (lambda value: value["benchmark"].__setitem__("instrument", "lower"), "instrument"),
-            (lambda value: value["benchmark"].__setitem__("instrument", "QQQ"), "must not also"),
+            (lambda value: value["benchmark"].__setitem__("instrument", "DEMO-ASSET-A"), "must not also"),
             (lambda value: value["benchmark"].__setitem__("asset_type", "etf"), "index level"),
             (lambda value: value["benchmark"].__setitem__("valuation_type", "market_price"), "index level"),
             (lambda value: value["benchmark"].__setitem__("display_name", " padded"), "display_name"),

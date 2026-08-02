@@ -90,6 +90,10 @@ run_complete_platform() {
   make -C "${LOCAL_DIR}" bootstrap || return
   make -C "${LOCAL_DIR}" bootstrap-data-path || return
   make -C "${LOCAL_DIR}" bootstrap-analytics || return
+  make -C "${LOCAL_DIR}" verify-scale-lab || return
+  CONFIRM_DESTROY_ANALYTICS=portfolio-analytics \
+    make -C "${LOCAL_DIR}" destroy-analytics || return
+  make -C "${LOCAL_DIR}" bootstrap-analytics || return
 }
 
 if ! run_complete_platform; then

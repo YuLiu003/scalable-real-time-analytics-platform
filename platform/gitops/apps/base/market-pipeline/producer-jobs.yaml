@@ -27,7 +27,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: producer
-          image: local/market-pipeline:slice2
+          image: local/market-pipeline:slice5
           imagePullPolicy: Never
           command:
             - /synthetic-producer
@@ -95,7 +95,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: producer
-          image: local/market-pipeline:slice2
+          image: local/market-pipeline:slice5
           imagePullPolicy: Never
           command:
             - /synthetic-producer
@@ -105,11 +105,11 @@ spec:
             - name: FAIL_AFTER_FIRST_ACK
               value: "true"
             - name: EVENT_ID
-              value: synthetic:price:fselx:ack-unknown-001
+              value: synthetic:price:demo-asset-c:ack-unknown-001
             - name: EVENT_INSTRUMENT
-              value: FSELX
+              value: DEMO-ASSET-C
             - name: EVENT_PRICE
-              value: "60.0000"
+              value: "100.0000"
             - name: EVENT_SEQUENCE
               value: "100"
             - name: EVENT_OCCURRED_AT
@@ -177,7 +177,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: producer
-          image: local/market-pipeline:slice2
+          image: local/market-pipeline:slice5
           imagePullPolicy: Never
           command:
             - /synthetic-producer
@@ -185,11 +185,11 @@ spec:
             - name: PRODUCER_SCENARIO
               value: single
             - name: EVENT_ID
-              value: synthetic:price:fselx:ack-unknown-001
+              value: synthetic:price:demo-asset-c:ack-unknown-001
             - name: EVENT_INSTRUMENT
-              value: FSELX
+              value: DEMO-ASSET-C
             - name: EVENT_PRICE
-              value: "60.0000"
+              value: "100.0000"
             - name: EVENT_SEQUENCE
               value: "100"
             - name: EVENT_OCCURRED_AT
@@ -257,7 +257,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: producer
-          image: local/market-pipeline:slice2
+          image: local/market-pipeline:slice5
           imagePullPolicy: Never
           command:
             - /synthetic-producer
@@ -265,11 +265,11 @@ spec:
             - name: PRODUCER_SCENARIO
               value: single
             - name: EVENT_ID
-              value: synthetic:price:sp500:consumer-crash-001
+              value: synthetic:price:demo-bench-d:consumer-crash-001
             - name: EVENT_INSTRUMENT
-              value: SP500
+              value: DEMO-BENCH-D
             - name: EVENT_PRICE
-              value: "6500.0000"
+              value: "1000.0000"
             - name: EVENT_SEQUENCE
               value: "101"
             - name: EVENT_OCCURRED_AT

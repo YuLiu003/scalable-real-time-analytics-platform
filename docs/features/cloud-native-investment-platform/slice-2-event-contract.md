@@ -96,8 +96,9 @@ The exact terminal state is:
 
 - `market.prices`: 7 retained records across 3 partitions.
 - `ingestion.quarantine`: 1 malformed-record outcome.
-- `bronze/`: 4 immutable objects (QQQ, QQQM, FSELX, and SP500).
-- The replacement archiver logs the SP500 event as a duplicate after redelivery.
+- `bronze/`: 4 immutable objects (DEMO-ASSET-A, DEMO-ASSET-B, DEMO-ASSET-C, and DEMO-BENCH-D).
+- The replacement archiver logs the expected one-way event reference as a
+  duplicate after redelivery; it does not log the event ID or object key.
 
 Run the complete test with:
 

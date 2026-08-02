@@ -33,6 +33,8 @@ spec:
             - secretRef:
                 name: market-archive-credentials
           env:
+            - name: BRONZE_SOURCE
+              value: synthetic
             - name: HOLDINGS_FILE
               value: /config/holdings.json
             - name: WORK_ROOT
@@ -107,7 +109,7 @@ spec:
             - name: PORTFOLIO_ID
               value: demo
             - name: EXPECTED_TOTAL
-              value: "6200.00000000"
+              value: "600.00000000"
             - name: WORK_ROOT
               value: /work
           resources:
@@ -217,6 +219,8 @@ spec:
             - secretRef:
                 name: market-archive-credentials
           env:
+            - name: BRONZE_SOURCE
+              value: synthetic
             - name: HOLDINGS_FILE
               value: /config/holdings.json
             - name: WORK_ROOT

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -12,10 +13,13 @@ from .storage import ObjectStore, S3Settings
 def main() -> None:
     holdings_file = Path(os.environ.get("HOLDINGS_FILE", "/config/holdings.json"))
     bronze_prefix = os.environ.get("BRONZE_PREFIX", "bronze/market.price.observed/v1/")
+    bronze_source = os.environ.get("BRONZE_SOURCE", "synthetic")
+    if re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,31}", bronze_source) is None:
+        raise ValueError("BRONZE_SOURCE must be a canonical source slug")
     work_root = Path(os.environ.get("WORK_ROOT", "/work"))
     holdings_data = holdings_file.read_bytes()
     store = ObjectStore(S3Settings.from_environment())
-    objects = store.list_objects(bronze_prefix)
+    objects = store.list_objects(bronze_prefix, f"/source={bronze_source}/")
 
     with tempfile.TemporaryDirectory(prefix="portfolio-analytics-", dir=work_root) as temporary:
         products = build_products(objects, holdings_data, Path(temporary))

@@ -65,10 +65,12 @@ kubectl --namespace analytics-apps wait --for=condition=Complete job/synthetic-m
 kubectl --namespace analytics-apps wait --for=condition=Complete job/synthetic-market-producer-portfolio-complete --timeout=5m
 
 deadline=$((SECONDS + 300))
-until kubectl --namespace analytics-apps logs deployment/raw-event-archiver | \
-  grep -q '"event_id":"synthetic:price:sp500:20260721t000130z"'; do
+until kubectl --namespace analytics-apps exec deployment/raw-event-archiver -- \
+  /archive-inspector \
+  --prefix 'bronze/market.price.observed/v1/date=2026-07-21/source=synthetic/instrument=DEMO-BENCH-D/synthetic:price:demo-bench-d:20260721t000130z.json' \
+  --expected 1 >/dev/null 2>&1; do
   if ((SECONDS >= deadline)); then
-    printf 'Timed out waiting for the baseline SP500 archive effect\n' >&2
+    printf 'Timed out waiting for the baseline DEMO-BENCH-D archive effect\n' >&2
     exit 1
   fi
   sleep 5

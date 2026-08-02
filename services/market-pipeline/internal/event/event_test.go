@@ -50,6 +50,14 @@ func TestEnvelopeRoundTripAndArchiveKey(t *testing.T) {
 	}
 }
 
+func TestIDReferenceIsStableAndDoesNotExposeTheEventID(t *testing.T) {
+	first := IDReference("provider:account:instrument:event")
+	second := IDReference("provider:account:instrument:event")
+	if first != second || len(first) != 64 || strings.Contains(first, "instrument") {
+		t.Fatalf("IDReference() = %q, %q", first, second)
+	}
+}
+
 func TestDecodeStrictRejectsUnknownFields(t *testing.T) {
 	encoded, err := validEvent().Marshal()
 	if err != nil {

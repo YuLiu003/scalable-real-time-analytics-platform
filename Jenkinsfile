@@ -73,6 +73,7 @@ pipeline {
             }
             post {
                 always {
+                    archiveArtifacts artifacts: 'artifacts/kafka-scale/**', allowEmptyArchive: true
                     deleteDir()
                 }
             }
