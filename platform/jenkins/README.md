@@ -25,10 +25,22 @@ Kubernetes agents without claiming that a local lab is a production deployment.
   reporter after it verifies the exact PR head, ordered success evidence, and
   VM deletion. The reporter token is never available to the Pipeline.
 
+## Prerequisites
+
+The disposable workflow requires macOS, Colima, the Docker CLI, kind at the
+exact version in `versions.lock`, a compatible kubectl client, Helm 3, Make,
+OpenSSL, Python 3, curl, and Git. A Docker daemon does not need to be running
+before invocation because the workflow creates an isolated Colima VM.
+
+Install the repository's Python development dependencies using the
+[root setup instructions](../../README.md#run-locally) before running the
+quality gate. The disposable VM defaults to 8 CPUs, 16 GiB of memory, and
+50 GiB of disk.
+
 ## Run
 
 ```bash
-make -C platform/jenkins quality
+PYTHON_BIN=.venv/bin/python make -C platform/jenkins quality
 make -C platform/jenkins e2e-ephemeral
 platform/jenkins/scripts/report-github-status.py \
   --pr "$PR_NUMBER" \

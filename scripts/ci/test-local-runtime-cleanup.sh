@@ -68,7 +68,7 @@ case "${command_name}" in
 esac
 FAKE
 chmod +x "${fake_bin}/fake-command"
-for command_name in colima docker kind kubectl helm make; do
+for command_name in colima curl docker git go kind kubectl helm make openssl python3; do
   ln -s fake-command "${fake_bin}/${command_name}"
 done
 

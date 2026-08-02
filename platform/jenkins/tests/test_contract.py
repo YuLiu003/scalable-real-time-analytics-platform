@@ -27,6 +27,14 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertRegex(values["DOCKER_DIND_ARM64_SOURCE"], r"@sha256:[0-9a-f]{64}$")
         self.assertRegex(values["JENKINS_KIND_NODE_IMAGE"], r"@sha256:[0-9a-f]{64}$")
 
+    def test_host_preflight_enforces_pinned_tool_versions(self) -> None:
+        text = (JENKINS_DIR / "scripts" / "preflight.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('source "${script_dir}/../versions.lock"', text)
+        self.assertIn('"${installed_kind_version}" != "${KIND_VERSION}"', text)
+        self.assertIn('"${installed_helm_version}" =~ ^v3\\.', text)
+
     def test_controller_and_agent_security(self) -> None:
         values = yaml.safe_load(
             (JENKINS_DIR / "helm" / "values.yaml").read_text(encoding="utf-8")
