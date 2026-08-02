@@ -16,11 +16,15 @@ source "${jenkins_dir}/versions.lock"
 
 mkdir -p \
   "${build_context}/services/portfolio-analytics" \
+  "${build_context}/tools/codex-plugins/agent-review-optimizer" \
   "${build_context}/tools/codex-plugins/cloud-platform-engineering/mcp"
 cp \
   "${repo_root}/services/portfolio-analytics/requirements.txt" \
   "${repo_root}/services/portfolio-analytics/requirements-dev.txt" \
   "${build_context}/services/portfolio-analytics/"
+cp \
+  "${repo_root}/tools/codex-plugins/agent-review-optimizer/requirements-dev.txt" \
+  "${build_context}/tools/codex-plugins/agent-review-optimizer/"
 cp \
   "${repo_root}/tools/codex-plugins/cloud-platform-engineering/mcp/requirements-dev.txt" \
   "${build_context}/tools/codex-plugins/cloud-platform-engineering/mcp/"

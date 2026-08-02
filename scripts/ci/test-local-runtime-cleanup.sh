@@ -18,6 +18,16 @@ set -Eeuo pipefail
 command_name="$(basename "$0")"
 printf '%s %s\n' "${command_name}" "$*" >>"${FAKE_LOG}"
 case "${command_name}" in
+  caffeinate)
+    [[ "${1:-}" == "-dimsu" ]]
+    [[ "${2:-}" == "-w" ]]
+    monitored_pid="${3:-}"
+    [[ "${monitored_pid}" =~ ^[0-9]+$ ]]
+    while kill -0 "${monitored_pid}" >/dev/null 2>&1; do
+      sleep 0.05
+    done
+    exit 0
+    ;;
   colima)
     if [[ "${1:-}" == "list" ]]; then
       printf 'PROFILE STATUS ARCH CPUS MEMORY DISK RUNTIME ADDRESS\n'
@@ -64,11 +74,17 @@ case "${command_name}" in
     if [[ -n "${FAKE_FAIL_TARGET:-}" && "${target}" == "${FAKE_FAIL_TARGET}" ]]; then
       exit 1
     fi
+    if [[ -n "${FAKE_BLOCK_TARGET:-}" && "${target}" == "${FAKE_BLOCK_TARGET}" ]]; then
+      : >"${FAKE_BLOCK_READY}"
+      while [[ ! -e "${FAKE_BLOCK_RELEASE}" ]]; do
+        sleep 0.05
+      done
+    fi
     ;;
 esac
 FAKE
 chmod +x "${fake_bin}/fake-command"
-for command_name in colima curl docker git go kind kubectl helm make openssl python3; do
+for command_name in caffeinate colima curl docker git go kind kubectl helm make openssl python3; do
   ln -s fake-command "${fake_bin}/${command_name}"
 done
 
@@ -237,6 +253,7 @@ FAKE_PROFILE_PRESENT=0 \
 DOCKER_CONTEXT=caller-context \
 DOCKER_HOST=unix:///caller/docker.sock \
   "${repo_root}/platform/jenkins/scripts/run-ephemeral.sh" >/dev/null
+grep -Eq '^caffeinate -dimsu -w [0-9]+$' "${log_file}"
 grep -q '^make -C .*/platform/jenkins bootstrap$' "${log_file}"
 grep -q '^make -C .*/platform/jenkins trigger$' "${log_file}"
 grep -q '^colima delete investment-platform-jenkins-ephemeral --force --data$' "${log_file}"
@@ -250,6 +267,39 @@ if FAKE_PROFILE_NAME=investment-platform-jenkins-ephemeral \
   DOCKER_HOST=unix:///caller/docker.sock \
     "${repo_root}/platform/jenkins/scripts/run-ephemeral.sh" >/dev/null 2>&1; then
   printf 'Jenkins run-ephemeral ignored a failed phase\n' >&2
+  exit 1
+fi
+grep -q '^colima delete investment-platform-jenkins-ephemeral --force --data$' "${log_file}"
+assert_runtime_config_isolated_and_removed
+
+: >"${log_file}"
+block_ready="${test_root}/jenkins-block-ready"
+block_release="${test_root}/jenkins-block-release"
+FAKE_PROFILE_NAME=investment-platform-jenkins-ephemeral \
+FAKE_PROFILE_PRESENT=0 \
+FAKE_BLOCK_TARGET=trigger \
+FAKE_BLOCK_READY="${block_ready}" \
+FAKE_BLOCK_RELEASE="${block_release}" \
+DOCKER_CONTEXT=caller-context \
+DOCKER_HOST=unix:///caller/docker.sock \
+  "${repo_root}/platform/jenkins/scripts/run-ephemeral.sh" >/dev/null 2>&1 &
+jenkins_pid=$!
+for _ in {1..100}; do
+  [[ -e "${block_ready}" ]] && break
+  sleep 0.05
+done
+if [[ ! -e "${block_ready}" ]]; then
+  printf 'Jenkins run-ephemeral did not reach the blocking phase\n' >&2
+  exit 1
+fi
+kill -TERM "${jenkins_pid}"
+: >"${block_release}"
+set +e
+wait "${jenkins_pid}"
+jenkins_status=$?
+set -e
+if [[ "${jenkins_status}" != 143 ]]; then
+  printf 'Jenkins run-ephemeral did not preserve TERM status\n' >&2
   exit 1
 fi
 grep -q '^colima delete investment-platform-jenkins-ephemeral --force --data$' "${log_file}"

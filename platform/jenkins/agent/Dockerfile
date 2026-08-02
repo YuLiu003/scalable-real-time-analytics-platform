@@ -24,6 +24,7 @@ COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-buildx /usr/local/libexec/docker/cli-plugins/docker-buildx
 COPY services/portfolio-analytics/requirements.txt /tmp/portfolio-requirements/requirements.txt
 COPY services/portfolio-analytics/requirements-dev.txt /tmp/portfolio-requirements/requirements-dev.txt
+COPY tools/codex-plugins/agent-review-optimizer/requirements-dev.txt /tmp/review-plugin-requirements.txt
 COPY tools/codex-plugins/cloud-platform-engineering/mcp/requirements-dev.txt /tmp/plugin-requirements.txt
 
 RUN set -eux; \
@@ -58,6 +59,7 @@ RUN set -eux; \
     GOBIN=/usr/local/bin go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"; \
     python -m pip install --no-cache-dir \
       --requirement /tmp/portfolio-requirements/requirements-dev.txt \
+      --requirement /tmp/review-plugin-requirements.txt \
       --requirement /tmp/plugin-requirements.txt; \
     groupadd --gid 10000 jenkins; \
     useradd --create-home --uid 10000 --gid 10000 --shell /bin/bash jenkins; \
