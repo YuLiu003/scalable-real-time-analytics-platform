@@ -7,13 +7,18 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/YuLiu003/real-time-analytics-platform/services/market-pipeline/internal/archive"
+	"github.com/YuLiu003/real-time-analytics-platform/services/market-pipeline/internal/archivemetrics"
 	"github.com/YuLiu003/real-time-analytics-platform/services/market-pipeline/internal/event"
 	"github.com/YuLiu003/real-time-analytics-platform/services/market-pipeline/internal/kafkaclient"
 )
@@ -62,6 +67,33 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	metrics, err := archivemetrics.New(envOrDefault("ARCHIVER_METRICS_SCOPE", "baseline"))
+	if err != nil {
+		return err
+	}
+	logEvery, err := strconv.ParseUint(envOrDefault("ARCHIVER_LOG_EVERY", "1"), 10, 64)
+	if err != nil || logEvery == 0 {
+		return errors.New("ARCHIVER_LOG_EVERY must be a positive integer")
+	}
+	metricsListener, err := net.Listen("tcp", envOrDefault("METRICS_ADDR", ":8081"))
+	if err != nil {
+		return fmt.Errorf("listen for metrics: %w", err)
+	}
+	metricsServer := &http.Server{
+		Handler:           metrics.Handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	runContext, cancel := context.WithCancel(ctx)
+	defer cancel()
+	metricsErrors := make(chan error, 1)
+	go func() {
+		if err := metricsServer.Serve(metricsListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			metricsErrors <- fmt.Errorf("serve metrics: %w", err)
+			cancel()
+		}
+	}()
+	defer metricsServer.Shutdown(context.Background())
+
 	delay, err := time.ParseDuration(envOrDefault("ARCHIVER_POST_WRITE_DELAY", "0s"))
 	if err != nil {
 		return fmt.Errorf("parse ARCHIVER_POST_WRITE_DELAY: %w", err)
@@ -72,6 +104,8 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		quarantineTopic: envOrDefault("KAFKA_QUARANTINE_TOPIC", "ingestion.quarantine"),
 		postWriteDelay:  delay,
 		logger:          logger,
+		metrics:         metrics,
+		logEvery:        logEvery,
 	}
 
 	go func() {
@@ -82,16 +116,21 @@ func run(ctx context.Context, logger *slog.Logger) error {
 
 	topic := envOrDefault("KAFKA_TOPIC", "market.prices")
 	logger.Info("archiver started", "topic", topic, "consumer_group", envOrDefault("KAFKA_CONSUMER_GROUP", "raw-event-archiver-v1"))
-	for ctx.Err() == nil {
-		if err := consumer.Consume(ctx, []string{topic}, handler); err != nil {
-			if ctx.Err() != nil {
+	for runContext.Err() == nil {
+		if err := consumer.Consume(runContext, []string{topic}, handler); err != nil {
+			if runContext.Err() != nil {
 				break
 			}
 			logger.Error("consumer session failed", "error", err)
 			time.Sleep(time.Second)
 		}
 	}
-	return ctx.Err()
+	select {
+	case err := <-metricsErrors:
+		return err
+	default:
+		return runContext.Err()
+	}
 }
 
 type consumerHandler struct {
@@ -100,6 +139,9 @@ type consumerHandler struct {
 	quarantineTopic string
 	postWriteDelay  time.Duration
 	logger          *slog.Logger
+	metrics         *archivemetrics.Recorder
+	logEvery        uint64
+	processed       atomic.Uint64
 }
 
 func (*consumerHandler) Setup(sarama.ConsumerGroupSession) error   { return nil }
@@ -114,38 +156,52 @@ func (h *consumerHandler) ConsumeClaim(session sarama.ConsumerGroupSession, clai
 			if !ok {
 				return nil
 			}
-			if err := h.process(session.Context(), message); err != nil {
+			startedAt := time.Now()
+			outcome, err := h.process(session.Context(), message)
+			processing := time.Since(startedAt)
+			durable := processing
+			if !message.Timestamp.IsZero() {
+				durable = time.Since(message.Timestamp)
+				if durable < 0 {
+					durable = processing
+				}
+			}
+			if err != nil {
+				_ = h.metrics.Observe("error", processing, durable)
 				return err
 			}
+			_ = h.metrics.Observe(outcome, processing, durable)
 			session.MarkMessage(message, "archive effect durable")
 		}
 	}
 }
 
-func (h *consumerHandler) process(ctx context.Context, message *sarama.ConsumerMessage) error {
+func (h *consumerHandler) process(ctx context.Context, message *sarama.ConsumerMessage) (string, error) {
 	envelope, err := event.DecodeStrict(message.Value)
 	if err != nil {
-		return h.sendToQuarantine(message, "schema_validation_failed", err.Error())
+		return "quarantined", h.sendToQuarantine(message, "schema_validation_failed", err.Error())
 	}
-	result, key, err := h.store.PutEvent(ctx, envelope, message.Value)
+	result, _, err := h.store.PutEvent(ctx, envelope, message.Value)
 	if errors.Is(err, archive.ErrEventIDCollision) {
-		return h.sendToQuarantine(message, "event_id_collision", err.Error())
+		return "quarantined", h.sendToQuarantine(message, "event_id_collision", err.Error())
 	}
 	if err != nil {
-		return err
+		return "", err
 	}
-	h.logger.Info("archive effect durable", "event_id", envelope.EventID, "result", result, "object_key", key, "partition", message.Partition, "offset", message.Offset)
+	if h.processed.Add(1)%h.logEvery == 0 {
+		h.logger.Info("archive effect durable", "event_ref", event.IDReference(envelope.EventID), "result", result, "partition", message.Partition, "offset", message.Offset)
+	}
 	if result == archive.Created && h.postWriteDelay > 0 {
-		h.logger.Info("post-write failure window open", "event_id", envelope.EventID, "delay", h.postWriteDelay.String())
+		h.logger.Info("post-write failure window open", "event_ref", event.IDReference(envelope.EventID), "delay", h.postWriteDelay.String())
 		timer := time.NewTimer(h.postWriteDelay)
 		defer timer.Stop()
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return "", ctx.Err()
 		case <-timer.C:
 		}
 	}
-	return nil
+	return string(result), nil
 }
 
 type quarantineRecord struct {

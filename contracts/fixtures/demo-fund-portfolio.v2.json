@@ -1,0 +1,35 @@
+{
+  "schema_version": 2,
+  "portfolio_id": "demo",
+  "display_name": "Synthetic Fund Portfolio",
+  "base_currency": "USD",
+  "positions": [
+    {
+      "instrument": "DEMO-ASSET-A",
+      "display_name": "Synthetic Asset A",
+      "asset_type": "etf",
+      "valuation_type": "market_price",
+      "quantity": "1.00000000"
+    },
+    {
+      "instrument": "DEMO-ASSET-B",
+      "display_name": "Synthetic Asset B",
+      "asset_type": "etf",
+      "valuation_type": "market_price",
+      "quantity": "2.00000000"
+    },
+    {
+      "instrument": "DEMO-ASSET-C",
+      "display_name": "Synthetic Asset C",
+      "asset_type": "mutual_fund",
+      "valuation_type": "nav",
+      "quantity": "3.00000000"
+    }
+  ],
+  "benchmark": {
+    "instrument": "DEMO-BENCH-D",
+    "display_name": "Synthetic Benchmark D",
+    "asset_type": "index",
+    "valuation_type": "index_level"
+  }
+}

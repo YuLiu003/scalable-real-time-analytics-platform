@@ -76,6 +76,7 @@ printf 'kubectl:    %s\n' "${kubectl_client_version:-unknown}"
 printf 'Helm:       %s\n' "${installed_helm_version}"
 printf 'Go:         %s\n' "${installed_go_version:-unknown}"
 printf 'Monitoring: kube-prometheus-stack %s\n' "${KUBE_PROMETHEUS_STACK_VERSION}"
+printf 'Autoscaling: KEDA %s\n' "${KEDA_VERSION}"
 
 if (( failed != 0 )); then
   exit 1

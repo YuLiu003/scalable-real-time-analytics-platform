@@ -32,6 +32,35 @@ kubectl --context "${KUBERNETES_CONTEXT}" wait \
   customresourcedefinition/kafkausers.kafka.strimzi.io \
   --timeout=120s
 
+printf 'Installing KEDA %s for Kafka-lag autoscaling...\n' "${KEDA_VERSION}"
+helm repo add kedacore https://kedacore.github.io/charts --force-update
+helm repo update kedacore
+keda_render="$(mktemp "${TMPDIR:-/tmp}/keda-render.XXXXXX")"
+helm template "${KEDA_RELEASE}" kedacore/keda \
+  --version "${KEDA_VERSION}" \
+  --namespace "${KEDA_NAMESPACE}" \
+  --values "${REPO_ROOT}/platform/gitops/addons/keda/values.yaml" >"${keda_render}"
+if ! grep -Fq -- '--enable-prometheus-metrics=true' "${keda_render}" ||
+  ! grep -Fq 'kind: ServiceMonitor' "${keda_render}"; then
+  rm -f "${keda_render}"
+  printf 'ERROR: pinned KEDA values did not render operator metrics and a ServiceMonitor.\n' >&2
+  exit 1
+fi
+rm -f "${keda_render}"
+helm upgrade --install "${KEDA_RELEASE}" \
+  kedacore/keda \
+  --version "${KEDA_VERSION}" \
+  --kube-context "${KUBERNETES_CONTEXT}" \
+  --namespace "${KEDA_NAMESPACE}" \
+  --values "${REPO_ROOT}/platform/gitops/addons/keda/values.yaml" \
+  --wait \
+  --timeout 5m
+kubectl --context "${KUBERNETES_CONTEXT}" wait \
+  --for=condition=Established \
+  customresourcedefinition/scaledobjects.keda.sh \
+  customresourcedefinition/triggerauthentications.keda.sh \
+  --timeout=120s
+
 secret_count=0
 for secret_ref in \
   "${DATA_NAMESPACE}/garage-server-config" \
@@ -103,7 +132,7 @@ kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${DATA_NAMESPACE}" \
 kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${DATA_NAMESPACE}" \
   wait kafka/"${KAFKA_CLUSTER_NAME}" --for=condition=Ready --timeout=10m
 kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${DATA_NAMESPACE}" \
-  wait kafkatopic/market-prices kafkatopic/ingestion-quarantine \
+  wait kafkatopic/market-prices kafkatopic/ingestion-quarantine kafkatopic/market-prices-scale \
   --for=condition=Ready --timeout=5m
 
 printf 'Publishing the Kafka broker CA to the application namespace...\n'
@@ -128,9 +157,14 @@ kubectl --context "${KUBERNETES_CONTEXT}" apply \
   -k "${REPO_ROOT}/platform/gitops/apps/local/market-pipeline"
 kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${APPLICATION_NAMESPACE}" \
   wait kafkauser/synthetic-market-producer kafkauser/raw-event-archiver \
+  kafkauser/scale-load-producer kafkauser/scale-event-archiver \
   --for=condition=Ready --timeout=5m
 kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${APPLICATION_NAMESPACE}" \
   rollout status deployment/raw-event-archiver --timeout=5m
+kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${APPLICATION_NAMESPACE}" \
+  rollout status deployment/scale-event-archiver --timeout=5m
+kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${APPLICATION_NAMESPACE}" \
+  wait scaledobject/scale-event-archiver --for=condition=Ready --timeout=5m
 kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${APPLICATION_NAMESPACE}" \
   wait job/synthetic-market-producer-baseline --for=condition=Complete --timeout=5m
 

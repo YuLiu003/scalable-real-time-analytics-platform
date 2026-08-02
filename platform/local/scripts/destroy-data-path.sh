@@ -46,12 +46,13 @@ kubectl --context "${KUBERNETES_CONTEXT}" delete \
 # controller and the broker still exist; deleting the whole data-services tree
 # at once can orphan terminating topics after their controller disappears.
 kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${DATA_NAMESPACE}" \
-  delete kafkatopic ingestion-quarantine market-prices \
+  delete kafkatopic ingestion-quarantine market-prices market-prices-scale \
   --ignore-not-found --wait=true --timeout=2m
 kubectl --context "${KUBERNETES_CONTEXT}" delete \
   -k "${REPO_ROOT}/platform/gitops/platform/local/market-data-services" \
   --ignore-not-found --wait=true
 helm uninstall "${STRIMZI_RELEASE}" --kube-context "${KUBERNETES_CONTEXT}" --namespace "${DATA_NAMESPACE}" --ignore-not-found
+helm uninstall "${KEDA_RELEASE}" --kube-context "${KUBERNETES_CONTEXT}" --namespace "${KEDA_NAMESPACE}" --ignore-not-found
 kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${DATA_NAMESPACE}" \
   delete secret garage-server-config market-archive-credentials --ignore-not-found
 kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${APPLICATION_NAMESPACE}" \

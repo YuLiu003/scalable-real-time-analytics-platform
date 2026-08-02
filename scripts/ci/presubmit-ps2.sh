@@ -51,5 +51,8 @@ trap cleanup EXIT
 make -C "${local_dir}" bootstrap
 make -C "${local_dir}" bootstrap-data-path
 make -C "${local_dir}" bootstrap-analytics
+make -C "${local_dir}" verify-scale-lab
+CONFIRM_DESTROY_ANALYTICS=portfolio-analytics make -C "${local_dir}" destroy-analytics
+make -C "${local_dir}" bootstrap-analytics
 
 printf 'PS2 integration, Kubernetes, and infrastructure checks passed.\n'

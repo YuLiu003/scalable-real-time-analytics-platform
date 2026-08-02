@@ -2,6 +2,7 @@ package event
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -144,4 +145,9 @@ func (e Envelope) ArchiveKey() (string, error) {
 		e.Payload.Instrument,
 		e.EventID,
 	), nil
+}
+
+// IDReference returns a one-way identifier suitable for operational logs.
+func IDReference(eventID string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(eventID)))
 }

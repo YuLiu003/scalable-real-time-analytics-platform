@@ -59,7 +59,7 @@ assert_go_coverage \
   "${MARKET_DIR}" \
   "${TMPDIR:-/tmp}/market-quality-gocache" \
   "${COVERAGE_DIR}/market-domain.out" \
-  ./internal/event ./internal/synthetic
+  ./internal/archivemetrics ./internal/event ./internal/scale ./internal/synthetic
 
 printf 'Building and race-testing every Go package in the feature services...\n'
 (
@@ -78,6 +78,24 @@ while IFS= read -r script; do
   bash -n "${REPO_ROOT}/${script}"
 done < <(cd "${REPO_ROOT}" && rg --files platform/local/scripts scripts/ci scripts/cloud -g '*.sh' | sort)
 "${REPO_ROOT}/scripts/ci/test-local-runtime-cleanup.sh"
+"${PYTHON_BIN}" "${REPO_ROOT}/scripts/ci/validate-public-fixtures.py"
+scale_config_log="${COVERAGE_DIR}/scale-config-validation.log"
+scale_config_artifact_dir="${COVERAGE_DIR}/invalid-scale-config-artifacts"
+mkdir -p "${scale_config_artifact_dir}"
+printf 'stale evidence\n' >"${scale_config_artifact_dir}/report.json"
+if SCALE_EVENT_COUNT=1200 SCALE_ARCHIVER_DELAY_MS=30 \
+  SCALE_ARTIFACT_DIR="${scale_config_artifact_dir}" \
+  "${REPO_ROOT}/platform/local/scripts/verify-scale-lab.sh" \
+  >"${scale_config_log}" 2>&1; then
+  printf 'ERROR: scale verification accepted a backlog shorter than the HPA observation window.\n' >&2
+  exit 1
+fi
+grep -Fq 'must retain at least 35 seconds of injected work per partition' \
+  "${scale_config_log}"
+if [[ -e "${scale_config_artifact_dir}/report.json" ]]; then
+  printf 'ERROR: invalid scale configuration left stale evidence available.\n' >&2
+  exit 1
+fi
 "${PYTHON_BIN}" -m json.tool "${REPO_ROOT}/contracts/fixtures/demo-fund-portfolio.v2.json" >/dev/null
 
 printf 'Portfolio feature quality gates passed with 100%% measured application coverage.\n'

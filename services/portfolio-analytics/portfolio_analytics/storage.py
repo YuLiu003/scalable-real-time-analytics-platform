@@ -50,12 +50,14 @@ class ObjectStore:
             )
         self.client = boto3.client("s3", **options)
 
-    def list_objects(self, prefix: str) -> list[BronzeObject]:
+    def list_objects(self, prefix: str, required_key_segment: str = "") -> list[BronzeObject]:
         objects: list[BronzeObject] = []
         paginator = self.client.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
             for item in page.get("Contents", []):
                 key = item["Key"]
+                if required_key_segment and required_key_segment not in key:
+                    continue
                 body = self.client.get_object(Bucket=self.bucket, Key=key)["Body"].read()
                 objects.append(BronzeObject(key, body))
         return sorted(objects, key=lambda item: item.key)
