@@ -20,10 +20,11 @@ source is the replay boundary and keeps the analytical engine replaceable.
 
 ## First calculation
 
-The first result is portfolio allocation, not performance return. Slice 2 has
-market prices but no canonical transaction, cash-flow, or cost-basis events, so
-claiming time-weighted return, money-weighted return, or gain/loss would invent
-financial history.
+The first result is portfolio allocation, not performance return. The later
+offline v1 ledger records external deposits and withdrawals, but this analytics
+Job does not consume it and there are still no trade, dividend, fee, or cost-
+basis events. Claiming time-weighted return, money-weighted return, or gain/loss
+would therefore invent financial history.
 
 The versioned `demo` fixture is explicitly synthetic and holds:
 

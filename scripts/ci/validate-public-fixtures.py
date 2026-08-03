@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import re
 from pathlib import Path
@@ -23,8 +24,27 @@ SCALE_VERIFY = REPO_ROOT / "platform" / "local" / "scripts" / "verify-scale-lab.
 CAPACITY_VERIFY = (
     REPO_ROOT / "platform" / "local" / "scripts" / "verify-capacity-benchmark.sh"
 )
+LEDGER_JSON = REPO_ROOT / "contracts" / "fixtures" / "demo-cash-flows.v1.json"
+LEDGER_CSV = REPO_ROOT / "contracts" / "fixtures" / "demo-cash-flows.v1.csv"
+PRIVATE_FEED_MANIFEST = (
+    REPO_ROOT
+    / "platform"
+    / "gitops"
+    / "apps"
+    / "private"
+    / "market-feed"
+    / "market-feed.yaml"
+)
 DEMO_ID = re.compile(r"^DEMO-(?:ASSET|BENCH)-[A-Z]$")
 LOAD_ID = re.compile(r"^LOAD-[A-Z]$")
+DEMO_TRANSACTION_ID = re.compile(r"^demo-cash-[0-9]{3}$")
+LEDGER_FIELDS = {
+    "transaction_id",
+    "occurred_at",
+    "cash_flow_type",
+    "amount",
+    "currency",
+}
 
 
 def main() -> None:
@@ -97,7 +117,42 @@ def main() -> None:
     ):
         raise SystemExit("capacity benchmark must retain the reviewed default matrix")
 
-    print("Committed portfolio, scale, and capacity fixtures are explicitly fictional.")
+    json_rows = json.loads(LEDGER_JSON.read_text(encoding="utf-8"))
+    with LEDGER_CSV.open(encoding="utf-8", newline="") as stream:
+        csv_rows = list(csv.DictReader(stream))
+    for rows in (json_rows, csv_rows):
+        if not isinstance(rows, list) or any(set(row) != LEDGER_FIELDS for row in rows):
+            raise SystemExit("committed ledger rows must use only the reviewed cash-flow fields")
+        if any(
+            not DEMO_TRANSACTION_ID.fullmatch(row["transaction_id"])
+            or row["cash_flow_type"] not in {"deposit", "withdrawal"}
+            or row["currency"] != "USD"
+            for row in rows
+        ):
+            raise SystemExit("committed ledger rows must be fictional single-currency cash flows")
+    if sorted(json_rows, key=lambda row: row["transaction_id"]) != sorted(
+        csv_rows, key=lambda row: row["transaction_id"]
+    ):
+        raise SystemExit("committed JSON and CSV ledger fixtures must be equivalent")
+
+    private_manifest = PRIVATE_FEED_MANIFEST.read_text(encoding="utf-8")
+    for private_name in (
+        "APCA_API_KEY_ID",
+        "APCA_API_SECRET_KEY",
+        "MARKET_WATCHLIST",
+        "MARKET_TENANT_ID",
+    ):
+        secret_reference = (
+            f"            - name: {private_name}\n"
+            "              valueFrom:\n"
+            "                secretKeyRef:\n"
+            "                  name: alpaca-market-feed\n"
+            f"                  key: {private_name}\n"
+        )
+        if private_manifest.count(secret_reference) != 1:
+            raise SystemExit(f"{private_name} must remain a runtime Secret reference")
+
+    print("Committed portfolio, ledger, scale, and capacity fixtures are explicitly fictional; private feed inputs remain Secret-backed.")
 
 
 if __name__ == "__main__":

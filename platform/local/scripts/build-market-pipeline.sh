@@ -30,7 +30,7 @@ printf 'Testing market pipeline with %s...\n' "$(cd "${SERVICE_DIR}" && GOWORK=o
   cd "${SERVICE_DIR}"
   GOWORK=off GOCACHE="${TMPDIR:-/tmp}/market-pipeline-gocache" go test ./...
 
-  for command in synthetic-producer raw-event-archiver archive-inspector topic-inspector; do
+  for command in synthetic-producer alpaca-market-producer raw-event-archiver archive-inspector topic-inspector; do
     printf 'Building linux/%s %s...\n' "${go_arch}" "${command}"
     CGO_ENABLED=0 GOOS=linux GOARCH="${go_arch}" GOWORK=off \
       GOCACHE="${TMPDIR:-/tmp}/market-pipeline-gocache" \
@@ -38,6 +38,9 @@ printf 'Testing market pipeline with %s...\n' "$(cd "${SERVICE_DIR}" && GOWORK=o
   done
 )
 
-docker build --tag "${MARKET_PIPELINE_IMAGE}" "${SERVICE_DIR}"
+docker build \
+  --build-arg "CERTIFICATE_IMAGE=${PYTHON_IMAGE}" \
+  --tag "${MARKET_PIPELINE_IMAGE}" \
+  "${SERVICE_DIR}"
 kind load docker-image --name "${CLUSTER_NAME}" "${MARKET_PIPELINE_IMAGE}"
 printf 'Loaded %s into kind cluster %s.\n' "${MARKET_PIPELINE_IMAGE}" "${CLUSTER_NAME}"

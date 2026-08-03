@@ -19,6 +19,7 @@ done
 kubectl kustomize "${repo_root}/platform/gitops/clusters/local" >/dev/null
 kubectl kustomize "${repo_root}/platform/gitops/platform/local/market-data-services" >/dev/null
 kubectl kustomize "${repo_root}/platform/gitops/apps/local/market-pipeline" >/dev/null
+kubectl kustomize "${repo_root}/platform/gitops/apps/private/market-feed" >/dev/null
 kubectl kustomize "${repo_root}/platform/gitops/apps/local/portfolio-analytics" >/dev/null
 
 if [[ "$(uname -s)" == "Darwin" && "${CI:-false}" != "true" ]]; then

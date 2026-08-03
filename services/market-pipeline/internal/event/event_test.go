@@ -58,6 +58,18 @@ func TestIDReferenceIsStableAndDoesNotExposeTheEventID(t *testing.T) {
 	}
 }
 
+func TestCanonicalIdentifierHelpers(t *testing.T) {
+	if !ValidSource("alpaca-iex") || ValidSource("ALPACA") {
+		t.Fatal("source validation did not enforce the canonical slug")
+	}
+	if !ValidTenantID("private") || ValidTenantID("PRIVATE") {
+		t.Fatal("tenant validation did not enforce the canonical identifier")
+	}
+	if !ValidInstrument("DEMO-ASSET-A") || ValidInstrument("lowercase") {
+		t.Fatal("instrument validation did not enforce the canonical identifier")
+	}
+}
+
 func TestDecodeStrictRejectsUnknownFields(t *testing.T) {
 	encoded, err := validEvent().Marshal()
 	if err != nil {

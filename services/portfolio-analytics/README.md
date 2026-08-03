@@ -14,6 +14,17 @@ DuckDB against local ephemeral storage. It therefore needs no DuckDB network
 extension at runtime, and the same transformation can later use S3, Cloud
 Storage interoperability, or another object-storage adapter.
 
+The separate offline ledger importer normalizes manual JSON or CSV deposits
+and withdrawals without publishing private data to the platform:
+
+```bash
+PYTHONPATH="$PWD/services/portfolio-analytics" \
+  .venv/bin/python -m portfolio_analytics.import_ledger --help
+```
+
+Its behavior is defined by the
+[`personal cash-flow ledger contract`](../../docs/features/cloud-native-investment-platform/personal-portfolio-ledger-contract.md).
+
 Run its 100% statement-and-branch coverage gate from the repository root after
 installing `requirements-dev.txt` in an isolated environment:
 

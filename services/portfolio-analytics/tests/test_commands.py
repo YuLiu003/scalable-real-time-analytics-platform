@@ -2,15 +2,19 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from portfolio_analytics import builder, query_products
+from portfolio_analytics import builder, import_ledger, query_products
 from portfolio_analytics.analytics import build_products
 from test_analytics import HOLDINGS, bronze
+
+FIXTURE_OVERRIDE = os.environ.get("PORTFOLIO_FIXTURE_ROOT")
+FIXTURES = Path(FIXTURE_OVERRIDE) if FIXTURE_OVERRIDE else Path(__file__).parents[3] / "contracts" / "fixtures"
 
 
 class FakeStore:
@@ -126,6 +130,90 @@ class QueryCommandTests(unittest.TestCase):
         result["total_market_value"] = "1.00000000"
         with self.assertRaisesRegex(ValueError, "does not match"):
             self.run_query(result=result)
+
+
+class ImportLedgerCommandTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name)
+        self.fixture_root = FIXTURES
+
+    def tearDown(self) -> None:
+        self.temporary.cleanup()
+
+    def run_import(self, input_format: str, input_path: Path, output: Path) -> str:
+        stdout = io.StringIO()
+        arguments = [
+            "import-ledger",
+            "--input-format",
+            input_format,
+            "--portfolio",
+            "demo",
+            "--currency",
+            "USD",
+            "--input",
+            str(input_path),
+            "--output",
+            str(output),
+        ]
+        with patch("sys.argv", arguments), redirect_stdout(stdout):
+            import_ledger.main()
+        return stdout.getvalue()
+
+    def test_main_imports_both_formats_without_logging_row_values(self) -> None:
+        outputs: list[bytes] = []
+        for input_format in ["json", "csv"]:
+            with self.subTest(input_format=input_format):
+                output = self.root / f"ledger-{input_format}.json"
+                log = self.run_import(
+                    input_format,
+                    self.fixture_root / f"demo-cash-flows.v1.{input_format}",
+                    output,
+                )
+                outputs.append(output.read_bytes())
+                self.assertEqual(output.stat().st_mode & 0o777, 0o600)
+                self.assertEqual(
+                    json.loads(log),
+                    {
+                        "event": "cash-flow ledger imported",
+                        "transaction_count": 4,
+                    },
+                )
+                self.assertNotIn("demo", log)
+                self.assertNotIn("demo-cash-001", log)
+                self.assertNotIn("1000", log)
+        self.assertEqual(outputs[0], outputs[1])
+
+    def test_main_requires_explicit_arguments(self) -> None:
+        with patch("sys.argv", ["import-ledger"]), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
+            import_ledger.main()
+        self.assertEqual(raised.exception.code, 2)
+
+    def test_invalid_input_neither_creates_nor_replaces_output_and_logs_nothing(self) -> None:
+        invalid = self.root / "invalid.json"
+        invalid.write_text("[{}]")
+        for exists in [False, True]:
+            with self.subTest(existing_output=exists):
+                output = self.root / f"output-{exists}.json"
+                if exists:
+                    output.write_bytes(b"protected")
+                stdout = io.StringIO()
+                with redirect_stdout(stdout), self.assertRaisesRegex(ValueError, "fields mismatch"):
+                    self.run_import("json", invalid, output)
+                self.assertEqual(stdout.getvalue(), "")
+                if exists:
+                    self.assertEqual(output.read_bytes(), b"protected")
+                else:
+                    self.assertFalse(output.exists())
+
+    def test_atomic_replace_failure_preserves_output_and_removes_temporary_file(self) -> None:
+        output = self.root / "ledger.json"
+        output.write_bytes(b"protected")
+        with patch.object(import_ledger.os, "replace", side_effect=OSError("replace failed")):
+            with self.assertRaisesRegex(OSError, "replace failed"):
+                import_ledger._write_atomic(output, b"new ledger")
+        self.assertEqual(output.read_bytes(), b"protected")
+        self.assertEqual(list(self.root.glob(".ledger.json.*")), [])
 
 
 if __name__ == "__main__":

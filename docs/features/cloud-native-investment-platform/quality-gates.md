@@ -6,7 +6,7 @@
 | Coverage threshold | 100% in every measured application scope |
 | CI workflows | `Presubmit` and `Portfolio Platform Quality` |
 | Required merge check | `jenkins / presubmit` |
-| Last verified | 2026-07-30 |
+| Last verified | 2026-08-03 |
 
 ## Policy
 
@@ -23,9 +23,9 @@ producer/consumer failures, and a clean kind deployment.
 
 | Scope | Metric | Required | Current evidence |
 | --- | --- | ---: | ---: |
-| `portfolio_analytics` Python package | Statements and branches | 100% | 358/358 statements; 96/96 branches |
+| `portfolio_analytics` Python package | Statements and branches | 100% | 501/501 statements; 130/130 branches |
 | Portfolio API `internal/...` packages | Go statements with `-race` | 100% | 100.0% |
-| Market `internal/event`, `internal/synthetic`, `internal/archivemetrics`, `internal/scale`, and `internal/benchmark` | Go statements with `-race` | 100% | 100.0% |
+| Market `internal/alpaca`, `internal/event`, `internal/synthetic`, `internal/archivemetrics`, `internal/scale`, and `internal/benchmark` | Go statements with `-race` | 100% | 100.0% |
 
 The Python denominator contains the analytical model, transformation, S3
 adapter, build command, and independent Parquet query command. Only structural
@@ -33,13 +33,14 @@ adapter, build command, and independent Parquet query command. Only structural
 are called by tests and their real module entrypoints run in Kubernetes.
 
 The Go denominator contains the portfolio API's HTTP, result-validation, and S3
-packages plus the market event, synthetic-fixture, archive-metrics, and scale
-verification and capacity-report domain packages. Thin Go process entrypoints, Kafka/S3 SDK wiring
-from the prior slice, generated artifacts, Kubernetes YAML, shell, and embedded
-HTML are not mislabeled as unit-covered statements. They are still built,
-race-tested where applicable, rendered, and exercised by the end-to-end gate.
-New domain logic must live in a measured package; moving logic into an
-entrypoint to evade coverage violates this policy.
+packages plus the market event, private-provider, synthetic-fixture,
+archive-metrics, scale-verification, and capacity-report domain packages. Thin
+Go process entrypoints, Kafka/S3 SDK wiring from the prior slice, generated
+artifacts, Kubernetes YAML, shell, and embedded HTML are not mislabeled as
+unit-covered statements. They are still built, race-tested where applicable,
+rendered, and exercised by the end-to-end gate. New domain logic must live in a
+measured package; moving logic into an entrypoint to evade coverage violates
+this policy.
 
 Run the local gate after installing the pinned development dependencies:
 
@@ -95,10 +96,16 @@ rollback procedure, and GitOps reconciliation target.
 
 ## Verification record
 
-The local-equivalent gate completed with 358/358 Python statements, 96/96
+The local-equivalent gate completed with 501/501 Python statements, 130/130
 Python branches, and 100.0% Go statement coverage in both measured profiles.
-All three production images built, and all 28 analytics tests passed again from
+All three production images built, and all 43 analytics tests passed again from
 inside the non-root production image.
+
+The private-provider package uses local fake WebSocket and historical HTTP
+servers to cover authentication, exact subscription acknowledgement, pages,
+disconnects, rate limits, backfill, overflow, stable identity, checkpoint
+ordering, and privacy. This is contract evidence; no CI or local verification
+claim here depends on real provider credentials.
 
 The AWS static gate validated both OpenTofu roots with AWS provider 6.55.0,
 passed 2 state-foundation and 5 platform architecture tests, rendered every AWS

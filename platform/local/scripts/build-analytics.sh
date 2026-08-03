@@ -47,7 +47,10 @@ docker build \
   --build-arg "PYTHON_IMAGE=${PYTHON_IMAGE}" \
   --tag "${PORTFOLIO_ANALYTICS_IMAGE}" \
   "${ANALYTICS_DIR}"
-docker run --rm --entrypoint python "${PORTFOLIO_ANALYTICS_IMAGE}" \
+docker run --rm \
+  --env PORTFOLIO_FIXTURE_ROOT=/fixtures \
+  --volume "${REPO_ROOT}/contracts/fixtures:/fixtures:ro" \
+  --entrypoint python "${PORTFOLIO_ANALYTICS_IMAGE}" \
   -m unittest discover --start-directory tests --verbose
 
 kind load docker-image --name "${CLUSTER_NAME}" "${PORTFOLIO_API_IMAGE}" "${PORTFOLIO_ANALYTICS_IMAGE}"

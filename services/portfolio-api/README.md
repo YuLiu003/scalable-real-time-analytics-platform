@@ -26,6 +26,9 @@ state remains rebuildable from bronze objects through the Slice 3 analytics Job.
 Projection assumptions and results are calculated per request and are not
 stored.
 
+The offline cash-flow ledger is intentionally not served here: this API has no
+authentication or private-data authorization boundary yet.
+
 The repository quality gate runs all internal API packages under the Go race
 detector and fails unless their combined statement coverage is exactly 100%:
 

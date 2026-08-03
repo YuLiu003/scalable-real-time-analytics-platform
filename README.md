@@ -2,10 +2,9 @@
 
 This repository is a free, production-like learning platform for Kubernetes,
 event-driven systems, cloud infrastructure, and long-term investment analytics.
-It processes deterministic events for three synthetic assets and one synthetic
-benchmark,
-builds portfolio products, and exposes contribution projections through a Go
-API and dashboard.
+It processes deterministic public fixtures or an optional private stock/ETF
+watchlist, builds portfolio products, normalizes external cash flows, and
+exposes contribution projections through a Go API and dashboard.
 
 The workload is intentionally useful without pretending a personal portfolio
 needs hyperscale infrastructure. Synthetic traffic and fault injection provide
@@ -19,6 +18,10 @@ observability, and cloud-platform engineering.
 - KEDA scales an isolated archive consumer group from Kafka lag.
 - A separate fixed-worker benchmark runs repeatable 10K/50K/100K synthetic
   trials and rejects incomplete, duplicated, reordered, or unmeasured runs.
+- An opt-in Alpaca WebSocket adapter uses runtime-only credentials and
+  watchlists, historical gap backfill, and stable Kafka event identities.
+- An offline JSON/CSV importer creates a private normalized cash-flow ledger
+  without confusing deposits or withdrawals with return.
 - Garage provides the local S3-compatible object-storage contract.
 - Python and DuckDB build deterministic Parquet analytics products.
 - The Go portfolio API serves holdings and contribution projections.
@@ -38,22 +41,18 @@ operates a continuously available production service or a live AWS account.
 ## Architecture
 
 ```text
-Synthetic market producer
-          |
-          v
-  Strimzi Kafka topics
-          |
-          v
- Raw event archiver --------> Garage / S3 bronze objects
-                                      |
-                                      v
-                          Python + DuckDB analytics
-                                      |
-                                      v
-                           Parquet portfolio products
-                                      |
-                                      v
-                         Go portfolio API + dashboard
+Synthetic producer -----------\
+                               > Strimzi Kafka -> raw archiver -> Garage / S3 bronze
+Private Alpaca adapter -------/                              |
+                                                             | synthetic source + demo holdings
+                                                             v
+                                                  Python + DuckDB analytics
+                                                             |
+                                                             v
+                                                  Parquet portfolio products
+                                                             |
+                                                             v
+                                                Go portfolio API + dashboard
 
 Synthetic scale producer --> isolated Kafka scale topic
                                       |
@@ -63,6 +62,10 @@ Synthetic scale producer --> isolated Kafka scale topic
                                       v
                              aggregate evidence
 ```
+
+The default analytics Job intentionally selects only the committed synthetic
+source and demo holdings. Private feed records stop at the bronze boundary
+until an authenticated private-holdings and retention contract exists.
 
 The acceptance path injects ambiguous producer acknowledgements, consumer
 crashes, duplicate delivery, replay, dependency loss, and readiness failures.
@@ -137,6 +140,11 @@ This runs the scale/recovery acceptance once, then five zero-delay trials at
 `artifacts/kafka-capacity/` path while the owned VM and all container data are
 deleted. See the capacity contract before presenting any result.
 
+For private product inputs, follow the
+[`cash-flow ledger contract`](docs/features/cloud-native-investment-platform/personal-portfolio-ledger-contract.md)
+or the runbook's
+[`optional live-feed procedure`](platform/local/README.md#optional-private-live-market-feed).
+
 Run the production-like Jenkins path:
 
 ```bash
@@ -167,6 +175,8 @@ operations. A paid apply is outside the required definition of done.
 - [Quality gates](docs/features/cloud-native-investment-platform/quality-gates.md)
 - [Kafka scale lab](docs/features/cloud-native-investment-platform/kafka-scale-lab-contract.md)
 - [Kafka capacity benchmark](docs/features/cloud-native-investment-platform/kafka-capacity-benchmark-contract.md)
+- [Private market feed](docs/features/cloud-native-investment-platform/private-market-feed-contract.md)
+- [Personal cash-flow ledger](docs/features/cloud-native-investment-platform/personal-portfolio-ledger-contract.md)
 - [Local Kubernetes runbook](platform/local/README.md)
 - [Jenkins platform](platform/jenkins/README.md)
 - [AWS OpenTofu lab](infra/opentofu/aws/README.md)

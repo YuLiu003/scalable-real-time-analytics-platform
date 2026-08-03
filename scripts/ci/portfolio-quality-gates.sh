@@ -59,7 +59,7 @@ assert_go_coverage \
   "${MARKET_DIR}" \
   "${TMPDIR:-/tmp}/market-quality-gocache" \
   "${COVERAGE_DIR}/market-domain.out" \
-  ./internal/archivemetrics ./internal/benchmark ./internal/event ./internal/scale ./internal/synthetic
+  ./internal/alpaca ./internal/archivemetrics ./internal/benchmark ./internal/event ./internal/scale ./internal/synthetic
 
 printf 'Building and race-testing every Go package in the feature services...\n'
 (
@@ -137,5 +137,21 @@ fi
 grep -Fq 'already exists' "${capacity_existing_log}"
 grep -Fqx 'stale evidence' "${capacity_config_artifact_dir}/preserve/summary.json"
 "${PYTHON_BIN}" -m json.tool "${REPO_ROOT}/contracts/fixtures/demo-fund-portfolio.v2.json" >/dev/null
+if ! grep -Fqx 'cpu_rate_window_seconds=25' \
+  "${REPO_ROOT}/platform/local/scripts/verify-capacity-benchmark.sh"; then
+  printf 'ERROR: capacity CPU window must retain the reviewed scrape-jitter margin.\n' >&2
+  exit 1
+fi
+if ! grep -Fqx 'resource_ingestion_timeout_seconds=30' \
+  "${REPO_ROOT}/platform/local/scripts/verify-capacity-benchmark.sh"; then
+  printf 'ERROR: capacity resource queries must retain the bounded ingestion retry.\n' >&2
+  exit 1
+fi
+if ! grep -Fqx '  wait_for_resource_ranges "${raw_dir}" "${start_seconds}" "${end_seconds}"' \
+  "${REPO_ROOT}/platform/local/scripts/verify-capacity-benchmark.sh"; then
+  printf 'ERROR: capacity reporting must wait on the original resource-query boundaries.\n' >&2
+  exit 1
+fi
+kubectl kustomize "${REPO_ROOT}/platform/gitops/apps/private/market-feed" >/dev/null
 
 printf 'Portfolio feature quality gates passed with 100%% measured application coverage.\n'
