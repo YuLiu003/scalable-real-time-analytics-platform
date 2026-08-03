@@ -77,7 +77,7 @@ restore_runtime() {
     set env cronjob/scale-load-producer \
     LOAD_RUN_ID=local-scale LOAD_PHASE=original LOAD_EVENT_COUNT=1200 \
     LOAD_INSTRUMENTS=LOAD-A,LOAD-B,LOAD-C,LOAD-D,LOAD-E,LOAD-F,LOAD-G,LOAD-H,LOAD-I,LOAD-J,LOAD-K,LOAD-L \
-    LOAD_BASE_TIME=2026-07-30T00:00:00Z >/dev/null 2>&1 || true
+    LOAD_BASE_TIME=2026-07-30T00:00:00Z LOAD_TARGET_RATE=0 >/dev/null 2>&1 || true
 }
 
 capture_failure() {
@@ -209,7 +209,7 @@ create_load_job() {
     set env cronjob/scale-load-producer \
     "LOAD_RUN_ID=${run_id}" "LOAD_PHASE=${phase}" "LOAD_EVENT_COUNT=${event_count}" \
     LOAD_INSTRUMENTS=LOAD-A,LOAD-B,LOAD-C,LOAD-D,LOAD-E,LOAD-F,LOAD-G,LOAD-H,LOAD-I,LOAD-J,LOAD-K,LOAD-L \
-    LOAD_BASE_TIME=2026-07-30T00:00:00Z >/dev/null
+    LOAD_BASE_TIME=2026-07-30T00:00:00Z LOAD_TARGET_RATE=0 >/dev/null
   kubectl --context "${context}" --namespace "${namespace}" \
     delete job "${job_name}" --ignore-not-found --wait=true >/dev/null
   kubectl --context "${context}" --namespace "${namespace}" \

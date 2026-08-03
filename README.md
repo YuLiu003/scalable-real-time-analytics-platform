@@ -17,6 +17,8 @@ observability, and cloud-platform engineering.
 - The complete local platform runs on disposable `kind` clusters.
 - Kafka uses Strimzi in KRaft mode.
 - KEDA scales an isolated archive consumer group from Kafka lag.
+- A separate fixed-worker benchmark runs repeatable 10K/50K/100K synthetic
+  trials and rejects incomplete, duplicated, reordered, or unmeasured runs.
 - Garage provides the local S3-compatible object-storage contract.
 - Python and DuckDB build deterministic Parquet analytics products.
 - The Go portfolio API serves holdings and contribution projections.
@@ -66,6 +68,12 @@ The acceptance path injects ambiguous producer acknowledgements, consumer
 crashes, duplicate delivery, replay, dependency loss, and readiness failures.
 Immutable object writes and deterministic input identities prevent a replay
 from silently changing a result.
+
+Capacity evidence is deliberately separate. It removes the artificial archive
+delay, fixes three consumers to the three-partition concurrency ceiling, and
+reports broker-acknowledgement throughput separately from durable
+Kafka-to-object-storage throughput. The repository does not contain a committed
+full-matrix result yet, so no throughput number is claimed here.
 
 ## Repository layout
 
@@ -118,6 +126,17 @@ autoscaling, replay, and recovery acceptance. Use the persistent development
 workflow in the local-platform runbook only when you need to inspect a running
 cluster.
 
+Run the repeated capacity matrix in its own disposable Colima VM:
+
+```bash
+make -C platform/local e2e-capacity-ephemeral
+```
+
+This runs the scale/recovery acceptance once, then five zero-delay trials at
+10K, 50K, and 100K events. Generated reports remain under the ignored
+`artifacts/kafka-capacity/` path while the owned VM and all container data are
+deleted. See the capacity contract before presenting any result.
+
 Run the production-like Jenkins path:
 
 ```bash
@@ -147,6 +166,7 @@ operations. A paid apply is outside the required definition of done.
 - [Roadmap](docs/features/cloud-native-investment-platform/roadmap-v2.md)
 - [Quality gates](docs/features/cloud-native-investment-platform/quality-gates.md)
 - [Kafka scale lab](docs/features/cloud-native-investment-platform/kafka-scale-lab-contract.md)
+- [Kafka capacity benchmark](docs/features/cloud-native-investment-platform/kafka-capacity-benchmark-contract.md)
 - [Local Kubernetes runbook](platform/local/README.md)
 - [Jenkins platform](platform/jenkins/README.md)
 - [AWS OpenTofu lab](infra/opentofu/aws/README.md)

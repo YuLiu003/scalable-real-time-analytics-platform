@@ -25,7 +25,7 @@ producer/consumer failures, and a clean kind deployment.
 | --- | --- | ---: | ---: |
 | `portfolio_analytics` Python package | Statements and branches | 100% | 358/358 statements; 96/96 branches |
 | Portfolio API `internal/...` packages | Go statements with `-race` | 100% | 100.0% |
-| Market `internal/event`, `internal/synthetic`, `internal/archivemetrics`, and `internal/scale` | Go statements with `-race` | 100% | 100.0% |
+| Market `internal/event`, `internal/synthetic`, `internal/archivemetrics`, `internal/scale`, and `internal/benchmark` | Go statements with `-race` | 100% | 100.0% |
 
 The Python denominator contains the analytical model, transformation, S3
 adapter, build command, and independent Parquet query command. Only structural
@@ -34,7 +34,7 @@ are called by tests and their real module entrypoints run in Kubernetes.
 
 The Go denominator contains the portfolio API's HTTP, result-validation, and S3
 packages plus the market event, synthetic-fixture, archive-metrics, and scale
-verification domain packages. Thin Go process entrypoints, Kafka/S3 SDK wiring
+verification and capacity-report domain packages. Thin Go process entrypoints, Kafka/S3 SDK wiring
 from the prior slice, generated artifacts, Kubernetes YAML, shell, and embedded
 HTML are not mislabeled as unit-covered statements. They are still built,
 race-tested where applicable, rendered, and exercised by the end-to-end gate.
@@ -125,6 +125,13 @@ only duplicate effects; lag must drain; and the Deployment must return to one
 ready replica. Aggregate samples and a failure snapshot are retained with the
 run, while exact measurements remain generated evidence rather than committed
 capacity claims.
+
+PS2 also runs one 10,000-event, fixed-three-consumer capacity smoke trial. It
+requires exact acknowledged/topic/archive counts, zero unexpected outcomes,
+trial-scoped durable-latency observations, per-partition committed lag, and
+consumer/Kafka/Garage CPU and memory series. The full five-repeat
+10K/50K/100K matrix remains a manual or scheduled disposable benchmark rather
+than a merge-blocking workload.
 
 This is `local_kind_synthetic` evidence, not AWS runtime, provider-data,
 availability, or production-capacity evidence.

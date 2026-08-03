@@ -20,6 +20,9 @@ SCALE_MANIFEST = (
     / "scale-lab.yaml"
 )
 SCALE_VERIFY = REPO_ROOT / "platform" / "local" / "scripts" / "verify-scale-lab.sh"
+CAPACITY_VERIFY = (
+    REPO_ROOT / "platform" / "local" / "scripts" / "verify-capacity-benchmark.sh"
+)
 DEMO_ID = re.compile(r"^DEMO-(?:ASSET|BENCH)-[A-Z]$")
 LOAD_ID = re.compile(r"^LOAD-[A-Z]$")
 
@@ -77,7 +80,24 @@ def main() -> None:
     ):
         raise SystemExit("scale verification must pin the committed fictional instruments")
 
-    print("Committed portfolio and scale fixtures are explicitly fictional.")
+    capacity_script = CAPACITY_VERIFY.read_text(encoding="utf-8")
+    capacity_lists = re.findall(
+        r"^\s*LOAD_INSTRUMENTS=([A-Z0-9,-]+)", capacity_script, re.MULTILINE
+    )
+    if not capacity_lists or any(
+        runtime_list.split(",") != load_instruments
+        for runtime_list in capacity_lists
+    ):
+        raise SystemExit("capacity benchmark must pin the committed fictional instruments")
+    if not re.search(
+        r'event_counts="\$\{CAPACITY_EVENT_COUNTS:-10000,50000,100000\}"',
+        capacity_script,
+    ) or not re.search(
+        r'repetitions="\$\{CAPACITY_REPETITIONS:-5\}"', capacity_script
+    ):
+        raise SystemExit("capacity benchmark must retain the reviewed default matrix")
+
+    print("Committed portfolio, scale, and capacity fixtures are explicitly fictional.")
 
 
 if __name__ == "__main__":

@@ -153,6 +153,47 @@ grep -q '^colima delete investment-platform-ephemeral --force --data$' "${log_fi
 assert_runtime_config_isolated_and_removed
 
 : >"${log_file}"
+EPHEMERAL_WORKFLOW=capacity \
+FAKE_PROFILE_NAME=investment-platform-capacity-ephemeral \
+FAKE_PROFILE_PRESENT=0 \
+FAKE_CLUSTER_PRESENT=1 \
+DOCKER_CONTEXT=caller-context \
+DOCKER_HOST=unix:///caller/docker.sock \
+  "${repo_root}/platform/local/scripts/run-ephemeral.sh" >/dev/null
+grep -q '^make -C .*/platform/local bootstrap$' "${log_file}"
+grep -q '^make -C .*/platform/local bootstrap-data-path$' "${log_file}"
+grep -q '^make -C .*/platform/local verify-scale-lab$' "${log_file}"
+grep -q '^make -C .*/platform/local verify-capacity-benchmark$' "${log_file}"
+if grep -q '^make -C .*/platform/local bootstrap-analytics$' "${log_file}"; then
+  printf 'capacity workflow bootstrapped unrelated analytics services\n' >&2
+  exit 1
+fi
+grep -q '^kind delete cluster --name investment-platform$' "${log_file}"
+grep -q '^colima delete investment-platform-capacity-ephemeral --force --data$' "${log_file}"
+assert_runtime_config_isolated_and_removed
+
+: >"${log_file}"
+if EPHEMERAL_WORKFLOW=capacity \
+  FAKE_PROFILE_NAME=investment-platform-capacity-ephemeral \
+  FAKE_PROFILE_PRESENT=0 \
+  FAKE_CLUSTER_PRESENT=1 \
+  FAKE_FAIL_TARGET=verify-capacity-benchmark \
+  DOCKER_CONTEXT=caller-context \
+  DOCKER_HOST=unix:///caller/docker.sock \
+    "${repo_root}/platform/local/scripts/run-ephemeral.sh" >/dev/null 2>&1; then
+  printf 'capacity workflow ignored a failed benchmark\n' >&2
+  exit 1
+fi
+grep -q '^make -C .*/platform/local verify-capacity-benchmark$' "${log_file}"
+grep -q '^make -C .*/platform/local diagnose-data-path$' "${log_file}"
+if grep -q '^make -C .*/platform/local diagnose-analytics$' "${log_file}"; then
+  printf 'capacity workflow diagnosed analytics that it did not install\n' >&2
+  exit 1
+fi
+grep -q '^colima delete investment-platform-capacity-ephemeral --force --data$' "${log_file}"
+assert_runtime_config_isolated_and_removed
+
+: >"${log_file}"
 if FAKE_PROFILE_NAME=investment-platform-ephemeral \
   FAKE_PROFILE_PRESENT=0 \
   FAKE_CLUSTER_PRESENT=1 \

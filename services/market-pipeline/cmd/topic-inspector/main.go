@@ -19,6 +19,7 @@ func main() {
 	runID := flag.String("run-id", "", "validate only records for this scale run")
 	phase := flag.String("phase", "original", "scale run phase to validate")
 	group := flag.String("group", "", "validate this consumer group")
+	lag := flag.Bool("lag", false, "report committed-offset lag for every topic partition")
 	requiredClientHost := flag.String("require-client-host", "", "require this client host in the consumer group")
 	expectedMembers := flag.Int("expected-members", 0, "expected consumer group member count")
 	expectedPartitions := flag.Int("expected-partitions", 0, "expected assigned topic partition count")
@@ -43,6 +44,54 @@ func main() {
 			fatal(err)
 		}
 		defer admin.Close()
+		if *lag {
+			if *expectedPartitions < 1 {
+				fatal(fmt.Errorf("--expected-partitions is required with --lag"))
+			}
+			partitions, err := client.Partitions(*topic)
+			if err != nil {
+				fatal(err)
+			}
+			response, err := admin.ListConsumerGroupOffsets(*group, map[string][]int32{*topic: partitions})
+			if err != nil {
+				fatal(err)
+			}
+			offsets := make(map[int32]scale.PartitionOffsets, len(partitions))
+			for _, partition := range partitions {
+				block := response.GetBlock(*topic, partition)
+				committed := int64(-1)
+				if block != nil && block.Err != sarama.ErrNoError {
+					fatal(fmt.Errorf("consumer offset for partition %d is unavailable", partition))
+				}
+				if block != nil {
+					committed = block.Offset
+				}
+				oldest, err := client.GetOffset(*topic, partition, sarama.OffsetOldest)
+				if err != nil {
+					fatal(err)
+				}
+				newest, err := client.GetOffset(*topic, partition, sarama.OffsetNewest)
+				if err != nil {
+					fatal(err)
+				}
+				offsets[partition] = scale.PartitionOffsets{Oldest: oldest, Newest: newest, Committed: committed}
+			}
+			report, err := scale.CalculateLag(offsets, *expectedPartitions)
+			if err != nil {
+				fatal(err)
+			}
+			if *output == "json" {
+				if err := json.NewEncoder(os.Stdout).Encode(report); err != nil {
+					fatal(err)
+				}
+				return
+			}
+			if *output != "text" {
+				fatal(fmt.Errorf("--output must be text or json"))
+			}
+			fmt.Printf("group=%s topic=%s partitions=%d total_lag=%d max_partition_lag=%d\n", *group, *topic, report.PartitionCount, report.TotalLag, report.MaxPartitionLag)
+			return
+		}
 		descriptions, err := admin.DescribeConsumerGroups([]string{*group})
 		if err != nil {
 			fatal(err)
@@ -96,7 +145,7 @@ func main() {
 		if *expected < 0 {
 			fatal(fmt.Errorf("--expected is required with --run-id"))
 		}
-		records, err := readRecords(client, *topic, partitions, time.Now().Add(*timeout))
+		records, err := readRecords(client, *topic, partitions, *runID, *phase, time.Now().Add(*timeout))
 		if err != nil {
 			fatal(err)
 		}
@@ -150,7 +199,7 @@ func main() {
 	}
 }
 
-func readRecords(client sarama.Client, topic string, partitions []int32, deadline time.Time) ([]scale.Record, error) {
+func readRecords(client sarama.Client, topic string, partitions []int32, runID, phase string, deadline time.Time) ([]scale.Record, error) {
 	consumer, err := sarama.NewConsumerFromClient(client)
 	if err != nil {
 		return nil, fmt.Errorf("create topic consumer: %w", err)
@@ -187,6 +236,9 @@ func readRecords(client sarama.Client, topic string, partitions []int32, deadlin
 				headers := make(map[string]string, len(message.Headers))
 				for _, header := range message.Headers {
 					headers[string(header.Key)] = string(header.Value)
+				}
+				if headers["run_id"] != runID || headers["phase"] != phase {
+					continue
 				}
 				records = append(records, scale.Record{
 					Partition: message.Partition,

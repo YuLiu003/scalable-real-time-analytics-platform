@@ -107,11 +107,13 @@ jobs:
           CI: 'true'
         run: python3 scripts/ci/presubmit.py PS2
 
-      - name: Preserve scale evidence
+      - name: Preserve Kafka evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: kafka-scale-${{ github.run_id }}
-          path: artifacts/kafka-scale
+          name: kafka-evidence-${{ github.run_id }}
+          path: |
+            artifacts/kafka-scale
+            artifacts/kafka-capacity
           if-no-files-found: warn
           retention-days: 14

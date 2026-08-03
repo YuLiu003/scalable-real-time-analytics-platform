@@ -59,7 +59,7 @@ assert_go_coverage \
   "${MARKET_DIR}" \
   "${TMPDIR:-/tmp}/market-quality-gocache" \
   "${COVERAGE_DIR}/market-domain.out" \
-  ./internal/archivemetrics ./internal/event ./internal/scale ./internal/synthetic
+  ./internal/archivemetrics ./internal/benchmark ./internal/event ./internal/scale ./internal/synthetic
 
 printf 'Building and race-testing every Go package in the feature services...\n'
 (
@@ -96,6 +96,46 @@ if [[ -e "${scale_config_artifact_dir}/report.json" ]]; then
   printf 'ERROR: invalid scale configuration left stale evidence available.\n' >&2
   exit 1
 fi
+capacity_config_log="${COVERAGE_DIR}/capacity-config-validation.log"
+capacity_config_artifact_dir="$(mktemp -d "${COVERAGE_DIR}/invalid-capacity-config-artifacts.XXXXXX")"
+capacity_path_log="${COVERAGE_DIR}/capacity-path-validation.log"
+printf 'protected evidence\n' >"${COVERAGE_DIR}/summary.json"
+if CAPACITY_SUITE_ID=.. \
+  CAPACITY_ALLOCATED_CPUS=4 CAPACITY_ALLOCATED_MEMORY_GIB=8 CAPACITY_ALLOCATED_DISK_GIB=30 \
+  CAPACITY_ARTIFACT_DIR="${capacity_config_artifact_dir}" \
+  "${REPO_ROOT}/platform/local/scripts/verify-capacity-benchmark.sh" \
+  >"${capacity_path_log}" 2>&1; then
+  printf 'ERROR: capacity benchmark accepted an unsafe suite ID.\n' >&2
+  exit 1
+fi
+grep -Fq 'CAPACITY_SUITE_ID' "${capacity_path_log}"
+grep -Fqx 'protected evidence' "${COVERAGE_DIR}/summary.json"
+if CAPACITY_SUITE_ID=badcfg CAPACITY_EVENT_COUNTS=1 \
+  CAPACITY_ALLOCATED_CPUS=4 CAPACITY_ALLOCATED_MEMORY_GIB=8 CAPACITY_ALLOCATED_DISK_GIB=30 \
+  CAPACITY_ARTIFACT_DIR="${capacity_config_artifact_dir}" \
+  "${REPO_ROOT}/platform/local/scripts/verify-capacity-benchmark.sh" \
+  >"${capacity_config_log}" 2>&1; then
+  printf 'ERROR: capacity benchmark accepted an event count below its contract.\n' >&2
+  exit 1
+fi
+grep -Fq 'event counts must be comma-separated integers' "${capacity_config_log}"
+if [[ -e "${capacity_config_artifact_dir}/badcfg" ]]; then
+  printf 'ERROR: invalid capacity configuration reserved an artifact suite.\n' >&2
+  exit 1
+fi
+capacity_existing_log="${COVERAGE_DIR}/capacity-existing-suite.log"
+mkdir "${capacity_config_artifact_dir}/preserve"
+printf 'stale evidence\n' >"${capacity_config_artifact_dir}/preserve/summary.json"
+if CAPACITY_SUITE_ID=preserve CAPACITY_EVENT_COUNTS=600 \
+  CAPACITY_ALLOCATED_CPUS=4 CAPACITY_ALLOCATED_MEMORY_GIB=8 CAPACITY_ALLOCATED_DISK_GIB=30 \
+  CAPACITY_ARTIFACT_DIR="${capacity_config_artifact_dir}" \
+  "${REPO_ROOT}/platform/local/scripts/verify-capacity-benchmark.sh" \
+  >"${capacity_existing_log}" 2>&1; then
+  printf 'ERROR: capacity benchmark reused an existing suite.\n' >&2
+  exit 1
+fi
+grep -Fq 'already exists' "${capacity_existing_log}"
+grep -Fqx 'stale evidence' "${capacity_config_artifact_dir}/preserve/summary.json"
 "${PYTHON_BIN}" -m json.tool "${REPO_ROOT}/contracts/fixtures/demo-fund-portfolio.v2.json" >/dev/null
 
 printf 'Portfolio feature quality gates passed with 100%% measured application coverage.\n'

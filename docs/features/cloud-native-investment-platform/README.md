@@ -68,6 +68,9 @@ design. Provider-specific control planes remain separate:
 - Isolated Kafka load/replay traffic, KEDA lag autoscaling, bounded consumer
   group recovery, exact replay outcomes, ordering checks, and machine-readable
   scale evidence.
+- A separate fixed-worker capacity profile with trial-scoped latency/counter
+  deltas, direct per-partition lag, resource peaks, and repeated-run summaries;
+  a clean full-matrix evidence run remains pending.
 - AWS EKS, network, identity, encryption, registry, storage, observability, and
   budget contracts validated without an account apply.
 - PS0, PS1, and PS2 gates shared by local development, GitHub, and Jenkins.
@@ -118,6 +121,7 @@ cannot fit the existing one.
 - [Analytics contract](slice-3-analytics-contract.md)
 - [Contribution projection contract](contribution-projection-contract.md)
 - [Kafka scale lab contract](kafka-scale-lab-contract.md)
+- [Kafka capacity benchmark contract](kafka-capacity-benchmark-contract.md)
 - [AWS streaming decision](aws-streaming-decision.md)
 - [Free-first lab strategy](free-first-lab-strategy.md)
 - [Local Kubernetes runbook](../../../platform/local/README.md)

@@ -11,8 +11,9 @@ contract is documented in
 | --- | --- |
 | `synthetic-producer` | Publish deterministic success, duplicate, malformed, and failure-test fixtures |
 | `raw-event-archiver` | Validate Kafka records and persist idempotent raw objects or quarantine outcomes |
-| `topic-inspector` | Assert the retained Kafka record count from partition offsets |
+| `topic-inspector` | Assert run ordering/count or report exact per-partition consumer lag |
 | `archive-inspector` | Assert the object keys present under an S3 prefix |
+| `capacity-report` | Validate trial artifacts and aggregate every planned repetition |
 
 The binaries share mutual-TLS Kafka configuration and run in one minimal,
 non-root container image. The archiver uses an S3-compatible API so the local
@@ -30,11 +31,13 @@ GOWORK=off go test ./...
 ```
 
 The portfolio feature quality gate additionally requires 100% statement
-coverage for the canonical event and synthetic-fixture domain packages, while
-the complete Kafka/S3 process boundary is exercised in kind:
+coverage for the canonical event, synthetic-fixture, scale, metrics, and
+capacity-report domain packages, while the complete Kafka/S3 process boundary
+is exercised in kind:
 
 ```bash
-PYTHON_BIN=.venv/bin/python make -C platform/local quality
+# From the repository root:
+PYTHON_BIN="$PWD/.venv/bin/python" make -C platform/local quality
 ```
 
 Use `make -C platform/local build-data-path` to test, cross-compile, build the

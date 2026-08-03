@@ -26,6 +26,10 @@ machine-readable report. Its privacy and measurement boundaries are defined in
 the
 [`Kafka scale lab contract`](../../docs/features/cloud-native-investment-platform/kafka-scale-lab-contract.md).
 
+V2-5B adds a fixed-worker, zero-delay capacity profile with repeated trial
+aggregation. Its metric and claim boundaries are defined in the
+[`Kafka capacity benchmark contract`](../../docs/features/cloud-native-investment-platform/kafka-capacity-benchmark-contract.md).
+
 The current baseline replaces the retired Minikube, raw-manifest, and incomplete
 Helm paths. Supported local workflows use kind through the targets documented
 here.
@@ -164,6 +168,31 @@ EPHEMERAL_COLIMA_DISK_GIB=30 \
   make -C platform/local e2e-ephemeral
 ```
 
+### Recommended: disposable capacity benchmark
+
+Run the default 10K/50K/100K matrix five times per size in a separate owned
+runtime:
+
+```bash
+make -C platform/local e2e-capacity-ephemeral
+```
+
+The `investment-platform-capacity-ephemeral` profile is never reused. The
+workflow verifies autoscaling/recovery once, measures the zero-delay capacity
+profile, preserves ignored reports under `artifacts/kafka-capacity/`, and then
+deletes the kind cluster and Colima VM on success, failure, or interruption.
+
+To reduce the matrix while developing the benchmark itself:
+
+```bash
+CAPACITY_EVENT_COUNTS=10000,50000 \
+CAPACITY_REPETITIONS=3 \
+  make -C platform/local e2e-capacity-ephemeral
+```
+
+This changes the experiment and must be recorded with any result. It is not
+equivalent to the default five-repeat matrix.
+
 ### Persistent development mode
 
 Optionally supply the Grafana password without writing it to a file:
@@ -255,6 +284,18 @@ are fictional, and metrics/reporting intentionally omit instrument labels. For
 large runs, prefer `e2e-ephemeral` so the VM, Kafka records, object data, images,
 and volumes are deleted after verification. That complete workflow also
 rebuilds analytics after the scale phase to prove source isolation.
+
+For capacity rather than autoscaling behavior, use
+`verify-capacity-benchmark` only against an already bootstrapped isolated
+cluster. It pins three consumers, removes the artificial delay, performs the
+configured repeated matrix, and restores the normal KEDA bounds afterward.
+`verify-capacity-smoke` is the single-10K-run PS2 gate. Prefer
+`e2e-capacity-ephemeral` for manual full runs so hundreds of thousands of Kafka
+records and archive objects cannot remain on the workstation.
+When invoking either verification target directly, set
+`CAPACITY_ALLOCATED_CPUS`, `CAPACITY_ALLOCATED_MEMORY_GIB`, and
+`CAPACITY_ALLOCATED_DISK_GIB` to the isolated runtime's actual allocation. The
+ephemeral and PS2 workflows record these automatically.
 
 ## Analytics and portfolio dashboard
 

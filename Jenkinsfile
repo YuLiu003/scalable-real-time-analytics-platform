@@ -14,6 +14,8 @@ pipeline {
         PYTHONDONTWRITEBYTECODE = '1'
         PRESUBMIT_REQUIRE_PR_CHECKLIST = 'false'
         PRESUBMIT_BASE_REF = 'origin/main'
+        CAPACITY_ALLOCATED_CPUS = '6'
+        CAPACITY_ALLOCATED_MEMORY_GIB = '10'
     }
 
     stages {
@@ -73,7 +75,7 @@ pipeline {
             }
             post {
                 always {
-                    archiveArtifacts artifacts: 'artifacts/kafka-scale/**', allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'artifacts/kafka-scale/**,artifacts/kafka-capacity/**', allowEmptyArchive: true
                     deleteDir()
                 }
             }

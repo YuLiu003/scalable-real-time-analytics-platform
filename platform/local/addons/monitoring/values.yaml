@@ -63,6 +63,13 @@ prometheus-node-exporter:
       cpu: 200m
       memory: 128Mi
 
+# Match the kubelet's ten-second cAdvisor housekeeping interval. Capacity
+# trials use a twenty-second CPU rate window so rate() receives at least two
+# raw, source-timestamped samples without crossing the trial boundary.
+kubelet:
+  serviceMonitor:
+    cAdvisorInterval: 10s
+
 # These control-plane endpoints are not exposed in a default kind cluster.
 kubeControllerManager:
   enabled: false
