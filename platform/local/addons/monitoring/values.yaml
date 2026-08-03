@@ -64,8 +64,8 @@ prometheus-node-exporter:
       memory: 128Mi
 
 # Match the kubelet's ten-second cAdvisor housekeeping interval. Capacity
-# trials use a twenty-second CPU rate window so rate() receives at least two
-# raw, source-timestamped samples without crossing the trial boundary.
+# trials use a twenty-five-second CPU rate window so scrape jitter still leaves
+# at least two raw, source-timestamped samples inside the trial boundary.
 kubelet:
   serviceMonitor:
     cAdvisorInterval: 10s

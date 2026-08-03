@@ -38,18 +38,23 @@ than an original `HeadObject` plus `PutObject` effect.
 | Durable p50/p95/p99 | Kafka record timestamp through successful S3-compatible archive or quarantine acknowledgement, calculated from trial-scoped histogram deltas |
 | Per-partition lag | Kafka newest offset minus the consumer group's committed offset, sampled directly for every partition |
 | Lag drain | First sampled positive lag through the first post-producer zero-lag sample |
-| CPU and memory | Peak sampled Prometheus twenty-second CPU rate and memory samples for the archivers, Kafka broker, and Garage, bounded by Job submission and durable completion |
+| CPU and memory | Peak sampled Prometheus twenty-five-second CPU rate and memory samples for the archivers, Kafka broker, and Garage, bounded by Job submission and durable completion |
 
 The report keeps producer acknowledgement throughput separate from durable
 end-to-end throughput. A broker acknowledgement does not prove that the
 archive side effect occurred.
 
 The local cAdvisor target is scraped at the kubelet's ten-second housekeeping
-interval. Each CPU rate uses a twenty-second source-timestamped window that
-starts no earlier than Job submission. Memory queries reject source samples
-timestamped before submission. Producer-container resources are not reported
-because a short producer Job can finish before its first scrape; its
-acknowledgement throughput and latency come from application telemetry.
+interval. Each CPU rate uses a twenty-five-second source-timestamped window
+that starts no earlier than Job submission. The extra five seconds prevents
+ordinary scrape jitter from leaving only one counter sample. Historical
+queries retain their original start and end timestamps while retrying for up
+to thirty seconds so Prometheus can ingest delayed scrapes without admitting
+post-completion usage. A series that remains absent still fails the trial
+instead of inventing a value. Memory queries reject source samples timestamped
+before submission. Producer-container resources are not reported because a
+short producer Job can finish before its first scrape; its acknowledgement
+throughput and latency come from application telemetry.
 
 ## Correctness assertions
 
@@ -65,7 +70,7 @@ A trial is rejected unless all of the following hold:
 - All three consumers remain available and measured CPU/memory series exist
   for the consumers, Kafka, and Garage.
 - The durable-completion window is long enough to contain a complete
-  twenty-second CPU rate sample.
+  twenty-five-second CPU rate sample.
 
 The summary is written atomically only after every planned trial passes. It
 reports the median and p95 across all repetitions; it never selects the best

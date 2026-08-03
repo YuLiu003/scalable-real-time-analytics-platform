@@ -18,7 +18,8 @@ target_rate="${CAPACITY_TARGET_RATE:-0}"
 phase_timeout_seconds="${CAPACITY_PHASE_TIMEOUT_SECONDS:-1800}"
 inspection_timeout_seconds="${CAPACITY_INSPECTION_TIMEOUT_SECONDS:-300}"
 sample_interval_seconds="${CAPACITY_SAMPLE_INTERVAL_SECONDS:-2}"
-cpu_rate_window_seconds=20
+cpu_rate_window_seconds=25
+resource_ingestion_timeout_seconds=30
 artifact_root="${CAPACITY_ARTIFACT_DIR:-${REPO_ROOT}/artifacts/kafka-capacity}"
 reporter=""
 go_cache="${CAPACITY_GOCACHE:-${TMPDIR:-/tmp}/market-capacity-gocache}"
@@ -171,10 +172,11 @@ prometheus_range_to_file() {
   local start_seconds="$2"
   local end_seconds="$3"
   local output_file="$4"
+  local request_timeout_seconds="$5"
   local parameters
   parameters="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.urlencode({"query": sys.argv[1], "start": sys.argv[2], "end": sys.argv[3], "step": "5"}))' \
     "${query}" "${start_seconds}" "${end_seconds}")"
-  kubectl --context "${context}" get --raw \
+  kubectl --context "${context}" --request-timeout="${request_timeout_seconds}s" get --raw \
     "/api/v1/namespaces/${OBSERVABILITY_NAMESPACE}/services/http:monitoring-kube-prometheus-prometheus:9090/proxy/api/v1/query_range?${parameters}" \
     >"${output_file}"
 }
@@ -275,7 +277,61 @@ capture_resource_ranges() {
   local raw_dir="$1"
   local start_seconds="$2"
   local end_seconds="$3"
-  local cpu_start_seconds component resource_namespace pod_pattern cpu_query memory_query memory_selector
+  local deadline="$4"
+  local cpu_start_seconds component resource_namespace pod_pattern cpu_query memory_query memory_selector remaining
+  cpu_start_seconds="$(python3 -c 'import sys; print(float(sys.argv[1]) + int(sys.argv[2]))' \
+    "${start_seconds}" "${cpu_rate_window_seconds}")"
+  while IFS='|' read -r component resource_namespace pod_pattern; do
+    cpu_query="sum(rate(container_cpu_usage_seconds_total{namespace=\"${resource_namespace}\",pod=~\"${pod_pattern}\",container!=\"\",container!=\"POD\"}[${cpu_rate_window_seconds}s]))"
+    memory_selector="container_memory_working_set_bytes{namespace=\"${resource_namespace}\",pod=~\"${pod_pattern}\",container!=\"\",container!=\"POD\"}"
+    memory_query="sum(${memory_selector} and (timestamp(${memory_selector}) >= ${start_seconds}))"
+    remaining=$((deadline - SECONDS))
+    (( remaining > 0 )) || return 1
+    prometheus_range_to_file "${cpu_query}" "${cpu_start_seconds}" "${end_seconds}" \
+      "${raw_dir}/resource-${component}-cpu.json" "${remaining}" || return 1
+    remaining=$((deadline - SECONDS))
+    (( remaining > 0 )) || return 1
+    prometheus_range_to_file "${memory_query}" "${start_seconds}" "${end_seconds}" \
+      "${raw_dir}/resource-${component}-memory.json" "${remaining}" || return 1
+  done <<EOF
+archiver|${namespace}|scale-event-archiver-.*
+kafka|${DATA_NAMESPACE}|market-kafka-.*
+object_store|${DATA_NAMESPACE}|garage-.*
+EOF
+}
+
+resource_ranges_available() {
+  local raw_dir="$1"
+  python3 - "${raw_dir}" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+for component in ("archiver", "kafka", "object_store"):
+    for resource in ("cpu", "memory"):
+        try:
+            response = json.loads(
+                (root / f"resource-{component}-{resource}.json").read_text()
+            )
+            series = response["data"]["result"]
+        except (KeyError, OSError, json.JSONDecodeError):
+            raise SystemExit(1)
+        if (
+            response.get("status") != "success"
+            or not isinstance(series, list)
+            or not any(isinstance(item, dict) and item.get("values") for item in series)
+        ):
+            raise SystemExit(1)
+PY
+}
+
+wait_for_resource_ranges() {
+  local raw_dir="$1"
+  local start_seconds="$2"
+  local end_seconds="$3"
+  local deadline=$((SECONDS + resource_ingestion_timeout_seconds))
+  local cpu_start_seconds remaining sleep_seconds
   cpu_start_seconds="$(python3 -c 'import sys; print(float(sys.argv[1]) + int(sys.argv[2]))' \
     "${start_seconds}" "${cpu_rate_window_seconds}")"
   if ! python3 -c 'import sys; raise SystemExit(0 if float(sys.argv[2]) > float(sys.argv[1]) else 1)' \
@@ -284,19 +340,23 @@ capture_resource_ranges() {
       "${cpu_rate_window_seconds}" >&2
     return 1
   fi
-  while IFS='|' read -r component resource_namespace pod_pattern; do
-    cpu_query="sum(rate(container_cpu_usage_seconds_total{namespace=\"${resource_namespace}\",pod=~\"${pod_pattern}\",container!=\"\",container!=\"POD\"}[${cpu_rate_window_seconds}s]))"
-    memory_selector="container_memory_working_set_bytes{namespace=\"${resource_namespace}\",pod=~\"${pod_pattern}\",container!=\"\",container!=\"POD\"}"
-    memory_query="sum(${memory_selector} and (timestamp(${memory_selector}) >= ${start_seconds}))"
-    prometheus_range_to_file "${cpu_query}" "${cpu_start_seconds}" "${end_seconds}" \
-      "${raw_dir}/resource-${component}-cpu.json"
-    prometheus_range_to_file "${memory_query}" "${start_seconds}" "${end_seconds}" \
-      "${raw_dir}/resource-${component}-memory.json"
-  done <<EOF
-archiver|${namespace}|scale-event-archiver-.*
-kafka|${DATA_NAMESPACE}|market-kafka-.*
-object_store|${DATA_NAMESPACE}|garage-.*
-EOF
+  while true; do
+    if capture_resource_ranges "${raw_dir}" "${start_seconds}" "${end_seconds}" "${deadline}" && \
+      resource_ranges_available "${raw_dir}"; then
+      return 0
+    fi
+    if (( SECONDS >= deadline )); then
+      printf 'ERROR: resource measurements were not ingested within %d seconds.\n' \
+        "${resource_ingestion_timeout_seconds}" >&2
+      return 1
+    fi
+    remaining=$((deadline - SECONDS))
+    sleep_seconds="${sample_interval_seconds}"
+    if (( sleep_seconds > remaining )); then
+      sleep_seconds="${remaining}"
+    fi
+    sleep "${sleep_seconds}"
+  done
 }
 
 run_capacity_trial() {
@@ -381,7 +441,7 @@ run_capacity_trial() {
   prometheus_query_to_file \
     'sum by (outcome) (market_archiver_events_total{scope="scale"})' \
     "${raw_dir}/outcomes-after.json"
-  capture_resource_ranges "${raw_dir}" "${start_seconds}" "${end_seconds}"
+  wait_for_resource_ranges "${raw_dir}" "${start_seconds}" "${end_seconds}"
 
   "${reporter}" run \
     --plan "${plan_path}" \
