@@ -159,6 +159,7 @@ class JenkinsContractTests(unittest.TestCase):
         )
         self.assertIn('JENKINS_COLIMA_CPUS:-8', text)
         self.assertIn('JENKINS_COLIMA_MEMORY_GIB:-16', text)
+        self.assertIn('caffeinate -dimsu -w "$$" &', text)
         self.assertIn('colima delete "${profile}" --force --data', text)
         self.assertIn("trap 'cleanup 129' HUP", text)
         self.assertIn("trap 'cleanup 130' INT", text)

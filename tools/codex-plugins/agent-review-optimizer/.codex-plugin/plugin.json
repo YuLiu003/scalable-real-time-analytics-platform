@@ -1,0 +1,35 @@
+{
+  "name": "agent-review-optimizer",
+  "version": "0.1.0",
+  "description": "Route code reviews to relevant specialists and report privacy-minimized reviewer-level outcomes.",
+  "author": {
+    "name": "Yu Liu"
+  },
+  "homepage": "https://github.com/YuLiu003/scalable-real-time-analytics-platform",
+  "repository": "https://github.com/YuLiu003/scalable-real-time-analytics-platform",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "code-review",
+    "agent-routing",
+    "token-efficiency",
+    "privacy"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Agent Review Optimizer",
+    "shortDescription": "Route focused reviews and measure their value",
+    "longDescription": "Select applicable code-review specialists, exclude raw content from optimizer records, and report descriptive reviewer-level quality and token cohorts.",
+    "developerName": "Yu Liu",
+    "category": "Engineering",
+    "capabilities": [
+      "Interactive",
+      "Read"
+    ],
+    "defaultPrompt": [
+      "Route this change to the smallest effective review team",
+      "Summarize these sanitized review outcomes",
+      "Summarize descriptive reviewer-level review cohorts"
+    ]
+  }
+}

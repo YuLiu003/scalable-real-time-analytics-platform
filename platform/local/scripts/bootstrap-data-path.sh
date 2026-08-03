@@ -130,7 +130,7 @@ kubectl --context "${KUBERNETES_CONTEXT}" apply \
 kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${DATA_NAMESPACE}" \
   rollout status statefulset/garage --timeout=5m
 kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${DATA_NAMESPACE}" \
-  wait kafka/"${KAFKA_CLUSTER_NAME}" --for=condition=Ready --timeout=10m
+  wait kafka/"${KAFKA_CLUSTER_NAME}" --for=condition=Ready --timeout=15m
 kubectl --context "${KUBERNETES_CONTEXT}" --namespace "${DATA_NAMESPACE}" \
   wait kafkatopic/market-prices kafkatopic/ingestion-quarantine kafkatopic/market-prices-scale \
   --for=condition=Ready --timeout=5m

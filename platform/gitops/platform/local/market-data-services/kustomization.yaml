@@ -16,3 +16,17 @@ patches:
           namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: keda
+      - op: add
+        path: /spec/entityOperator/topicOperator/startupProbe
+        value:
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 24
+      - op: add
+        path: /spec/entityOperator/userOperator/livenessProbe
+        value:
+          initialDelaySeconds: 180
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3

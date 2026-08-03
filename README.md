@@ -24,6 +24,9 @@ observability, and cloud-platform engineering.
 - OpenTofu validates the AWS EKS architecture without requiring a paid apply.
 - Jenkins runs repository-owned PS0, PS1, and PS2 gates on isolated Kubernetes
   agents and publishes exact-commit evidence to GitHub.
+- A separate Codex plugin routes focused code reviews and reports descriptive
+  quality-per-token cohorts without including prompts, diffs, or paths in its
+  records.
 - Measured application scopes require 100% statement coverage; Python analytics
   also requires 100% branch coverage.
 
@@ -76,6 +79,7 @@ from silently changing a result.
 | `platform/jenkins/` | Jenkins controller, isolated agents, and exact-commit presubmit |
 | `infra/opentofu/aws/` | AWS network, EKS, identity, registry, storage, encryption, and cost controls |
 | `scripts/ci/` | Repository-owned PS0, PS1, and PS2 implementation |
+| `tools/codex-plugins/agent-review-optimizer/` | Privacy-safe Codex review routing and efficiency analysis |
 | `tools/codex-plugins/cloud-platform-engineering/` | Project-specific cloud-platform review and research tools |
 
 ## Run locally
@@ -91,6 +95,7 @@ Install the Python test dependencies once:
 python3 -m venv .venv
 .venv/bin/python -m pip install \
   --requirement services/portfolio-analytics/requirements-dev.txt \
+  --requirement tools/codex-plugins/agent-review-optimizer/requirements-dev.txt \
   --requirement tools/codex-plugins/cloud-platform-engineering/mcp/requirements-dev.txt
 ```
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Optimize Agent Reviews"
+  short_description: "Route and measure efficient code reviews"
+  default_prompt: "Use $optimize-agent-reviews to route this change to the smallest effective review team and measure the outcome."
