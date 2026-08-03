@@ -54,6 +54,17 @@ A paid AWS, GCP, or Azure apply is not a completion requirement. Local
 emulation does not prove cloud control-plane behavior, and documentation must
 state that limitation rather than claim production provider experience.
 
+## Adjacent developer tooling
+
+The repository also contains an independent
+[`agent-review-optimizer`](../agent-review-optimizer/README.md) Codex plugin.
+Its local MVP is implemented: deterministic reviewer routing, privacy-safe
+Codex JSONL usage extraction, and aggregate outcome summaries. It is not an
+investment workload and does not justify Kafka or Kubernetes by itself. A
+future producer may publish only its allowlisted aggregate record after a
+seeded benchmark proves the measurements useful; prompts, code, diffs, paths,
+identity, session, and financial data remain outside that event boundary.
+
 ## Definition of done for every slice
 
 - Domain behavior is implemented, not hardcoded in a dashboard.

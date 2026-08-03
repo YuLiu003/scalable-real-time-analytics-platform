@@ -38,6 +38,11 @@ trap 'cleanup 129' HUP
 trap 'cleanup 130' INT
 trap 'cleanup 143' TERM
 
+if command -v caffeinate >/dev/null 2>&1; then
+  printf 'Preventing macOS idle sleep during disposable Jenkins validation.\n'
+  caffeinate -dimsu -w "$$" &
+fi
+
 runtime_config_dir="$(mktemp -d "${TMPDIR:-/tmp}/jenkins-runtime-config.XXXXXX")"
 export DOCKER_CONFIG="${runtime_config_dir}/docker"
 export KUBECONFIG="${runtime_config_dir}/kubeconfig"

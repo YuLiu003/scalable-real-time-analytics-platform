@@ -30,6 +30,7 @@ STAGE_COMMANDS = {
         ("make", "-C", "platform/jenkins", "quality"),
         ("make", "-C", "platform/local", "quality"),
         ("tools/codex-plugins/cloud-platform-engineering/scripts/quality.sh",),
+        ("tools/codex-plugins/agent-review-optimizer/scripts/quality.sh",),
         ("scripts/ci/presubmit-quality.sh",),
         ("scripts/ci/validate-workflows.sh",),
     ),
