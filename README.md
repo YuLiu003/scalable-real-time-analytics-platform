@@ -141,9 +141,30 @@ deleted. Stop any other running Colima profile first; the benchmark checks this
 at startup and never mutates the other profile. See the capacity contract before
 presenting any result.
 
-For a private live stock/ETF allocation and projection dashboard, follow the
-[`private portfolio workflow`](docs/features/cloud-native-investment-platform/private-portfolio-workflow.md).
-The separate
+For a private live stock/ETF allocation and projection dashboard, create the
+three absolute-path, mode-`0600` input files described in the
+[`private portfolio workflow`](docs/features/cloud-native-investment-platform/private-portfolio-workflow.md),
+then run:
+
+```bash
+PRIVATE_FEED_ENV_FILE=/absolute/path/alpaca-market-feed.env \
+PRIVATE_HOLDINGS_FILE=/absolute/path/portfolio.json \
+PRIVATE_ACCESS_TOKEN_FILE=/absolute/path/portfolio.token \
+  make -C platform/local bootstrap-private-portfolio
+
+make -C platform/local private-portfolio-dashboard
+```
+
+Open `http://127.0.0.1:8080` and enter the token from the third file. Stop the
+private workloads and remove their runtime Secrets and checkpoint with:
+
+```bash
+CONFIRM_DESTROY_PRIVATE_PORTFOLIO=private-portfolio \
+  make -C platform/local destroy-private-portfolio
+```
+
+The credential-free PS2 acceptance proves this wiring with fictional records;
+it does not contact Alpaca or prove a live provider subscription. The separate
 [`cash-flow ledger contract`](docs/features/cloud-native-investment-platform/personal-portfolio-ledger-contract.md)
 remains an offline input for future transaction-grounded performance work.
 
