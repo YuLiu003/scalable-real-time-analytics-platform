@@ -133,12 +133,13 @@ ready replica. Aggregate samples and a failure snapshot are retained with the
 run, while exact measurements remain generated evidence rather than committed
 capacity claims.
 
-PS2 also runs one 10,000-event, fixed-three-consumer capacity smoke trial. It
-requires exact acknowledged/topic/archive counts, zero unexpected outcomes,
-trial-scoped durable-latency observations, per-partition committed lag, and
-consumer/Kafka/Garage CPU and memory series. The full five-repeat
-10K/50K/100K matrix remains a manual or scheduled disposable benchmark rather
-than a merge-blocking workload.
+PS2 also runs one 10,000-event, fixed-three-consumer capacity smoke trial at a
+controlled 250 events per second. The rate guarantees a complete in-boundary
+CPU window while validating exact acknowledged/topic/archive counts, zero
+unexpected outcomes, trial-scoped durable-latency observations, per-partition
+committed lag, and consumer/Kafka/Garage CPU and memory series. It is not a
+burst-capacity claim. The unbounded five-repeat 10K/50K/100K matrix remains a
+manual or scheduled disposable benchmark rather than a merge-blocking workload.
 
 This is `local_kind_synthetic` evidence, not AWS runtime, provider-data,
 availability, or production-capacity evidence.

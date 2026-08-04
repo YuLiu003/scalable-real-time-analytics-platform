@@ -140,9 +140,12 @@ CAPACITY_REPETITIONS=3 \
   make -C platform/local e2e-capacity-ephemeral
 ```
 
-`make -C platform/local verify-capacity-smoke` runs one 10,000-event trial
-against an already bootstrapped cluster and is the bounded PS2 merge gate. It
-does not replace the full repeated matrix. Direct runs must provide
+`make -C platform/local verify-capacity-smoke` runs one 10,000-event trial at a
+fixed 250 events per second against an already bootstrapped cluster and is the
+bounded PS2 merge gate. The controlled rate guarantees enough in-boundary time
+for the required twenty-five-second CPU sample; it is execution-path evidence,
+not burst-capacity evidence, and does not replace the unbounded repeated matrix.
+Direct runs must provide
 `CAPACITY_ALLOCATED_CPUS`, `CAPACITY_ALLOCATED_MEMORY_GIB`, and
 `CAPACITY_ALLOCATED_DISK_GIB`; the disposable Colima and CI workflows supply
 those values from the runtime they own.

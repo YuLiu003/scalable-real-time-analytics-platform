@@ -447,9 +447,16 @@ func BuildRunReport(input RunInput) (RunReport, error) {
 		Limitations: []string{
 			"Synthetic local load is not production or AWS capacity evidence.",
 			"The single-replica Kafka broker and object store do not provide availability evidence.",
-			"Unbounded production measures burst completion, not a sustained provider feed.",
+			producerScopeLimitation(input.Spec.TargetRate),
 		},
 	}, nil
+}
+
+func producerScopeLimitation(targetRate int64) string {
+	if targetRate > 0 {
+		return "Rate-controlled production validates the configured arrival rate, not burst capacity or a sustained provider feed."
+	}
+	return "Unbounded production measures burst completion, not a sustained provider feed."
 }
 
 func prometheusValue(sample []json.RawMessage) (float64, error) {

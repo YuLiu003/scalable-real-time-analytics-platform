@@ -197,8 +197,16 @@ func TestBuildRunReportProducesLosslessEvidence(t *testing.T) {
 	if err != nil || report.SchemaVersion != SchemaVersion || report.SuiteID != "cap" ||
 		report.Measurements.DurableThroughputEventsPerSecond != 200 ||
 		report.Assertions.ArchiveCreatedEvents != 600 || !report.Assertions.NoLoss ||
-		report.Config.ArchiveDelayMillis != 0 || len(report.Limitations) != 3 {
+		report.Config.ArchiveDelayMillis != 0 || len(report.Limitations) != 3 ||
+		report.Limitations[2] != "Unbounded production measures burst completion, not a sustained provider feed." {
 		t.Fatalf("BuildRunReport() = %+v, %v", report, err)
+	}
+	paced := validRunInput()
+	paced.Spec.TargetRate = 250
+	paced.Producer.TargetRateEventsPerSecond = 250
+	report, err = BuildRunReport(paced)
+	if err != nil || report.Limitations[2] != "Rate-controlled production validates the configured arrival rate, not burst capacity or a sustained provider feed." {
+		t.Fatalf("paced BuildRunReport() = %+v, %v", report, err)
 	}
 }
 

@@ -21,7 +21,8 @@ func TestBuildSummaryAggregatesEveryRunWithoutBestRunSelection(t *testing.T) {
 		t.Fatal(err)
 	}
 	if summary.SchemaVersion != SchemaVersion || summary.EvidenceScope != EvidenceScope ||
-		len(summary.Scenarios) != 2 || len(summary.Limitations) != 3 {
+		len(summary.Scenarios) != 2 || len(summary.Limitations) != 4 ||
+		summary.Limitations[3] != "Unbounded production measures burst completion, not a sustained provider feed." {
 		t.Fatalf("BuildSummary() = %+v", summary)
 	}
 	first := summary.Scenarios[0]
@@ -35,6 +36,14 @@ func TestBuildSummaryAggregatesEveryRunWithoutBestRunSelection(t *testing.T) {
 	odd := distribution([]float64{9, 1, 5})
 	if odd.Minimum != 1 || odd.Median != 5 || odd.P95 != 9 || odd.Maximum != 9 {
 		t.Fatalf("distribution() = %+v", odd)
+	}
+	pacedPlan, err := NewPlan("paced", "600", 1, 250)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paced, err := BuildSummary(pacedPlan, validEnvironment(), []RunReport{summaryReport(pacedPlan.Runs[0], 1)})
+	if err != nil || paced.Limitations[3] != "Rate-controlled production validates the configured arrival rate, not burst capacity or a sustained provider feed." {
+		t.Fatalf("paced BuildSummary() = %+v, %v", paced, err)
 	}
 }
 

@@ -30,9 +30,11 @@ On a local Mac, `PS2` uses the disposable Colima path and deletes its dedicated
 VM and data. Linux CI/Jenkins agents delete the kind cluster and should
 themselves be ephemeral.
 
-The bounded capacity gate is one 10,000-event trial. The repeated
-10K/50K/100K five-run matrix is separate because shared-runner contention and
-merge-gate timeouts would make capacity comparisons misleading.
+The bounded capacity gate is one 10,000-event trial paced at 250 events per
+second so it contains the required CPU measurement window. It validates the
+benchmark path but is not a burst-capacity claim. The unbounded 10K/50K/100K
+five-run matrix is separate because shared-runner contention and merge-gate
+timeouts would make capacity comparisons misleading.
 
 ## PR review checklist
 

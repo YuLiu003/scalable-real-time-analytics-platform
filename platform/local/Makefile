@@ -58,7 +58,7 @@ verify-capacity-benchmark:
 	./scripts/verify-capacity-benchmark.sh
 
 verify-capacity-smoke:
-	CAPACITY_EVENT_COUNTS=10000 CAPACITY_REPETITIONS=1 ./scripts/verify-capacity-benchmark.sh
+	CAPACITY_EVENT_COUNTS=10000 CAPACITY_REPETITIONS=1 CAPACITY_TARGET_RATE=250 ./scripts/verify-capacity-benchmark.sh
 
 diagnose-data-path:
 	./scripts/diagnose-data-path.sh

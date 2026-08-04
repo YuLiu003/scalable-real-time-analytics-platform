@@ -337,7 +337,8 @@ For capacity rather than autoscaling behavior, use
 `verify-capacity-benchmark` only against an already bootstrapped isolated
 cluster. It pins three consumers, removes the artificial delay, performs the
 configured repeated matrix, and restores the normal KEDA bounds afterward.
-`verify-capacity-smoke` is the single-10K-run PS2 gate. Prefer
+`verify-capacity-smoke` is the single-10K-run PS2 gate, paced at 250 events per
+second so its twenty-five-second CPU window is deterministic. Prefer
 `e2e-capacity-ephemeral` for manual full runs so hundreds of thousands of Kafka
 records and archive objects cannot remain on the workstation.
 When invoking either verification target directly, set

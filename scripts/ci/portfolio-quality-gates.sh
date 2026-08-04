@@ -143,6 +143,11 @@ if ! grep -Fqx 'cpu_rate_window_seconds=25' \
   printf 'ERROR: capacity CPU window must retain the reviewed scrape-jitter margin.\n' >&2
   exit 1
 fi
+if ! grep -Fqx $'\tCAPACITY_EVENT_COUNTS=10000 CAPACITY_REPETITIONS=1 CAPACITY_TARGET_RATE=250 ./scripts/verify-capacity-benchmark.sh' \
+  "${REPO_ROOT}/platform/local/Makefile"; then
+  printf 'ERROR: capacity smoke must retain a controlled rate long enough for its CPU window.\n' >&2
+  exit 1
+fi
 if ! grep -Fqx 'resource_ingestion_timeout_seconds=30' \
   "${REPO_ROOT}/platform/local/scripts/verify-capacity-benchmark.sh"; then
   printf 'ERROR: capacity resource queries must retain the bounded ingestion retry.\n' >&2

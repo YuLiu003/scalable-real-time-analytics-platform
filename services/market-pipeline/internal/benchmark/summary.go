@@ -104,6 +104,7 @@ func BuildSummary(plan Plan, environment Environment, reports []RunReport) (Summ
 			"Results describe one disposable local kind environment, not AWS or production capacity.",
 			"The Kafka broker and S3-compatible object store each use one replica.",
 			"Host contention can affect local results; compare distributions from equivalent environments.",
+			producerScopeLimitation(plan.TargetRate),
 		},
 	}
 	for _, eventCount := range plan.EventCounts {
