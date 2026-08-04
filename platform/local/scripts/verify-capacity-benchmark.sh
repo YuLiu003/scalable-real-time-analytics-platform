@@ -355,11 +355,9 @@ wait_for_resource_ranges() {
   local start_seconds="$2"
   local end_seconds="$3"
   local deadline=$((SECONDS + resource_ingestion_timeout_seconds))
-  local cpu_start_seconds remaining sleep_seconds
-  cpu_start_seconds="$(python3 -c 'import sys; print(float(sys.argv[1]) + int(sys.argv[2]))' \
-    "${start_seconds}" "${cpu_rate_window_seconds}")"
-  if ! python3 -c 'import sys; raise SystemExit(0 if float(sys.argv[2]) > float(sys.argv[1]) else 1)' \
-    "${cpu_start_seconds}" "${end_seconds}"; then
+  local remaining sleep_seconds
+  if ! capacity_duration_supports_window \
+    "${start_seconds}" "${end_seconds}" "${cpu_rate_window_seconds}"; then
     printf 'ERROR: durable trial duration is too short for an in-boundary %d-second CPU rate sample.\n' \
       "${cpu_rate_window_seconds}" >&2
     return 1
@@ -388,6 +386,7 @@ run_capacity_trial() {
   local event_count="$2"
   local repetition="$3"
   local rate="$4"
+  local resource_measurements_required="$5"
   local run_dir="${runs_dir}/${run_id}"
   local raw_dir="${run_dir}/raw"
   local started_ms completed_ms duration_ms start_seconds end_seconds deadline
@@ -396,8 +395,12 @@ run_capacity_trial() {
   mkdir -p "${raw_dir}"
   : >"${raw_dir}/samples.jsonl"
 
-  printf 'Running capacity trial %s: events=%s repetition=%s target_rate=%s...\n' \
-    "${run_id}" "${event_count}" "${repetition}" "${rate}"
+  if [[ "${resource_measurements_required}" != "true" && "${resource_measurements_required}" != "false" ]]; then
+    printf 'ERROR: capacity plan has an invalid resource policy for %s.\n' "${run_id}" >&2
+    return 1
+  fi
+  printf 'Running capacity trial %s: events=%s repetition=%s target_rate=%s resources_required=%s...\n' \
+    "${run_id}" "${event_count}" "${repetition}" "${rate}" "${resource_measurements_required}"
   prometheus_query_to_file \
     'sum by (le) (market_archiver_durable_latency_seconds_bucket{scope="scale"})' \
     le \
@@ -476,7 +479,9 @@ run_capacity_trial() {
     'sum by (outcome) (market_archiver_events_total{scope="scale"})' \
     outcome \
     "${raw_dir}/outcomes-after.json"
-  wait_for_resource_ranges "${raw_dir}" "${start_seconds}" "${end_seconds}"
+  if [[ "${resource_measurements_required}" == "true" ]]; then
+    wait_for_resource_ranges "${raw_dir}" "${start_seconds}" "${end_seconds}"
+  fi
 
   "${reporter}" run \
     --plan "${plan_path}" \
@@ -539,8 +544,9 @@ printf '{\n  "git_revision": "%s",\n  "tracked_tree_clean": %s,\n  "architecture
   "${GO_VERSION}" "${KUBERNETES_VERSION}" "${KIND_VERSION}" "${KAFKA_VERSION}" \
   "${STRIMZI_OPERATOR_VERSION}" "${KEDA_VERSION}" "${GARAGE_VERSION}" >"${environment_path}"
 
-while IFS=$'\t' read -r run_id event_count repetition rate; do
-  run_capacity_trial "${run_id}" "${event_count}" "${repetition}" "${rate}"
+while IFS=$'\t' read -r run_id event_count repetition rate resource_measurements_required; do
+  run_capacity_trial \
+    "${run_id}" "${event_count}" "${repetition}" "${rate}" "${resource_measurements_required}"
 done <"${run_matrix_path}"
 
 "${reporter}" summary \

@@ -197,7 +197,7 @@ func TestBuildRunReportProducesLosslessEvidence(t *testing.T) {
 	if err != nil || report.SchemaVersion != SchemaVersion || report.SuiteID != "cap" ||
 		report.Measurements.DurableThroughputEventsPerSecond != 200 ||
 		report.Assertions.ArchiveCreatedEvents != 600 || !report.Assertions.NoLoss ||
-		report.Config.ArchiveDelayMillis != 0 || len(report.Limitations) != 3 ||
+		report.Config.ArchiveDelayMillis != 0 || !report.Config.ResourceMeasurementsRequired || len(report.Limitations) != 3 ||
 		report.Limitations[2] != "Unbounded production measures burst completion, not a sustained provider feed." {
 		t.Fatalf("BuildRunReport() = %+v, %v", report, err)
 	}
@@ -210,6 +210,19 @@ func TestBuildRunReportProducesLosslessEvidence(t *testing.T) {
 	}
 }
 
+func TestBuildRunReportOmitsShortUnboundedResources(t *testing.T) {
+	input := shortUnboundedRunInput()
+	report, err := BuildRunReport(input)
+	if err != nil || report.Config.ResourceMeasurementsRequired || report.Measurements.Resources != nil ||
+		len(report.Limitations) != 4 || report.Limitations[3] != resourceOmissionLimitation() {
+		t.Fatalf("BuildRunReport(short unbounded) = %+v, %v", report, err)
+	}
+	input.Resources = validRunInput().Resources
+	if _, err := BuildRunReport(input); err == nil || !strings.Contains(err.Error(), "must be omitted") {
+		t.Fatalf("BuildRunReport(unexpected resources) error = %v", err)
+	}
+}
+
 func TestBuildRunReportRejectsInvalidEvidence(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -218,6 +231,7 @@ func TestBuildRunReportRejectsInvalidEvidence(t *testing.T) {
 	}{
 		{name: "topology", mutate: func(input *RunInput) { input.Workers = 0 }, want: "topology"},
 		{name: "identity", mutate: func(input *RunInput) { input.Spec.RunID = "wrong" }, want: "identity"},
+		{name: "resource policy", mutate: func(input *RunInput) { input.Spec.ResourceMeasurementsRequired = false }, want: "resource policy"},
 		{name: "producer", mutate: func(input *RunInput) { input.Producer.Messages = 1 }, want: "producer"},
 		{name: "histogram", mutate: func(input *RunInput) { input.LatencyBefore = nil }, want: "histogram"},
 		{name: "latency count", mutate: func(input *RunInput) { input.LatencyAfter["+Inf"]-- }, want: "durable latency"},
@@ -227,6 +241,7 @@ func TestBuildRunReportRejectsInvalidEvidence(t *testing.T) {
 		{name: "ordering", mutate: func(input *RunInput) { input.Ordering.OrderingValid = false }, want: "ordering"},
 		{name: "archive", mutate: func(input *RunInput) { input.ArchiveCount-- }, want: "archive contains"},
 		{name: "resources", mutate: func(input *RunInput) { delete(input.Resources, "kafka") }, want: "kafka"},
+		{name: "resource set", mutate: func(input *RunInput) { input.Resources["extra"] = ResourcePeak{} }, want: "component set"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -322,7 +337,10 @@ func validRunInput() RunInput {
 		resources[component] = ResourcePeak{CPUAvailable: true, PeakCPUCores: 0.5, MemoryAvailable: true, PeakMemoryBytes: 1024}
 	}
 	return RunInput{
-		Spec:                          RunSpec{SuiteID: "cap", RunID: "cap-e600-r1", EventCount: 600, Repetition: 1},
+		Spec: RunSpec{
+			SuiteID: "cap", RunID: "cap-e600-r1", EventCount: 600, Repetition: 1,
+			ResourceMeasurementsRequired: true,
+		},
 		Partitions:                    3,
 		Workers:                       3,
 		DurableCompletionMilliseconds: 3000,
@@ -342,4 +360,18 @@ func validRunInput() RunInput {
 		ArchiveCount: 600,
 		Resources:    resources,
 	}
+}
+
+func shortUnboundedRunInput() RunInput {
+	input := validRunInput()
+	input.Spec = RunSpec{SuiteID: "cap", RunID: "cap-e10000-r1", EventCount: 10_000, Repetition: 1}
+	input.Producer.Messages = 10_000
+	input.LatencyAfter = map[string]float64{"1": 5_010, "2": 10_010, "+Inf": 10_020}
+	input.OutcomesAfter["created"] = 10_005
+	input.Ordering.RunID = input.Spec.RunID
+	input.Ordering.ExpectedRecords = 10_000
+	input.Ordering.ObservedRecords = 10_000
+	input.ArchiveCount = 10_000
+	input.Resources = nil
+	return input
 }

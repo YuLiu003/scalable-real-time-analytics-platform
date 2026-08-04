@@ -62,12 +62,13 @@ type ResourcePeak struct {
 }
 
 type RunConfig struct {
-	Events             int64 `json:"events"`
-	Repetition         int   `json:"repetition"`
-	TargetRate         int64 `json:"target_rate_events_per_second"`
-	TopicPartitions    int   `json:"topic_partitions"`
-	ConsumerReplicas   int   `json:"consumer_replicas"`
-	ArchiveDelayMillis int   `json:"archive_delay_milliseconds"`
+	Events                       int64 `json:"events"`
+	Repetition                   int   `json:"repetition"`
+	TargetRate                   int64 `json:"target_rate_events_per_second"`
+	TopicPartitions              int   `json:"topic_partitions"`
+	ConsumerReplicas             int   `json:"consumer_replicas"`
+	ArchiveDelayMillis           int   `json:"archive_delay_milliseconds"`
+	ResourceMeasurementsRequired bool  `json:"resource_measurements_required"`
 }
 
 type RunMeasurements struct {
@@ -76,7 +77,7 @@ type RunMeasurements struct {
 	DurableThroughputEventsPerSecond float64                 `json:"durable_throughput_events_per_second"`
 	DurableLatency                   LatencyQuantiles        `json:"durable_latency"`
 	Lag                              LagSummary              `json:"lag"`
-	Resources                        map[string]ResourcePeak `json:"resources"`
+	Resources                        map[string]ResourcePeak `json:"resources,omitempty"`
 }
 
 type RunAssertions struct {
@@ -374,6 +375,9 @@ func BuildRunReport(input RunInput) (RunReport, error) {
 		input.Spec.RunID != fmt.Sprintf("%s-e%d-r%d", input.Spec.SuiteID, input.Spec.EventCount, input.Spec.Repetition) {
 		return RunReport{}, errors.New("run identity does not match the benchmark plan")
 	}
+	if input.Spec.ResourceMeasurementsRequired != resourceMeasurementsRequired(input.Spec.EventCount, input.Spec.TargetRate) {
+		return RunReport{}, errors.New("run resource policy does not match the benchmark plan")
+	}
 	if input.Producer.Messages != input.Spec.EventCount || input.Producer.TargetRateEventsPerSecond != input.Spec.TargetRate {
 		return RunReport{}, errors.New("producer summary does not match the run plan")
 	}
@@ -404,26 +408,42 @@ func BuildRunReport(input RunInput) (RunReport, error) {
 	if input.ArchiveCount != input.Spec.EventCount {
 		return RunReport{}, fmt.Errorf("archive contains %d objects, want %d", input.ArchiveCount, input.Spec.EventCount)
 	}
-	for _, component := range requiredResourceComponents {
-		resource, exists := input.Resources[component]
-		if !exists || !resource.CPUAvailable || !resource.MemoryAvailable ||
-			!finiteNonNegative(resource.PeakCPUCores) || !finiteNonNegative(resource.PeakMemoryBytes) {
-			return RunReport{}, fmt.Errorf("resource measurements for %s are unavailable", component)
+	if input.Spec.ResourceMeasurementsRequired {
+		for _, component := range requiredResourceComponents {
+			resource, exists := input.Resources[component]
+			if !exists || !resource.CPUAvailable || !resource.MemoryAvailable ||
+				!finiteNonNegative(resource.PeakCPUCores) || !finiteNonNegative(resource.PeakMemoryBytes) {
+				return RunReport{}, fmt.Errorf("resource measurements for %s are unavailable", component)
+			}
 		}
+		if len(input.Resources) != len(requiredResourceComponents) {
+			return RunReport{}, errors.New("resource measurements do not match the required component set")
+		}
+	} else if len(input.Resources) != 0 {
+		return RunReport{}, errors.New("resource measurements must be omitted when the run plan does not require them")
 	}
 	durableThroughput := float64(input.Spec.EventCount) / (float64(input.DurableCompletionMilliseconds) / 1000)
+	limitations := []string{
+		"Synthetic local load is not production or AWS capacity evidence.",
+		"The single-replica Kafka broker and object store do not provide availability evidence.",
+		producerScopeLimitation(input.Spec.TargetRate),
+	}
+	if !input.Spec.ResourceMeasurementsRequired {
+		limitations = append(limitations, resourceOmissionLimitation())
+	}
 	return RunReport{
 		SchemaVersion: SchemaVersion,
 		EvidenceScope: EvidenceScope,
 		SuiteID:       input.Spec.SuiteID,
 		RunID:         input.Spec.RunID,
 		Config: RunConfig{
-			Events:             input.Spec.EventCount,
-			Repetition:         input.Spec.Repetition,
-			TargetRate:         input.Spec.TargetRate,
-			TopicPartitions:    input.Partitions,
-			ConsumerReplicas:   input.Workers,
-			ArchiveDelayMillis: 0,
+			Events:                       input.Spec.EventCount,
+			Repetition:                   input.Spec.Repetition,
+			TargetRate:                   input.Spec.TargetRate,
+			TopicPartitions:              input.Partitions,
+			ConsumerReplicas:             input.Workers,
+			ArchiveDelayMillis:           0,
+			ResourceMeasurementsRequired: input.Spec.ResourceMeasurementsRequired,
 		},
 		Measurements: RunMeasurements{
 			Producer:                         input.Producer,
@@ -444,11 +464,7 @@ func BuildRunReport(input RunInput) (RunReport, error) {
 			NoUnexpectedDuplicates:   true,
 			NoQuarantineOrErrors:     true,
 		},
-		Limitations: []string{
-			"Synthetic local load is not production or AWS capacity evidence.",
-			"The single-replica Kafka broker and object store do not provide availability evidence.",
-			producerScopeLimitation(input.Spec.TargetRate),
-		},
+		Limitations: limitations,
 	}, nil
 }
 
@@ -457,6 +473,10 @@ func producerScopeLimitation(targetRate int64) string {
 		return "Rate-controlled production validates the configured arrival rate, not burst capacity or a sustained provider feed."
 	}
 	return "Unbounded production measures burst completion, not a sustained provider feed."
+}
+
+func resourceOmissionLimitation() string {
+	return "CPU and memory are intentionally not collected for the short unbounded 10,000-event scenario because its durable boundary may not contain the required 25-second CPU window."
 }
 
 func prometheusValue(sample []json.RawMessage) (float64, error) {

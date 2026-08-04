@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 
+capacity_duration_supports_window() {
+  local start_seconds="$1"
+  local end_seconds="$2"
+  local window_seconds="$3"
+  python3 -c 'import sys; raise SystemExit(0 if float(sys.argv[2]) > float(sys.argv[1]) + int(sys.argv[3]) else 1)' \
+    "${start_seconds}" "${end_seconds}" "${window_seconds}"
+}
+
 capacity_prometheus_vector_valid() {
   local input_file="$1"
   local required_label="$2"

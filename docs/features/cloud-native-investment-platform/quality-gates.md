@@ -140,6 +140,9 @@ unexpected outcomes, trial-scoped durable-latency observations, per-partition
 committed lag, and consumer/Kafka/Garage CPU and memory series. It is not a
 burst-capacity claim. The unbounded five-repeat 10K/50K/100K matrix remains a
 manual or scheduled disposable benchmark rather than a merge-blocking workload.
+That matrix predeclares CPU/memory as omitted for the short unbounded 10K
+scenario and mandatory for 50K/100K; all other correctness and performance
+measurements remain mandatory at every size.
 
 This is `local_kind_synthetic` evidence, not AWS runtime, provider-data,
 availability, or production-capacity evidence.

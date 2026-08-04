@@ -153,9 +153,14 @@ if ! grep -Fqx 'resource_ingestion_timeout_seconds=30' \
   printf 'ERROR: capacity resource queries must retain the bounded ingestion retry.\n' >&2
   exit 1
 fi
-if ! grep -Fqx '  wait_for_resource_ranges "${raw_dir}" "${start_seconds}" "${end_seconds}"' \
+if ! grep -Fqx '    wait_for_resource_ranges "${raw_dir}" "${start_seconds}" "${end_seconds}"' \
   "${REPO_ROOT}/platform/local/scripts/verify-capacity-benchmark.sh"; then
   printf 'ERROR: capacity reporting must wait on the original resource-query boundaries.\n' >&2
+  exit 1
+fi
+if ! grep -Fqx '  if [[ "${resource_measurements_required}" == "true" ]]; then' \
+  "${REPO_ROOT}/platform/local/scripts/verify-capacity-benchmark.sh"; then
+  printf 'ERROR: capacity resource collection must follow the predeclared run policy.\n' >&2
   exit 1
 fi
 kubectl kustomize "${REPO_ROOT}/platform/gitops/apps/private/market-feed" >/dev/null

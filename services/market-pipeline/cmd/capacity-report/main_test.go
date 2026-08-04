@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,42 +22,11 @@ func TestCommandsBuildRunAndSuiteReports(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if matrix := readText(t, matrixPath); matrix != "cap-e600-r1\t600\t1\t0\n" {
+	if matrix := readText(t, matrixPath); matrix != "cap-e600-r1\t600\t1\t0\ttrue\n" {
 		t.Fatalf("matrix = %q", matrix)
 	}
 
-	rawDir := filepath.Join(directory, "runs", "cap-e600-r1", "raw")
-	if err := os.MkdirAll(rawDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeText(t, filepath.Join(rawDir, "producer.jsonl"), `{"msg":"load scenario completed","messages":600,"target_rate_events_per_second":0,"duration_milliseconds":1000,"throughput_events_per_second":600,"ack_p50_milliseconds":1,"ack_p95_milliseconds":2,"ack_p99_milliseconds":3}`+"\n")
-	writeJSON(t, filepath.Join(rawDir, "latency-before.json"), vector("le", map[string]float64{"1": 10, "2": 20, "+Inf": 20}))
-	writeJSON(t, filepath.Join(rawDir, "latency-after.json"), vector("le", map[string]float64{"1": 310, "2": 610, "+Inf": 620}))
-	writeJSON(t, filepath.Join(rawDir, "outcomes-before.json"), vector("outcome", map[string]float64{"created": 5, "duplicate": 2, "quarantined": 1, "error": 1}))
-	writeJSON(t, filepath.Join(rawDir, "outcomes-after.json"), vector("outcome", map[string]float64{"created": 605, "duplicate": 2, "quarantined": 1, "error": 1}))
-	samples := []benchmark.LagSample{
-		{ElapsedMilliseconds: 1, AvailableReplicas: 3, Lag: scale.LagReport{PartitionCount: 3, TotalLag: 3, MaxPartitionLag: 1, LagByPartition: map[int32]int64{0: 1, 1: 1, 2: 1}}},
-		{ElapsedMilliseconds: 2, AvailableReplicas: 3, ProducerComplete: true, Lag: scale.LagReport{PartitionCount: 3, LagByPartition: map[int32]int64{0: 0, 1: 0, 2: 0}}},
-	}
-	var sampleLines strings.Builder
-	for _, sample := range samples {
-		encoded, _ := json.Marshal(sample)
-		sampleLines.Write(encoded)
-		sampleLines.WriteByte('\n')
-	}
-	writeText(t, filepath.Join(rawDir, "samples.jsonl"), sampleLines.String())
-	writeJSON(t, filepath.Join(rawDir, "ordering.json"), scale.Report{
-		RunID: "cap-e600-r1", Phase: "original", ExpectedRecords: 600, ObservedRecords: 600,
-		PartitionCount: 3, RecordsByPartition: map[int32]int64{0: 200, 1: 200, 2: 200}, OrderingValid: true,
-	})
-	writeJSON(t, filepath.Join(rawDir, "archive.json"), map[string]any{
-		"prefix": "bronze/market.price.observed/v1/date=2026-07-30/source=scale.cap-e600-r1/",
-		"count":  600,
-	})
-	for _, component := range []string{"archiver", "kafka", "object_store"} {
-		writeJSON(t, filepath.Join(rawDir, "resource-"+component+"-cpu.json"), rangeVector(0.25, 0.5))
-		writeJSON(t, filepath.Join(rawDir, "resource-"+component+"-memory.json"), rangeVector(1024, 2048))
-	}
+	rawDir := writeRawRun(t, directory, "cap-e600-r1", 600, 0, true)
 	reportPath := filepath.Join(directory, "runs", "cap-e600-r1", "report.json")
 	if err := run([]string{
 		"run", "--plan", planPath, "--run-id", "cap-e600-r1", "--raw-dir", rawDir,
@@ -93,6 +63,54 @@ func TestCommandsBuildRunAndSuiteReports(t *testing.T) {
 	}
 }
 
+func TestCommandOmitsResourcesForShortUnboundedRun(t *testing.T) {
+	directory := t.TempDir()
+	planPath := filepath.Join(directory, "plan.json")
+	matrixPath := filepath.Join(directory, "runs.tsv")
+	if err := run([]string{
+		"plan", "--suite-id", "burst", "--event-counts", "10000", "--repetitions", "1",
+		"--output", planPath, "--runs-output", matrixPath,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if matrix := readText(t, matrixPath); matrix != "burst-e10000-r1\t10000\t1\t0\tfalse\n" {
+		t.Fatalf("matrix = %q", matrix)
+	}
+	rawDir := writeRawRun(t, directory, "burst-e10000-r1", 10_000, 0, false)
+	reportPath := filepath.Join(directory, "runs", "burst-e10000-r1", "report.json")
+	if err := run([]string{
+		"run", "--plan", planPath, "--run-id", "burst-e10000-r1", "--raw-dir", rawDir,
+		"--duration-ms", "3000", "--output", reportPath,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var report benchmark.RunReport
+	readJSONFile(t, reportPath, &report)
+	if report.Config.ResourceMeasurementsRequired || report.Measurements.Resources != nil ||
+		strings.Contains(readText(t, reportPath), `"resources"`) {
+		t.Fatalf("short unbounded report = %+v", report)
+	}
+}
+
+func TestCommandRequiresResourcesForPacedTenThousand(t *testing.T) {
+	directory := t.TempDir()
+	planPath := filepath.Join(directory, "plan.json")
+	if err := run([]string{
+		"plan", "--suite-id", "paced", "--event-counts", "10000", "--repetitions", "1", "--target-rate", "250",
+		"--output", planPath, "--runs-output", filepath.Join(directory, "runs.tsv"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rawDir := writeRawRun(t, directory, "paced-e10000-r1", 10_000, 250, false)
+	err := run([]string{
+		"run", "--plan", planPath, "--run-id", "paced-e10000-r1", "--raw-dir", rawDir,
+		"--duration-ms", "30000", "--output", filepath.Join(directory, "report.json"),
+	})
+	if err == nil || !strings.Contains(err.Error(), "resource-archiver-cpu.json") {
+		t.Fatalf("paced run missing resources error = %v", err)
+	}
+}
+
 func TestCommandRejectsMissingOrUnknownOperation(t *testing.T) {
 	if err := run(nil); err == nil {
 		t.Fatal("run() accepted no command")
@@ -118,6 +136,48 @@ func rangeVector(values ...float64) map[string]any {
 		samples[index] = []any{index + 1, number(value)}
 	}
 	return map[string]any{"status": "success", "data": map[string]any{"result": []any{map[string]any{"values": samples}}}}
+}
+
+func writeRawRun(t *testing.T, directory, runID string, events, targetRate int64, includeResources bool) string {
+	t.Helper()
+	rawDir := filepath.Join(directory, "runs", runID, "raw")
+	if err := os.MkdirAll(rawDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeText(t, filepath.Join(rawDir, "producer.jsonl"), fmt.Sprintf(
+		`{"msg":"load scenario completed","messages":%d,"target_rate_events_per_second":%d,"duration_milliseconds":1000,"throughput_events_per_second":600,"ack_p50_milliseconds":1,"ack_p95_milliseconds":2,"ack_p99_milliseconds":3}`+"\n",
+		events, targetRate,
+	))
+	writeJSON(t, filepath.Join(rawDir, "latency-before.json"), vector("le", map[string]float64{"1": 10, "2": 20, "+Inf": 20}))
+	writeJSON(t, filepath.Join(rawDir, "latency-after.json"), vector("le", map[string]float64{
+		"1": 10 + float64(events)/2, "2": 20 + float64(events), "+Inf": 20 + float64(events),
+	}))
+	writeJSON(t, filepath.Join(rawDir, "outcomes-before.json"), vector("outcome", map[string]float64{"created": 5, "duplicate": 2, "quarantined": 1, "error": 1}))
+	writeJSON(t, filepath.Join(rawDir, "outcomes-after.json"), vector("outcome", map[string]float64{"created": 5 + float64(events), "duplicate": 2, "quarantined": 1, "error": 1}))
+	samples := []benchmark.LagSample{
+		{ElapsedMilliseconds: 1, AvailableReplicas: 3, Lag: scale.LagReport{PartitionCount: 3, TotalLag: 3, MaxPartitionLag: 1, LagByPartition: map[int32]int64{0: 1, 1: 1, 2: 1}}},
+		{ElapsedMilliseconds: 2, AvailableReplicas: 3, ProducerComplete: true, Lag: scale.LagReport{PartitionCount: 3, LagByPartition: map[int32]int64{0: 0, 1: 0, 2: 0}}},
+	}
+	var sampleLines strings.Builder
+	for _, sample := range samples {
+		encoded, _ := json.Marshal(sample)
+		sampleLines.Write(encoded)
+		sampleLines.WriteByte('\n')
+	}
+	writeText(t, filepath.Join(rawDir, "samples.jsonl"), sampleLines.String())
+	perPartition := events / 3
+	writeJSON(t, filepath.Join(rawDir, "ordering.json"), scale.Report{
+		RunID: runID, Phase: "original", ExpectedRecords: events, ObservedRecords: events,
+		PartitionCount: 3, RecordsByPartition: map[int32]int64{0: perPartition, 1: perPartition, 2: events - 2*perPartition}, OrderingValid: true,
+	})
+	writeJSON(t, filepath.Join(rawDir, "archive.json"), map[string]any{"prefix": "privacy-safe", "count": events})
+	if includeResources {
+		for _, component := range []string{"archiver", "kafka", "object_store"} {
+			writeJSON(t, filepath.Join(rawDir, "resource-"+component+"-cpu.json"), rangeVector(0.25, 0.5))
+			writeJSON(t, filepath.Join(rawDir, "resource-"+component+"-memory.json"), rangeVector(1024, 2048))
+		}
+	}
+	return rawDir
 }
 
 func number(value float64) string {

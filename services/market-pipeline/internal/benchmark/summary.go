@@ -63,7 +63,8 @@ type ScenarioSummary struct {
 	MaximumTotalLag                   Distribution                    `json:"maximum_total_lag"`
 	ObservedLagDrainMilliseconds      Distribution                    `json:"observed_lag_drain_milliseconds"`
 	PostProducerDrainMilliseconds     Distribution                    `json:"post_producer_drain_milliseconds"`
-	Resources                         map[string]ResourceDistribution `json:"resources"`
+	ResourceMeasurementsRequired      bool                            `json:"resource_measurements_required"`
+	Resources                         map[string]ResourceDistribution `json:"resources,omitempty"`
 	AllAssertionsPassed               bool                            `json:"all_assertions_passed"`
 }
 
@@ -106,6 +107,12 @@ func BuildSummary(plan Plan, environment Environment, reports []RunReport) (Summ
 			"Host contention can affect local results; compare distributions from equivalent environments.",
 			producerScopeLimitation(plan.TargetRate),
 		},
+	}
+	for _, eventCount := range plan.EventCounts {
+		if !resourceMeasurementsRequired(eventCount, plan.TargetRate) {
+			summary.Limitations = append(summary.Limitations, resourceOmissionLimitation())
+			break
+		}
 	}
 	for _, eventCount := range plan.EventCounts {
 		group := make([]RunReport, 0, plan.Repetitions)
@@ -161,25 +168,19 @@ func summarizeScenario(eventCount, targetRate int64, reports []RunReport) Scenar
 		MaximumTotalLag:                   distribution(values(func(r RunReport) float64 { return float64(r.Measurements.Lag.MaximumTotalLag) })),
 		ObservedLagDrainMilliseconds:      distribution(values(func(r RunReport) float64 { return float64(r.Measurements.Lag.ObservedLagDrainMilliseconds) })),
 		PostProducerDrainMilliseconds:     distribution(values(func(r RunReport) float64 { return float64(r.Measurements.Lag.PostProducerDrainMilliseconds) })),
-		Resources:                         make(map[string]ResourceDistribution, len(requiredResourceComponents)),
+		ResourceMeasurementsRequired:      resourceMeasurementsRequired(eventCount, targetRate),
 		AllAssertionsPassed:               true,
 	}
-	for _, component := range requiredResourceComponents {
-		scenario.Resources[component] = ResourceDistribution{
-			PeakCPUCores:    distribution(values(func(r RunReport) float64 { return r.Measurements.Resources[component].PeakCPUCores })),
-			PeakMemoryBytes: distribution(values(func(r RunReport) float64 { return r.Measurements.Resources[component].PeakMemoryBytes })),
+	if scenario.ResourceMeasurementsRequired {
+		scenario.Resources = make(map[string]ResourceDistribution, len(requiredResourceComponents))
+		for _, component := range requiredResourceComponents {
+			scenario.Resources[component] = ResourceDistribution{
+				PeakCPUCores:    distribution(values(func(r RunReport) float64 { return r.Measurements.Resources[component].PeakCPUCores })),
+				PeakMemoryBytes: distribution(values(func(r RunReport) float64 { return r.Measurements.Resources[component].PeakMemoryBytes })),
+			}
 		}
 	}
 	return scenario
-}
-
-func validatePlan(plan Plan) error {
-	if plan.SchemaVersion != SchemaVersion || plan.EvidenceScope != EvidenceScope ||
-		!suiteIDPattern.MatchString(plan.SuiteID) || len(plan.EventCounts) == 0 ||
-		plan.Repetitions < 1 || len(plan.Runs) != len(plan.EventCounts)*plan.Repetitions {
-		return errors.New("benchmark plan is invalid")
-	}
-	return nil
 }
 
 func validateEnvironment(environment Environment) error {
@@ -207,8 +208,10 @@ func validateEnvironment(environment Environment) error {
 
 func validateRunForSummary(report RunReport, plan Plan, eventCount int64, repetition int) error {
 	expectedRunID := fmt.Sprintf("%s-e%d-r%d", plan.SuiteID, eventCount, repetition)
+	resourcesRequired := resourceMeasurementsRequired(eventCount, plan.TargetRate)
 	if report.SchemaVersion != SchemaVersion || report.EvidenceScope != EvidenceScope || report.SuiteID != plan.SuiteID || report.RunID != expectedRunID ||
 		report.Config.Events != eventCount || report.Config.Repetition != repetition || report.Config.TargetRate != plan.TargetRate ||
+		report.Config.ResourceMeasurementsRequired != resourcesRequired ||
 		report.Config.TopicPartitions < 1 || report.Config.ConsumerReplicas < 1 || report.Config.ArchiveDelayMillis != 0 ||
 		report.Measurements.Producer.Messages != eventCount || report.Measurements.Producer.TargetRateEventsPerSecond != plan.TargetRate ||
 		report.Measurements.DurableLatency.Observations != eventCount || !finitePositive(report.Measurements.Producer.ThroughputEventsPerSecond) ||
@@ -221,12 +224,19 @@ func validateRunForSummary(report RunReport, plan Plan, eventCount int64, repeti
 		!report.Assertions.NoQuarantineOrErrors {
 		return fmt.Errorf("run report %q is incompatible or failed its assertions", report.RunID)
 	}
-	for _, component := range requiredResourceComponents {
-		resource, exists := report.Measurements.Resources[component]
-		if !exists || !resource.CPUAvailable || !resource.MemoryAvailable ||
-			!finiteNonNegative(resource.PeakCPUCores) || !finiteNonNegative(resource.PeakMemoryBytes) {
-			return fmt.Errorf("run report %q has invalid %s resources", report.RunID, component)
+	if resourcesRequired {
+		for _, component := range requiredResourceComponents {
+			resource, exists := report.Measurements.Resources[component]
+			if !exists || !resource.CPUAvailable || !resource.MemoryAvailable ||
+				!finiteNonNegative(resource.PeakCPUCores) || !finiteNonNegative(resource.PeakMemoryBytes) {
+				return fmt.Errorf("run report %q has invalid %s resources", report.RunID, component)
+			}
 		}
+		if len(report.Measurements.Resources) != len(requiredResourceComponents) {
+			return fmt.Errorf("run report %q has an invalid resource component set", report.RunID)
+		}
+	} else if len(report.Measurements.Resources) != 0 {
+		return fmt.Errorf("run report %q must omit resources", report.RunID)
 	}
 	return nil
 }

@@ -34,7 +34,9 @@ The bounded capacity gate is one 10,000-event trial paced at 250 events per
 second so it contains the required CPU measurement window. It validates the
 benchmark path but is not a burst-capacity claim. The unbounded 10K/50K/100K
 five-run matrix is separate because shared-runner contention and merge-gate
-timeouts would make capacity comparisons misleading.
+timeouts would make capacity comparisons misleading. That manual matrix omits
+CPU/memory for unbounded 10K only and keeps strict resource evidence for
+50K/100K; PS2's paced 10K continues to exercise the strict path.
 
 ## PR review checklist
 

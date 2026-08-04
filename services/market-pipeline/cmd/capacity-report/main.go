@@ -60,7 +60,7 @@ func writePlan(arguments []string) error {
 	}
 	var rows bytes.Buffer
 	for _, run := range plan.Runs {
-		fmt.Fprintf(&rows, "%s\t%d\t%d\t%d\n", run.RunID, run.EventCount, run.Repetition, run.TargetRate)
+		fmt.Fprintf(&rows, "%s\t%d\t%d\t%d\t%t\n", run.RunID, run.EventCount, run.Repetition, run.TargetRate, run.ResourceMeasurementsRequired)
 	}
 	return writeAtomic(*runsOutput, rows.Bytes())
 }
@@ -131,21 +131,24 @@ func writeRun(arguments []string) error {
 	if err := readJSON(filepath.Join(*rawDir, "archive.json"), &archive); err != nil {
 		return err
 	}
-	resources := make(map[string]benchmark.ResourcePeak, 3)
-	for _, component := range []string{"archiver", "kafka", "object_store"} {
-		cpu, cpuAvailable, err := readRangePeak(filepath.Join(*rawDir, "resource-"+component+"-cpu.json"))
-		if err != nil {
-			return err
-		}
-		memory, memoryAvailable, err := readRangePeak(filepath.Join(*rawDir, "resource-"+component+"-memory.json"))
-		if err != nil {
-			return err
-		}
-		resources[component] = benchmark.ResourcePeak{
-			CPUAvailable:    cpuAvailable,
-			PeakCPUCores:    cpu,
-			MemoryAvailable: memoryAvailable,
-			PeakMemoryBytes: memory,
+	var resources map[string]benchmark.ResourcePeak
+	if spec.ResourceMeasurementsRequired {
+		resources = make(map[string]benchmark.ResourcePeak, 3)
+		for _, component := range []string{"archiver", "kafka", "object_store"} {
+			cpu, cpuAvailable, err := readRangePeak(filepath.Join(*rawDir, "resource-"+component+"-cpu.json"))
+			if err != nil {
+				return err
+			}
+			memory, memoryAvailable, err := readRangePeak(filepath.Join(*rawDir, "resource-"+component+"-memory.json"))
+			if err != nil {
+				return err
+			}
+			resources[component] = benchmark.ResourcePeak{
+				CPUAvailable:    cpuAvailable,
+				PeakCPUCores:    cpu,
+				MemoryAvailable: memoryAvailable,
+				PeakMemoryBytes: memory,
+			}
 		}
 	}
 	report, err := benchmark.BuildRunReport(benchmark.RunInput{

@@ -28,6 +28,13 @@ archive delay, and before/after Prometheus snapshots. Replay remains in the
 correctness profile because duplicate `HeadObject` work has a different cost
 than an original `HeadObject` plus `PutObject` effect.
 
+Evidence schema version 2 declares the resource policy before each trial. The
+unbounded 10,000-event scenario does not collect CPU or memory because it can
+complete before the required CPU window. Paced 10,000-event trials and all
+50,000- and 100,000-event trials require every resource series and fail closed
+when one is unavailable. Results never select resource evidence based on how
+long a repetition happened to run.
+
 The runner captures each partition's newest offset immediately before the
 producer and after durable completion. Ordering inspection reads only that
 exact offset window. It rejects a window whose total delta is not `N`, avoiding
@@ -43,7 +50,7 @@ history-growing verification work as earlier trials accumulate in the topic.
 | Durable p50/p95/p99 | Kafka record timestamp through successful S3-compatible archive or quarantine acknowledgement, calculated from trial-scoped histogram deltas |
 | Per-partition lag | Kafka newest offset minus the consumer group's committed offset, sampled directly for every partition |
 | Lag drain | First sampled positive lag through the first post-producer zero-lag sample |
-| CPU and memory | Peak sampled Prometheus twenty-five-second CPU rate and memory samples for the archivers, Kafka broker, and Garage, bounded by Job submission and durable completion |
+| CPU and memory | When required by the plan, peak sampled Prometheus twenty-five-second CPU rate and memory samples for the archivers, Kafka broker, and Garage, bounded by Job submission and durable completion |
 
 The report keeps producer acknowledgement throughput separate from durable
 end-to-end throughput. A broker acknowledgement does not prove that the
@@ -60,6 +67,12 @@ instead of inventing a value. Memory queries reject source samples timestamped
 before submission. Producer-container resources are not reported because a
 short producer Job can finish before its first scrape; its acknowledgement
 throughput and latency come from application telemetry.
+
+The unbounded 10,000-event scenario omits the `resources` object and records
+`resource_measurements_required: false`; missing measurements are never
+encoded as zero. It still reports producer and durable throughput, producer
+and durable latency, lag, ordering, loss, duplicates, outcomes, and archive
+correctness. Its summary limitation explains the narrower claim boundary.
 
 Instant counter and histogram queries also retry for at most thirty seconds,
 cap each Kubernetes API request at ten seconds, validate the required labeled
@@ -78,16 +91,17 @@ A trial is rejected unless all of the following hold:
 - Prometheus counter deltas contain exactly `N` creates and zero duplicates,
   quarantines, or errors.
 - The durable-latency histogram delta contains exactly `N` observations.
-- All three consumers remain available and measured CPU/memory series exist
-  for the consumers, Kafka, and Garage.
+- All three consumers remain available. When the plan requires resources,
+  measured CPU/memory series exist for the consumers, Kafka, and Garage.
 - No baseline Kubernetes pod is replaced and no container restart count
   changes during the measured suite.
-- The durable-completion window is long enough to contain a complete
-  twenty-five-second CPU rate sample.
+- When the plan requires resources, the durable-completion window is long
+  enough to contain a complete twenty-five-second CPU rate sample.
 
 The summary is written atomically only after every planned trial passes. It
 reports the median and p95 across all repetitions; it never selects the best
-trial.
+trial. CPU and memory distributions are present only for scenarios whose plan
+requires them.
 
 ## Privacy and artifact boundary
 
@@ -145,6 +159,9 @@ fixed 250 events per second against an already bootstrapped cluster and is the
 bounded PS2 merge gate. The controlled rate guarantees enough in-boundary time
 for the required twenty-five-second CPU sample; it is execution-path evidence,
 not burst-capacity evidence, and does not replace the unbounded repeated matrix.
+In the unbounded matrix, 10,000-event resource metrics are intentionally
+omitted while the 50,000- and 100,000-event scenarios retain strict resource
+measurement requirements.
 Direct runs must provide
 `CAPACITY_ALLOCATED_CPUS`, `CAPACITY_ALLOCATED_MEMORY_GIB`, and
 `CAPACITY_ALLOCATED_DISK_GIB`; the disposable Colima and CI workflows supply

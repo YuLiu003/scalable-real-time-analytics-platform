@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildSummaryAggregatesEveryRunWithoutBestRunSelection(t *testing.T) {
-	plan, err := NewPlan("cap", "1000,600", 2, 0)
+	plan, err := NewPlan("cap", "100000,50000", 2, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +26,8 @@ func TestBuildSummaryAggregatesEveryRunWithoutBestRunSelection(t *testing.T) {
 		t.Fatalf("BuildSummary() = %+v", summary)
 	}
 	first := summary.Scenarios[0]
-	if first.EventCount != 600 || first.Repetitions != 2 || !first.AllAssertionsPassed ||
+	if first.EventCount != 50_000 || first.Repetitions != 2 || !first.AllAssertionsPassed ||
+		!first.ResourceMeasurementsRequired ||
 		first.ProducerThroughputEventsPerSecond.Minimum != 10 ||
 		first.ProducerThroughputEventsPerSecond.Median != 15 ||
 		first.ProducerThroughputEventsPerSecond.P95 != 20 ||
@@ -47,12 +48,36 @@ func TestBuildSummaryAggregatesEveryRunWithoutBestRunSelection(t *testing.T) {
 	}
 }
 
+func TestBuildSummaryOmitsShortUnboundedResourceDistribution(t *testing.T) {
+	plan, err := NewPlan("burst", "10000", 2, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary, err := BuildSummary(plan, validEnvironment(), []RunReport{
+		summaryReport(plan.Runs[0], 1), summaryReport(plan.Runs[1], 2),
+	})
+	if err != nil || len(summary.Limitations) != 5 || summary.Limitations[4] != resourceOmissionLimitation() ||
+		len(summary.Scenarios) != 1 || summary.Scenarios[0].ResourceMeasurementsRequired ||
+		summary.Scenarios[0].Resources != nil {
+		t.Fatalf("BuildSummary(short unbounded) = %+v, %v", summary, err)
+	}
+
+	unexpected := summaryReport(plan.Runs[0], 1)
+	unexpected.Measurements.Resources = validResources(1)
+	if err := validateRunForSummary(unexpected, plan, 10_000, 1); err == nil || !strings.Contains(err.Error(), "omit resources") {
+		t.Fatalf("validateRunForSummary(unexpected resources) error = %v", err)
+	}
+}
+
 func TestBuildSummaryRejectsInvalidEvidence(t *testing.T) {
 	plan, err := NewPlan("cap", "600", 2, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	validReports := []RunReport{summaryReport(plan.Runs[0], 1), summaryReport(plan.Runs[1], 2)}
+	badRunPolicyPlan := plan
+	badRunPolicyPlan.Runs = append([]RunSpec(nil), plan.Runs...)
+	badRunPolicyPlan.Runs[0].ResourceMeasurementsRequired = false
 	tests := []struct {
 		name        string
 		plan        Plan
@@ -61,6 +86,7 @@ func TestBuildSummaryRejectsInvalidEvidence(t *testing.T) {
 		want        string
 	}{
 		{name: "plan", plan: Plan{}, environment: validEnvironment(), want: "plan"},
+		{name: "run policy", plan: badRunPolicyPlan, environment: validEnvironment(), reports: validReports, want: "plan"},
 		{name: "environment", plan: plan, environment: Environment{}, reports: validReports, want: "environment"},
 		{name: "count", plan: plan, environment: validEnvironment(), reports: validReports[:1], want: "received"},
 		{name: "duplicate", plan: plan, environment: validEnvironment(), reports: []RunReport{validReports[0], validReports[0]}, want: "duplicated"},
@@ -88,6 +114,11 @@ func TestBuildSummaryRejectsInvalidEvidence(t *testing.T) {
 	if err := validateRunForSummary(badResources, plan, 600, 1); err == nil || !strings.Contains(err.Error(), "archiver") {
 		t.Fatalf("validateRunForSummary(resources) error = %v", err)
 	}
+	extraResources := summaryReport(plan.Runs[0], 1)
+	extraResources.Measurements.Resources["extra"] = ResourcePeak{}
+	if err := validateRunForSummary(extraResources, plan, 600, 1); err == nil || !strings.Contains(err.Error(), "component set") {
+		t.Fatalf("validateRunForSummary(resource set) error = %v", err)
+	}
 }
 
 func TestEnvironmentValidationRejectsUnsafeOrMissingMetadata(t *testing.T) {
@@ -108,18 +139,16 @@ func TestEnvironmentValidationRejectsUnsafeOrMissingMetadata(t *testing.T) {
 }
 
 func summaryReport(spec RunSpec, factor float64) RunReport {
-	resources := map[string]ResourcePeak{}
-	for _, component := range requiredResourceComponents {
-		resources[component] = ResourcePeak{
-			CPUAvailable: true, PeakCPUCores: factor / 10,
-			MemoryAvailable: true, PeakMemoryBytes: factor * 512,
-		}
+	var resources map[string]ResourcePeak
+	if spec.ResourceMeasurementsRequired {
+		resources = validResources(factor)
 	}
 	return RunReport{
 		SchemaVersion: SchemaVersion, EvidenceScope: EvidenceScope, SuiteID: spec.SuiteID, RunID: spec.RunID,
 		Config: RunConfig{
 			Events: spec.EventCount, Repetition: spec.Repetition, TargetRate: spec.TargetRate,
 			TopicPartitions: 3, ConsumerReplicas: 3,
+			ResourceMeasurementsRequired: spec.ResourceMeasurementsRequired,
 		},
 		Measurements: RunMeasurements{
 			Producer: ProducerSummary{
@@ -146,6 +175,17 @@ func summaryReport(spec RunSpec, factor float64) RunReport {
 			OrderingValid: true, NoLoss: true, NoUnexpectedDuplicates: true, NoQuarantineOrErrors: true,
 		},
 	}
+}
+
+func validResources(factor float64) map[string]ResourcePeak {
+	resources := make(map[string]ResourcePeak, len(requiredResourceComponents))
+	for _, component := range requiredResourceComponents {
+		resources[component] = ResourcePeak{
+			CPUAvailable: true, PeakCPUCores: factor / 10,
+			MemoryAvailable: true, PeakMemoryBytes: factor * 512,
+		}
+	}
+	return resources
 }
 
 func validEnvironment() Environment {

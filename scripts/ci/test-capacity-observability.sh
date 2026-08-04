@@ -42,6 +42,16 @@ export FAKE_COUNT="${test_root}/count"
 # shellcheck disable=SC1091
 source "${repo_root}/platform/local/scripts/capacity-observability-lib.sh"
 
+capacity_duration_supports_window 100 125.001 25
+if capacity_duration_supports_window 100 125 25; then
+  printf 'equal resource window boundary was accepted\n' >&2
+  exit 1
+fi
+if capacity_duration_supports_window 100 124.999 25; then
+  printf 'short resource window boundary was accepted\n' >&2
+  exit 1
+fi
+
 output="${test_root}/vector.json"
 printf 'stale\n' >"${output}"
 export FAKE_MODE=retry

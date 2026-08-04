@@ -10,7 +10,7 @@ func TestNewPlanBuildsSortedDeterministicMatrix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plan.SchemaVersion != SchemaVersion || plan.EvidenceScope != EvidenceScope ||
+	if plan.SchemaVersion != 2 || plan.EvidenceScope != EvidenceScope ||
 		len(plan.Runs) != 4 || plan.EventCounts[0] != 10000 || plan.EventCounts[1] != 50000 {
 		t.Fatalf("NewPlan() = %+v", plan)
 	}
@@ -22,7 +22,7 @@ func TestNewPlanBuildsSortedDeterministicMatrix(t *testing.T) {
 	}
 	for index, want := range wantIDs {
 		if plan.Runs[index].SuiteID != plan.SuiteID || plan.Runs[index].RunID != want ||
-			plan.Runs[index].TargetRate != 1000 {
+			plan.Runs[index].TargetRate != 1000 || !plan.Runs[index].ResourceMeasurementsRequired {
 			t.Fatalf("run %d = %+v", index, plan.Runs[index])
 		}
 	}
@@ -32,6 +32,22 @@ func TestNewPlanBuildsSortedDeterministicMatrix(t *testing.T) {
 	}
 	if _, err := plan.Run("missing"); err == nil {
 		t.Fatal("Run() accepted an unknown ID")
+	}
+	oldPlan := plan
+	oldPlan.SchemaVersion = 1
+	if _, err := oldPlan.Run(wantIDs[0]); err == nil || !strings.Contains(err.Error(), "plan") {
+		t.Fatalf("Run(old schema) error = %v", err)
+	}
+	unbounded, err := NewPlan("burst", "10000,50000", 1, 0)
+	if err != nil || unbounded.Runs[0].ResourceMeasurementsRequired ||
+		!unbounded.Runs[1].ResourceMeasurementsRequired {
+		t.Fatalf("unbounded resource policies = %+v, %v", unbounded.Runs, err)
+	}
+	mismatched := unbounded
+	mismatched.Runs = append([]RunSpec(nil), unbounded.Runs...)
+	mismatched.Runs[0].ResourceMeasurementsRequired = true
+	if _, err := mismatched.Run(mismatched.Runs[0].RunID); err == nil || !strings.Contains(err.Error(), "policy") {
+		t.Fatalf("Run(mismatched policy) error = %v", err)
 	}
 }
 

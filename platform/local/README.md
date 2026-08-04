@@ -182,6 +182,11 @@ runtime:
 make -C platform/local e2e-capacity-ephemeral
 ```
 
+The plan omits CPU/memory only for the short unbounded 10K scenario. Its
+throughput, latency, lag, ordering, and exact-count evidence remains required;
+50K/100K resource series remain mandatory. The paced PS2 10K smoke also keeps
+strict resource checks.
+
 The `investment-platform-capacity-ephemeral` profile is never reused. The
 workflow verifies autoscaling/recovery once, measures the zero-delay capacity
 profile, preserves ignored reports under `artifacts/kafka-capacity/`, and then
@@ -341,6 +346,9 @@ configured repeated matrix, and restores the normal KEDA bounds afterward.
 second so its twenty-five-second CPU window is deterministic. Prefer
 `e2e-capacity-ephemeral` for manual full runs so hundreds of thousands of Kafka
 records and archive objects cannot remain on the workstation.
+The full unbounded matrix intentionally omits 10K CPU/memory rather than
+recording unavailable series as zero; it requires those measurements for 50K
+and 100K.
 When invoking either verification target directly, set
 `CAPACITY_ALLOCATED_CPUS`, `CAPACITY_ALLOCATED_MEMORY_GIB`, and
 `CAPACITY_ALLOCATED_DISK_GIB` to the isolated runtime's actual allocation. The
