@@ -28,6 +28,17 @@ class FakeStore:
         self.required_key_segment = required_key_segment
         return bronze()
 
+    def list_latest_source_objects(
+        self,
+        prefix: str,
+        required_key_segment: str,
+        maximum_date_partitions: int,
+    ):
+        self.prefix = prefix
+        self.required_key_segment = required_key_segment
+        self.maximum_date_partitions = maximum_date_partitions
+        return bronze()
+
     def get(self, key: str) -> bytes:
         return self.objects[key]
 
@@ -65,16 +76,89 @@ class BuilderCommandTests(unittest.TestCase):
                 builder.main()
         result = json.loads(output.getvalue())
         self.assertEqual(result["event"], "portfolio analytics build complete")
+        self.assertEqual(result["result_sha256"], products["result_sha256"])
         self.assertEqual(store.prefix, "bronze/custom/")
         self.assertEqual(store.required_key_segment, "/source=synthetic/")
         self.assertEqual(store.immutable_writes, [products["silver_key"], products["gold_key"]])
         self.assertEqual(store.latest_writes, [products["latest_key"]])
 
     def test_main_rejects_invalid_bronze_source(self) -> None:
-        with patch.dict("os.environ", {"BRONZE_SOURCE": "PRIVATE/SOURCE"}, clear=True), self.assertRaisesRegex(
-            ValueError, "BRONZE_SOURCE"
+        with (
+            patch.dict("os.environ", {"BRONZE_SOURCE": "PRIVATE/SOURCE"}, clear=True),
+            self.assertRaisesRegex(ValueError, "BRONZE_SOURCE"),
+        ):
+            builder._build(False)
+
+    def test_private_mode_reports_only_aggregate_outcomes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            holdings = root / "holdings.json"
+            holdings.write_bytes(HOLDINGS)
+            products_dir = root / "products"
+            products_dir.mkdir()
+            products = build_products(bronze(), HOLDINGS, products_dir)
+            store = FakeStore()
+            output = io.StringIO()
+            environment = {
+                "ANALYTICS_PRIVATE_MODE": "true",
+                "HOLDINGS_FILE": str(holdings),
+                "WORK_ROOT": str(root),
+            }
+            with (
+                patch.dict("os.environ", environment, clear=True),
+                patch.object(builder.S3Settings, "from_environment", return_value=Mock()),
+                patch.object(builder, "ObjectStore", return_value=store),
+                patch.object(builder, "build_products", return_value=products),
+                redirect_stdout(output),
+            ):
+                builder.main()
+        self.assertEqual(
+            json.loads(output.getvalue()),
+            {
+                "event": "portfolio analytics build complete",
+                "gold_write": "created",
+                "input_objects": 4,
+                "positions": 3,
+                "silver_write": "created",
+            },
+        )
+        self.assertEqual(store.maximum_date_partitions, 2)
+        self.assertNotIn("result_sha256", json.loads(output.getvalue()))
+
+    def test_private_mode_redacts_every_exception(self) -> None:
+        private_value = "PRIVATE/SOURCE"
+        for environment in [
+            {"ANALYTICS_PRIVATE_MODE": "true", "BRONZE_SOURCE": private_value},
+            {"BRONZE_SOURCE": "alpaca-iex"},
+            {"ANALYTICS_PRIVATE_MODE": "typo", "BRONZE_SOURCE": "alpaca-iex"},
+            {"ANALYTICS_PRIVATE_MODE": "typo"},
+        ]:
+            with self.subTest(environment=environment):
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                with (
+                    patch.dict("os.environ", environment, clear=True),
+                    redirect_stdout(stdout),
+                    redirect_stderr(stderr),
+                    self.assertRaisesRegex(SystemExit, "1"),
+                ):
+                    builder.main()
+                self.assertEqual(stdout.getvalue(), "")
+                self.assertEqual(stderr.getvalue(), '{"event":"portfolio analytics build failed"}\n')
+                self.assertNotIn(private_value, stderr.getvalue())
+
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch.object(builder, "_build", side_effect=ValueError("public failure")),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+            self.assertRaisesRegex(SystemExit, "1"),
         ):
             builder.main()
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertEqual(stderr.getvalue(), '{"event":"portfolio analytics build failed"}\n')
 
 
 class QueryCommandTests(unittest.TestCase):

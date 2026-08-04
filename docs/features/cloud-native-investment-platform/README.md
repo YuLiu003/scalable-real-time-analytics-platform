@@ -6,7 +6,7 @@
 | Product goal | Transparent long-term portfolio analysis and contribution planning |
 | Engineering goal | Observable and recoverable Kubernetes and event-driven system |
 | Cost boundary | Required work runs locally or in included CI without a paid cloud apply |
-| Public instruments | Three synthetic asset fixtures and one synthetic benchmark fixture; private watchlists are runtime-only |
+| Committed instruments | Fictional demo and private-acceptance fixtures only; real watchlists and holdings are runtime-only |
 
 ## Why this project exists
 
@@ -37,7 +37,8 @@ synthetic market producer
 
 private market producer
     -> the same Kafka and bronze contracts
-    -> private records stop before analytics pending authenticated holdings
+    -> runtime-only private holdings
+    -> separate analytics job and bearer-protected dashboard
 
 non-personal load producer
     -> isolated Kafka scale topic
@@ -64,6 +65,8 @@ design. Provider-specific control planes remain separate:
 - Strict versioned market-event envelopes and deterministic fixtures.
 - An opt-in Alpaca stock/ETF bar adapter with runtime-only credentials and
   watchlist, deterministic backfill, and bounded reconnect recovery.
+- A single-user private stock/ETF allocation workflow with strict external
+  inputs, separate Kubernetes workloads, periodic analytics, and protected API.
 - A strict offline JSON/CSV cash-flow importer that keeps deposits and
   withdrawals separate from return.
 - Synthetic producer cases for normal delivery and ambiguous acknowledgements.
@@ -79,7 +82,7 @@ design. Provider-specific control planes remain separate:
   scale evidence.
 - A separate fixed-worker capacity profile with trial-scoped latency/counter
   deltas, direct per-partition lag, resource peaks, and repeated-run summaries;
-  a clean full-matrix evidence run remains pending.
+  the roadmap records the completed local 15-trial matrix and its boundaries.
 - AWS EKS, network, identity, encryption, registry, storage, observability, and
   budget contracts validated without an account apply.
 - PS0, PS1, and PS2 gates shared by local development, GitHub, and Jenkins.
@@ -120,8 +123,8 @@ cannot fit the existing one.
 - GCP and Azure are comparison milestones after the AWS learning path.
 - Provider credentials and user-selected instruments remain runtime-only;
   synthetic traffic remains the capacity source. The Alpaca adapter does not
-  supply mutual-fund NAVs or direct index levels, and the default analytics Job
-  does not consume private feed records.
+  supply mutual-fund NAVs or direct index levels. Private analytics supports
+  stock/ETF market-price holdings only and is isolated from the public demo Job.
 
 ## Roadmap and evidence
 
@@ -133,6 +136,7 @@ cannot fit the existing one.
 - [Kafka scale lab contract](kafka-scale-lab-contract.md)
 - [Kafka capacity benchmark contract](kafka-capacity-benchmark-contract.md)
 - [Private market feed contract](private-market-feed-contract.md)
+- [Private portfolio workflow](private-portfolio-workflow.md)
 - [Personal cash-flow ledger contract](personal-portfolio-ledger-contract.md)
 - [AWS streaming decision](aws-streaming-decision.md)
 - [Free-first lab strategy](free-first-lab-strategy.md)

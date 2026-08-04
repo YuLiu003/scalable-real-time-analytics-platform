@@ -20,6 +20,8 @@ observability, and cloud-platform engineering.
   trials and rejects incomplete, duplicated, reordered, or unmeasured runs.
 - An opt-in Alpaca WebSocket adapter uses runtime-only credentials and
   watchlists, historical gap backfill, and stable Kafka event identities.
+- A private local workflow joins that feed to runtime-only stock/ETF holdings,
+  five-minute analytics refreshes, and a bearer-protected dashboard.
 - An offline JSON/CSV importer creates a private normalized cash-flow ledger
   without confusing deposits or withdrawals with return.
 - Garage provides the local S3-compatible object-storage contract.
@@ -44,15 +46,11 @@ operates a continuously available production service or a live AWS account.
 Synthetic producer -----------\
                                > Strimzi Kafka -> raw archiver -> Garage / S3 bronze
 Private Alpaca adapter -------/                              |
-                                                             | synthetic source + demo holdings
-                                                             v
-                                                  Python + DuckDB analytics
+                                                             +-> synthetic source + demo holdings
+                                                             |       -> public analytics and API
                                                              |
-                                                             v
-                                                  Parquet portfolio products
-                                                             |
-                                                             v
-                                                Go portfolio API + dashboard
+                                                             +-> private source + runtime-only holdings
+                                                                     -> private analytics and protected API
 
 Synthetic scale producer --> isolated Kafka scale topic
                                       |
@@ -64,8 +62,9 @@ Synthetic scale producer --> isolated Kafka scale topic
 ```
 
 The default analytics Job intentionally selects only the committed synthetic
-source and demo holdings. Private feed records stop at the bronze boundary
-until an authenticated private-holdings and retention contract exists.
+source and demo holdings. The opt-in private workflow uses separate Secrets,
+analytics/API workloads, and a fixed private tenant; it never publishes a real
+watchlist or holding to Git or CI artifacts.
 
 The acceptance path injects ambiguous producer acknowledgements, consumer
 crashes, duplicate delivery, replay, dependency loss, and readiness failures.
@@ -75,8 +74,8 @@ from silently changing a result.
 Capacity evidence is deliberately separate. It removes the artificial archive
 delay, fixes three consumers to the three-partition concurrency ceiling, and
 reports broker-acknowledgement throughput separately from durable
-Kafka-to-object-storage throughput. The repository does not contain a committed
-full-matrix result yet, so no throughput number is claimed here.
+Kafka-to-object-storage throughput. The roadmap preserves the committed
+aggregate result and its exact local hardware and topology boundary.
 
 ## Repository layout
 
@@ -142,10 +141,11 @@ deleted. Stop any other running Colima profile first; the benchmark checks this
 at startup and never mutates the other profile. See the capacity contract before
 presenting any result.
 
-For private product inputs, follow the
+For a private live stock/ETF allocation and projection dashboard, follow the
+[`private portfolio workflow`](docs/features/cloud-native-investment-platform/private-portfolio-workflow.md).
+The separate
 [`cash-flow ledger contract`](docs/features/cloud-native-investment-platform/personal-portfolio-ledger-contract.md)
-or the runbook's
-[`optional live-feed procedure`](platform/local/README.md#optional-private-live-market-feed).
+remains an offline input for future transaction-grounded performance work.
 
 Run the production-like Jenkins path:
 
@@ -178,6 +178,7 @@ operations. A paid apply is outside the required definition of done.
 - [Kafka scale lab](docs/features/cloud-native-investment-platform/kafka-scale-lab-contract.md)
 - [Kafka capacity benchmark](docs/features/cloud-native-investment-platform/kafka-capacity-benchmark-contract.md)
 - [Private market feed](docs/features/cloud-native-investment-platform/private-market-feed-contract.md)
+- [Private portfolio workflow](docs/features/cloud-native-investment-platform/private-portfolio-workflow.md)
 - [Personal cash-flow ledger](docs/features/cloud-native-investment-platform/personal-portfolio-ledger-contract.md)
 - [Local Kubernetes runbook](platform/local/README.md)
 - [Jenkins platform](platform/jenkins/README.md)

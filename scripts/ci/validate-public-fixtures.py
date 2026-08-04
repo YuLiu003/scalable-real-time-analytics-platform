@@ -11,6 +11,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = REPO_ROOT / "contracts" / "fixtures" / "demo-fund-portfolio.v2.json"
+PRIVATE_ACCEPTANCE_FIXTURE = (
+    REPO_ROOT / "contracts" / "fixtures" / "demo-private-portfolio.v2.json"
+)
 SCALE_MANIFEST = (
     REPO_ROOT
     / "platform"
@@ -36,6 +39,7 @@ PRIVATE_FEED_MANIFEST = (
     / "market-feed.yaml"
 )
 DEMO_ID = re.compile(r"^DEMO-(?:ASSET|BENCH)-[A-Z]$")
+PRIVATE_ACCEPTANCE_ID = re.compile(r"^DEMO-LIVE-[A-C]$")
 LOAD_ID = re.compile(r"^LOAD-[A-Z]$")
 DEMO_TRANSACTION_ID = re.compile(r"^demo-cash-[0-9]{3}$")
 LEDGER_FIELDS = {
@@ -63,6 +67,28 @@ def main() -> None:
             raise SystemExit(
                 "committed portfolio instruments and display names must be fictional"
             )
+
+    private_fixture = json.loads(PRIVATE_ACCEPTANCE_FIXTURE.read_text(encoding="utf-8"))
+    private_instruments = [
+        (position["instrument"], position["display_name"])
+        for position in private_fixture["positions"]
+    ]
+    private_instruments.append(
+        (
+            private_fixture["benchmark"]["instrument"],
+            private_fixture["benchmark"]["display_name"],
+        )
+    )
+    if (
+        private_fixture["portfolio_id"] != "private"
+        or not private_fixture["display_name"].startswith("Synthetic ")
+    ):
+        raise SystemExit("private acceptance portfolio must be explicitly synthetic")
+    for instrument, display_name in private_instruments:
+        if not PRIVATE_ACCEPTANCE_ID.fullmatch(instrument) or not display_name.startswith(
+            "Synthetic "
+        ):
+            raise SystemExit("private acceptance instruments must be fictional DEMO-LIVE-* values")
 
     manifest = SCALE_MANIFEST.read_text(encoding="utf-8")
     match = re.search(r"name: LOAD_INSTRUMENTS\s+value: ([A-Z0-9,-]+)", manifest)

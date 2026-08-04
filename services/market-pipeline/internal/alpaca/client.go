@@ -93,8 +93,12 @@ func (client StreamClient) Connect(ctx context.Context, watchlist []string) (Ses
 	if message.Type != "subscription" || !sameStrings(message.Bars, watchlist) || !sameStrings(message.Updated, watchlist) {
 		return nil, errors.New("market-data provider confirmed an unexpected subscription")
 	}
+	selected := make(map[string]struct{}, len(watchlist))
+	for _, instrument := range watchlist {
+		selected[instrument] = struct{}{}
+	}
 	closeOnError = false
-	return &websocketSession{connection: connection}, nil
+	return &websocketSession{connection: connection, selected: selected}, nil
 }
 
 func expectControl(ctx context.Context, connection *websocket.Conn, messageType, messageText string) error {
@@ -130,6 +134,7 @@ func sameStrings(left, right []string) bool {
 
 type websocketSession struct {
 	connection *websocket.Conn
+	selected   map[string]struct{}
 }
 
 func (session *websocketSession) Read(ctx context.Context) ([]Bar, error) {
@@ -151,6 +156,9 @@ func (session *websocketSession) Read(ctx context.Context) ([]Bar, error) {
 			bar, err := message.bar()
 			if err != nil {
 				return nil, err
+			}
+			if _, ok := session.selected[bar.Instrument]; !ok {
+				return nil, errors.New("market-data provider returned an unrequested instrument")
 			}
 			bars = append(bars, bar)
 		case "error":

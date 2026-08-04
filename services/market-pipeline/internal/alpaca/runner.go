@@ -48,6 +48,12 @@ func (runner *Runner) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	cursors, pruned := selectedCursors(cursors, runner.Config.Watchlist)
+	if pruned {
+		if err := runner.Checkpoints.Save(cursors); err != nil {
+			return err
+		}
+	}
 	backoff := runner.Config.ReconnectMinimum
 	for {
 		err := runner.runSession(ctx, cursors)
@@ -71,6 +77,16 @@ func (runner *Runner) Run(ctx context.Context) error {
 			backoff = runner.Config.ReconnectMaximum
 		}
 	}
+}
+
+func selectedCursors(cursors map[string]Cursor, watchlist []string) (map[string]Cursor, bool) {
+	selected := make(map[string]Cursor, len(watchlist))
+	for _, instrument := range watchlist {
+		if cursor, ok := cursors[instrument]; ok {
+			selected[instrument] = cursor
+		}
+	}
+	return selected, len(selected) != len(cursors)
 }
 
 func (runner *Runner) runSession(ctx context.Context, cursors map[string]Cursor) error {

@@ -30,10 +30,16 @@ V2-5B adds a fixed-worker, zero-delay capacity profile with repeated trial
 aggregation. Its metric and claim boundaries are defined in the
 [`Kafka capacity benchmark contract`](../../docs/features/cloud-native-investment-platform/kafka-capacity-benchmark-contract.md).
 
-V2-5A adds an opt-in private Alpaca stock/ETF feed. It is excluded from normal
-bootstrap and CI because credentials and the user-selected watchlist must stay
-runtime-only. Its recovery and privacy boundaries are defined in the
+V2-5A adds an opt-in private Alpaca stock/ETF feed. The real adapter is excluded
+from credential-free CI because credentials and the user-selected watchlist
+must stay runtime-only; PS2 uses fictional records through the same contract.
+Its recovery and privacy boundaries are defined in the
 [`private market feed contract`](../../docs/features/cloud-native-investment-platform/private-market-feed-contract.md).
+
+V2-5C joins that feed to runtime-only stock/ETF holdings, a separate analytics
+Job, and a bearer-protected local dashboard. Its supported inputs and cleanup
+boundary are defined in the
+[`private portfolio workflow`](../../docs/features/cloud-native-investment-platform/private-portfolio-workflow.md).
 
 The current baseline replaces the retired Minikube, raw-manifest, and incomplete
 Helm paths. Supported local workflows use kind through the targets documented
@@ -260,44 +266,39 @@ This local topology has one Kafka broker and one Garage replica. It tests API,
 identity, persistence, and failure boundaries but does not claim broker or
 object-store availability.
 
-## Optional private live market feed
+## Private stock/ETF portfolio
 
-First run `bootstrap-data-path` in persistent development mode. Create a mode-
-`0600` environment file outside this repository containing the four required
-runtime values:
-
-```text
-APCA_API_KEY_ID=<private value>
-APCA_API_SECRET_KEY=<private value>
-MARKET_WATCHLIST=<private comma-separated stock/ETF symbols>
-MARKET_TENANT_ID=private
-```
-
-Create the Secret without placing values in shell history, then apply the
-standalone overlay:
+Create the three absolute, mode-`0600` files defined in the
+[`private portfolio workflow`](../../docs/features/cloud-native-investment-platform/private-portfolio-workflow.md),
+then start the complete persistent path with one command:
 
 ```bash
-kubectl --context kind-investment-platform --namespace analytics-apps \
-  create secret generic alpaca-market-feed \
-  --from-env-file=/absolute/path/outside/repository/alpaca-market-feed.env \
-  --dry-run=client --output=yaml \
-  | kubectl --context kind-investment-platform apply -f -
-
-kubectl --context kind-investment-platform apply \
-  -k platform/gitops/apps/private/market-feed
-kubectl --context kind-investment-platform --namespace analytics-apps \
-  wait kafkauser/alpaca-market-producer --for=condition=Ready --timeout=5m
-kubectl --context kind-investment-platform --namespace analytics-apps \
-  rollout status deployment/alpaca-market-feed --timeout=5m
+PRIVATE_FEED_ENV_FILE=/absolute/path/outside/repository/alpaca-market-feed.env \
+PRIVATE_HOLDINGS_FILE=/absolute/path/outside/repository/portfolio.json \
+PRIVATE_ACCESS_TOKEN_FILE=/absolute/path/outside/repository/portfolio.token \
+  make -C platform/local bootstrap-private-portfolio
 ```
 
-The adapter becomes ready only after provider authentication, exact
-subscription acknowledgement, and historical gap backfill. Its logs and
-metrics omit the watchlist, tenant, event IDs, and credentials. Kafka, Garage,
-and the checkpoint PVC contain private workload data. Scale the Deployment to
-zero when not using it. Deleting the standalone kustomization also deletes its
-PVC and checkpoint, so do that only when the exact private data target has been
-reviewed.
+The command validates inputs before creating Secrets, starts the provider
+adapter, waits for the archive, publishes a private allocation, and enables a
+five-minute refresh. Open the protected dashboard through loopback only:
+
+```bash
+make -C platform/local private-portfolio-dashboard
+```
+
+Stop the private workloads and remove their Secrets and checkpoint with:
+
+```bash
+CONFIRM_DESTROY_PRIVATE_PORTFOLIO=private-portfolio \
+  make -C platform/local destroy-private-portfolio
+```
+
+Kafka and Garage retain shared market data unless the separate all-data purge
+confirmation in the workflow is supplied. The live adapter becomes ready only
+after provider authentication, exact subscription acknowledgement, and
+historical gap backfill. A credential-free fictional PS2 acceptance does not
+prove a live provider run.
 
 ## Kafka scale, replay, and recovery
 

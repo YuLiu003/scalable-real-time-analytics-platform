@@ -42,6 +42,43 @@ func TestRunnerRunReturnsCheckpointLoadError(t *testing.T) {
 	}
 }
 
+func TestRunnerRunPrunesInactiveCheckpointCursors(t *testing.T) {
+	now := testHistoryStart()
+	t.Run("persists selected cursors", func(t *testing.T) {
+		checkpoints := &fakeCheckpoints{load: map[string]Cursor{
+			"LOAD-A": {Timestamp: now},
+			"OLD-A":  {Timestamp: now.Add(-time.Hour)},
+		}}
+		runner := newTestRunner()
+		runner.Checkpoints = checkpoints
+		runner.Stream = &fakeStream{connectErr: providerError(401)}
+		if err := runner.Run(context.Background()); err == nil {
+			t.Fatal("Run() accepted a permanent provider failure")
+		}
+		if len(checkpoints.saves) != 1 || len(checkpoints.saves[0]) != 1 ||
+			!checkpoints.saves[0]["LOAD-A"].Timestamp.Equal(now) {
+			t.Fatalf("pruned checkpoint saves = %#v", checkpoints.saves)
+		}
+	})
+
+	t.Run("returns pruning save failure", func(t *testing.T) {
+		want := errors.New("checkpoint save failure")
+		stream := &fakeStream{}
+		runner := newTestRunner()
+		runner.Stream = stream
+		runner.Checkpoints = &fakeCheckpoints{
+			load:    map[string]Cursor{"OLD-A": {Timestamp: now}},
+			saveErr: want,
+		}
+		if err := runner.Run(context.Background()); !errors.Is(err, want) {
+			t.Fatalf("Run() error = %v", err)
+		}
+		if stream.connectCalls != 0 {
+			t.Fatalf("stream connected %d times before checkpoint pruning", stream.connectCalls)
+		}
+	})
+}
+
 func TestRunnerRunStopsOnPermanentProviderError(t *testing.T) {
 	runner := newTestRunner()
 	runner.Stream = &fakeStream{connectErr: providerError(401)}

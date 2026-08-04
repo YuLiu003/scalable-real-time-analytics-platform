@@ -59,7 +59,7 @@ assert_go_coverage \
   "${MARKET_DIR}" \
   "${TMPDIR:-/tmp}/market-quality-gocache" \
   "${COVERAGE_DIR}/market-domain.out" \
-  ./internal/alpaca ./internal/archivemetrics ./internal/benchmark ./internal/event ./internal/scale ./internal/synthetic
+  ./internal/alpaca ./internal/archivemetrics ./internal/benchmark ./internal/event ./internal/kafkaclient ./internal/scale ./internal/synthetic
 
 printf 'Building and race-testing every Go package in the feature services...\n'
 (
@@ -164,5 +164,7 @@ if ! grep -Fqx '  if [[ "${resource_measurements_required}" == "true" ]]; then' 
   exit 1
 fi
 kubectl kustomize "${REPO_ROOT}/platform/gitops/apps/private/market-feed" >/dev/null
+kubectl kustomize "${REPO_ROOT}/platform/gitops/apps/private/portfolio-analytics" >/dev/null
+kubectl kustomize "${REPO_ROOT}/platform/gitops/apps/private/portfolio-analytics-acceptance" >/dev/null
 
 printf 'Portfolio feature quality gates passed with 100%% measured application coverage.\n'

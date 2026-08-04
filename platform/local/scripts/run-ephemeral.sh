@@ -141,6 +141,7 @@ run_complete_platform() {
   CONFIRM_DESTROY_ANALYTICS=portfolio-analytics \
     make -C "${LOCAL_DIR}" destroy-analytics || return
   make -C "${LOCAL_DIR}" bootstrap-analytics || return
+  make -C "${LOCAL_DIR}" verify-private-portfolio || return
 }
 
 run_capacity_platform() {

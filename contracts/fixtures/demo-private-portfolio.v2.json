@@ -1,0 +1,28 @@
+{
+  "schema_version": 2,
+  "portfolio_id": "private",
+  "display_name": "Synthetic Private-mode Portfolio",
+  "base_currency": "USD",
+  "positions": [
+    {
+      "instrument": "DEMO-LIVE-A",
+      "display_name": "Synthetic Live-mode Stock",
+      "asset_type": "stock",
+      "valuation_type": "market_price",
+      "quantity": "1.00000000"
+    },
+    {
+      "instrument": "DEMO-LIVE-B",
+      "display_name": "Synthetic Live-mode ETF",
+      "asset_type": "etf",
+      "valuation_type": "market_price",
+      "quantity": "2.00000000"
+    }
+  ],
+  "benchmark": {
+    "instrument": "DEMO-LIVE-C",
+    "display_name": "Synthetic Live-mode ETF Benchmark",
+    "asset_type": "etf",
+    "valuation_type": "market_price"
+  }
+}

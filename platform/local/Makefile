@@ -5,6 +5,7 @@ PORTFOLIO_DASHBOARD_PORT ?= 8080
 	build-data-path bootstrap-data-path verify-data-path diagnose-data-path destroy-data-path \
 	verify-scale-lab verify-capacity-benchmark verify-capacity-smoke \
 	build-analytics bootstrap-analytics verify-analytics diagnose-analytics destroy-analytics portfolio-dashboard \
+	bootstrap-private-portfolio verify-private-portfolio destroy-private-portfolio private-portfolio-dashboard \
 	quality
 
 quality:
@@ -84,3 +85,16 @@ destroy-analytics:
 portfolio-dashboard:
 	kubectl --context kind-investment-platform --namespace analytics-apps \
 		port-forward service/portfolio-api $(PORTFOLIO_DASHBOARD_PORT):8080
+
+bootstrap-private-portfolio:
+	./scripts/bootstrap-private-portfolio.sh
+
+verify-private-portfolio:
+	./scripts/verify-private-portfolio.sh
+
+destroy-private-portfolio:
+	./scripts/destroy-private-portfolio.sh
+
+private-portfolio-dashboard:
+	kubectl --context kind-investment-platform --namespace analytics-apps \
+		port-forward service/private-portfolio-api $(PORTFOLIO_DASHBOARD_PORT):8080

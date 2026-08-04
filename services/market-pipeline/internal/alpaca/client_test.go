@@ -223,6 +223,9 @@ func TestWebsocketSessionReadValidationDisconnectAndCancellation(t *testing.T) {
 		{name: "invalid bar", write: func(ctx context.Context, connection *websocket.Conn) {
 			writeTestWSJSON(t, ctx, connection, []map[string]any{{"T": "b", "S": "LOAD-A", "c": 0, "n": 1, "t": "2026-08-03T12:00:00Z"}})
 		}, want: "invalid positive close"},
+		{name: "unrequested instrument", write: func(ctx context.Context, connection *websocket.Conn) {
+			writeTestWSJSON(t, ctx, connection, []map[string]any{{"T": "b", "S": "LOAD-B", "c": 1, "n": 1, "t": "2026-08-03T12:00:00Z"}})
+		}, want: "unrequested instrument"},
 		{name: "unsupported", write: func(ctx context.Context, connection *websocket.Conn) {
 			writeTestWSJSON(t, ctx, connection, []map[string]any{{"T": "private"}})
 		}, want: "unsupported message type"},
@@ -236,7 +239,7 @@ func TestWebsocketSessionReadValidationDisconnectAndCancellation(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			session := &websocketSession{connection: connection}
+			session := &websocketSession{connection: connection, selected: map[string]struct{}{"LOAD-A": {}}}
 			_, err = session.Read(context.Background())
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("Read() error = %v, want substring %q", err, test.want)
@@ -253,7 +256,7 @@ func TestWebsocketSessionReadValidationDisconnectAndCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	session := &websocketSession{connection: connection}
+	session := &websocketSession{connection: connection, selected: map[string]struct{}{"LOAD-A": {}}}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err = session.Read(ctx)

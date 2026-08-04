@@ -21,6 +21,8 @@ kubectl kustomize "${repo_root}/platform/gitops/platform/local/market-data-servi
 kubectl kustomize "${repo_root}/platform/gitops/apps/local/market-pipeline" >/dev/null
 kubectl kustomize "${repo_root}/platform/gitops/apps/private/market-feed" >/dev/null
 kubectl kustomize "${repo_root}/platform/gitops/apps/local/portfolio-analytics" >/dev/null
+kubectl kustomize "${repo_root}/platform/gitops/apps/private/portfolio-analytics" >/dev/null
+kubectl kustomize "${repo_root}/platform/gitops/apps/private/portfolio-analytics-acceptance" >/dev/null
 
 if [[ "$(uname -s)" == "Darwin" && "${CI:-false}" != "true" ]]; then
   EPHEMERAL_CAPACITY_SMOKE=true make -C "${local_dir}" e2e-ephemeral
@@ -76,5 +78,6 @@ CAPACITY_ALLOCATED_DISK_GIB="${docker_disk_gib}" \
   make -C "${local_dir}" verify-capacity-smoke
 CONFIRM_DESTROY_ANALYTICS=portfolio-analytics make -C "${local_dir}" destroy-analytics
 make -C "${local_dir}" bootstrap-analytics
+make -C "${local_dir}" verify-private-portfolio
 
 printf 'PS2 integration, Kubernetes, and infrastructure checks passed.\n'

@@ -23,6 +23,11 @@ Security review requirements for every change are defined in the
   bounded budgets, and no static access keys.
 - Failure diagnostics exclude Kubernetes Secret objects, secret values, and
   archived portfolio contents.
+- The single-user private portfolio workflow validates owner-only inputs
+  outside Git, mounts them as separate runtime Secrets, redacts analytics logs,
+  and protects allocation responses with an exact bearer token and `no-store`.
+- The private verifier refuses to replace an existing private runtime and uses
+  fictional records only. Its resources are deleted after the acceptance.
 
 ## Unsupported claims
 
@@ -30,6 +35,14 @@ The local environment does not prove public-edge TLS, enterprise SSO, cloud IAM
 propagation, managed-service recovery, multi-region disaster recovery, or
 continuous production operations. Those require separately authorized
 environments and evidence.
+
+Bearer protection on a loopback port-forward is not enterprise identity or a
+public-edge security boundary. Kafka and Garage are shared local storage. After
+private workloads are removed, Kafka can retain private tenant, symbol, and
+price events; Garage can retain derived quantities, position values and
+allocations, benchmark data, and total portfolio valuation. The private
+workflow documents the separate destructive confirmation required to purge all
+local market and analytical data.
 
 ## Reporting
 

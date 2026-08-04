@@ -7,7 +7,7 @@ from pathlib import Path
 
 import duckdb
 
-from portfolio_analytics.analytics import build_products
+from portfolio_analytics.analytics import build_products, latest_required_objects
 from portfolio_analytics.model import BronzeObject, input_set_sha256, parse_portfolio
 
 
@@ -108,6 +108,40 @@ class AnalyticsTests(unittest.TestCase):
     def test_input_identity_is_order_independent(self) -> None:
         objects = bronze()
         self.assertEqual(input_set_sha256(HOLDINGS, objects), input_set_sha256(HOLDINGS, reversed(objects)))
+
+    def test_private_selection_keeps_only_latest_required_observations(self) -> None:
+        objects = bronze()
+        objects.extend(
+            [
+                BronzeObject(
+                    "bronze/newer-a.json",
+                    event("DEMO-ASSET-A", "125.0000", 200, "2026-07-22T00:00:00Z"),
+                ),
+                BronzeObject(
+                    "bronze/unrelated.json",
+                    event("UNRELATED", "10.0000", 201, "2026-07-22T00:00:00Z"),
+                ),
+                BronzeObject(
+                    "bronze/zz-older-a.json",
+                    event("DEMO-ASSET-A", "90.0000", 202, "2026-07-20T00:00:00Z"),
+                ),
+            ]
+        )
+        selected = latest_required_objects(list(reversed(objects)), HOLDINGS)
+        self.assertEqual(len(selected), 4)
+        self.assertIn("bronze/newer-a.json", {item.key for item in selected})
+        self.assertNotIn("bronze/demo-asset-a.json", {item.key for item in selected})
+
+        duplicate = [*objects, BronzeObject("bronze/duplicate.json", objects[0].data)]
+        with self.assertRaisesRegex(ValueError, "duplicate event_id"):
+            latest_required_objects(duplicate, HOLDINGS)
+
+        cross_tenant = list(objects)
+        value = json.loads(cross_tenant[0].data)
+        value["tenant_id"] = "another-portfolio"
+        cross_tenant[0] = BronzeObject(cross_tenant[0].key, json.dumps(value).encode())
+        with self.assertRaisesRegex(ValueError, "unexpected tenant_id"):
+            latest_required_objects(cross_tenant, HOLDINGS)
 
     def test_missing_price_fails_without_a_partial_result(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

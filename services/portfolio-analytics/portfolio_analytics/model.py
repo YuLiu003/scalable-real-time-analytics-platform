@@ -33,8 +33,13 @@ CURRENCY = re.compile(r"^[A-Z]{3}$")
 DECIMAL_VALUE = re.compile(r"^(0|[1-9][0-9]*)(\.[0-9]{1,8})?$")
 TRACE_ID = re.compile(r"^[0-9a-f]{32}$")
 DISPLAY_NAME = re.compile(r"^[^\x00-\x1f\x7f]{1,100}$")
-POSITION_ASSET_TYPES = {"etf", "mutual_fund"}
+POSITION_ASSET_TYPES = {"etf", "mutual_fund", "stock"}
 POSITION_VALUATION_TYPES = {"market_price", "nav"}
+BENCHMARK_SEMANTICS = (
+    ("etf", "market_price"),
+    ("index", "index_level"),
+    ("stock", "market_price"),
+)
 
 
 @dataclass(frozen=True)
@@ -221,6 +226,8 @@ def parse_portfolio(data: bytes) -> Portfolio:
             raise ValueError(f"holdings {instrument} mutual fund must use NAV")
         if asset_type == "etf" and valuation_type != "market_price":
             raise ValueError(f"holdings {instrument} ETF must use market price")
+        if asset_type == "stock" and valuation_type != "market_price":
+            raise ValueError(f"holdings {instrument} stock must use market price")
         positions.append(
             PositionDefinition(
                 instrument=instrument,
@@ -235,13 +242,14 @@ def parse_portfolio(data: bytes) -> Portfolio:
     benchmark_instrument = _instrument(benchmark_value["instrument"], "holdings benchmark instrument")
     if benchmark_instrument in seen:
         raise ValueError("holdings benchmark must not also be a position")
-    if benchmark_value["asset_type"] != "index" or benchmark_value["valuation_type"] != "index_level":
-        raise ValueError("holdings benchmark must be an index level")
+    benchmark_semantics = (benchmark_value["asset_type"], benchmark_value["valuation_type"])
+    if benchmark_semantics not in BENCHMARK_SEMANTICS:
+        raise ValueError("holdings benchmark asset and valuation types are incompatible")
     benchmark = BenchmarkDefinition(
         instrument=benchmark_instrument,
         display_name=_display_name(benchmark_value["display_name"], "holdings benchmark display_name"),
-        asset_type="index",
-        valuation_type="index_level",
+        asset_type=benchmark_semantics[0],
+        valuation_type=benchmark_semantics[1],
     )
     return Portfolio(
         portfolio_id=portfolio_id,

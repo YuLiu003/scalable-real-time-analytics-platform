@@ -23,18 +23,19 @@ producer/consumer failures, and a clean kind deployment.
 
 | Scope | Metric | Required | Current evidence |
 | --- | --- | ---: | ---: |
-| `portfolio_analytics` Python package | Statements and branches | 100% | 501/501 statements; 130/130 branches |
+| `portfolio_analytics` Python package | Statements and branches | 100% | 658/658 statements; 196/196 branches |
 | Portfolio API `internal/...` packages | Go statements with `-race` | 100% | 100.0% |
-| Market `internal/alpaca`, `internal/event`, `internal/synthetic`, `internal/archivemetrics`, `internal/scale`, and `internal/benchmark` | Go statements with `-race` | 100% | 100.0% |
+| Market `internal/alpaca`, `internal/event`, `internal/kafkaclient`, `internal/synthetic`, `internal/archivemetrics`, `internal/scale`, and `internal/benchmark` | Go statements with `-race` | 100% | 100.0% |
 
 The Python denominator contains the analytical model, transformation, S3
 adapter, build command, and independent Parquet query command. Only structural
 `if __name__ == "__main__"` launch guards are excluded; their `main()` functions
 are called by tests and their real module entrypoints run in Kubernetes.
 
-The Go denominator contains the portfolio API's HTTP, result-validation, and S3
-packages plus the market event, private-provider, synthetic-fixture,
-archive-metrics, scale-verification, and capacity-report domain packages. Thin
+The Go denominator contains the portfolio API's access configuration, HTTP,
+result-validation, and S3 packages plus the market event, private-provider, synthetic-fixture,
+Kafka-client configuration, archive-metrics, scale-verification, and
+capacity-report domain packages. Thin
 Go process entrypoints, Kafka/S3 SDK wiring from the prior slice, generated
 artifacts, Kubernetes YAML, shell, and embedded HTML are not mislabeled as
 unit-covered statements. They are still built, race-tested where applicable,
@@ -77,6 +78,9 @@ branches, and manual dispatch.
    The acceptance run also posts the source-controlled zero-return contribution
    scenario through the Kubernetes service proxy and requires its deterministic
    $2,200 ending balance, contribution total, and end-of-period timing contract.
+   A separate fictional private-mode case publishes stock/ETF observations,
+   builds a private result, rejects missing and wrong tokens, accepts the exact
+   token, checks privacy-safe logs, and removes its temporary resources.
 4. `portfolio / aws infrastructure` verifies the pinned OpenTofu and AWS
    provider configuration, reusable Kustomize bases, AWS overlays, Kafka
    replication settings, Pod Identity service accounts, and absence of static
@@ -96,15 +100,16 @@ rollback procedure, and GitOps reconciliation target.
 
 ## Verification record
 
-The local-equivalent gate completed with 501/501 Python statements, 130/130
+The local-equivalent gate completed with 658/658 Python statements, 196/196
 Python branches, and 100.0% Go statement coverage in both measured profiles.
-All three production images built, and all 43 analytics tests passed again from
+All three production images built, and all 56 analytics tests passed again from
 inside the non-root production image.
 
 The private-provider package uses local fake WebSocket and historical HTTP
 servers to cover authentication, exact subscription acknowledgement, pages,
 disconnects, rate limits, backfill, overflow, stable identity, checkpoint
-ordering, and privacy. This is contract evidence; no CI or local verification
+scope/pruning, requested-instrument enforcement, Kafka configuration, ordering,
+and privacy. This is contract evidence; no CI or local verification
 claim here depends on real provider credentials.
 
 The AWS static gate validated both OpenTofu roots with AWS provider 6.55.0,

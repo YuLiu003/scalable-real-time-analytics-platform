@@ -54,7 +54,7 @@ func run(ctx context.Context) error {
 		alpaca.StreamClient{URL: config.StreamURL, KeyID: config.KeyID, SecretKey: config.SecretKey, HTTP: streamHTTPClient},
 		alpaca.HistoryClient{URL: config.HistoryURL, Feed: config.Feed, KeyID: config.KeyID, SecretKey: config.SecretKey, HTTP: historyHTTPClient},
 		kafkaPublisher{producer: producer, topic: config.Topic},
-		alpaca.NewFileCheckpoints(config.CheckpointFile),
+		alpaca.NewFileCheckpoints(config.CheckpointFile, alpaca.CheckpointScope(config)),
 		status,
 	)
 	server := &http.Server{
@@ -85,8 +85,12 @@ func run(ctx context.Context) error {
 }
 
 type kafkaPublisher struct {
-	producer sarama.SyncProducer
+	producer messageProducer
 	topic    string
+}
+
+type messageProducer interface {
+	SendMessage(*sarama.ProducerMessage) (partition int32, offset int64, err error)
 }
 
 func (publisher kafkaPublisher) Publish(ctx context.Context, envelope event.Envelope) error {

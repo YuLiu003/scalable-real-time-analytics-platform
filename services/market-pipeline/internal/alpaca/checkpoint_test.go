@@ -1,6 +1,7 @@
 package alpaca
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,10 +11,12 @@ import (
 	"time"
 )
 
+const testCheckpointScope = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
 func TestFileCheckpointsRoundTripIsPrivateAndAtomic(t *testing.T) {
 	directory := filepath.Join(t.TempDir(), "private")
 	path := filepath.Join(directory, "checkpoint.json")
-	store := NewFileCheckpoints(path)
+	store := NewFileCheckpoints(path, testCheckpointScope)
 	timestamp := time.Date(2026, 8, 3, 12, 0, 0, 123, time.FixedZone("private", -7*60*60))
 	want := map[string]Cursor{"LOAD-A": {Timestamp: timestamp}, "LOAD-B": {Timestamp: timestamp.Add(time.Minute)}}
 	if err := store.Save(want); err != nil {
@@ -59,7 +62,7 @@ func TestFileCheckpointsRoundTripIsPrivateAndAtomic(t *testing.T) {
 }
 
 func TestFileCheckpointsLoadMissingAndValidationErrors(t *testing.T) {
-	missing := NewFileCheckpoints(filepath.Join(t.TempDir(), "missing.json"))
+	missing := NewFileCheckpoints(filepath.Join(t.TempDir(), "missing.json"), testCheckpointScope)
 	got, err := missing.Load()
 	if err != nil || len(got) != 0 {
 		t.Fatalf("missing Load() = %#v, %v", got, err)
@@ -71,16 +74,17 @@ func TestFileCheckpointsLoadMissingAndValidationErrors(t *testing.T) {
 		want string
 	}{
 		{name: "malformed", data: `{`, want: "invalid JSON"},
-		{name: "unknown", data: `{"schema_version":1,"cursors":{},"private":"secret"}`, want: "invalid JSON"},
-		{name: "multiple", data: `{"schema_version":1,"cursors":{}} {}`, want: "multiple JSON values"},
-		{name: "schema", data: `{"schema_version":2,"cursors":{}}`, want: "unsupported schema"},
-		{name: "nil cursors", data: `{"schema_version":1,"cursors":null}`, want: "unsupported schema"},
-		{name: "instrument", data: `{"schema_version":1,"cursors":{"private":{"timestamp":"2026-08-03T12:00:00Z"}}}`, want: "invalid instrument"},
-		{name: "timestamp", data: `{"schema_version":1,"cursors":{"LOAD-A":{"timestamp":"private"}}}`, want: "invalid timestamp"},
+		{name: "unknown", data: `{"schema_version":2,"scope_sha256":"` + testCheckpointScope + `","cursors":{},"private":"secret"}`, want: "invalid JSON"},
+		{name: "multiple", data: `{"schema_version":2,"scope_sha256":"` + testCheckpointScope + `","cursors":{}} {}`, want: "multiple JSON values"},
+		{name: "schema", data: `{"schema_version":1,"scope_sha256":"` + testCheckpointScope + `","cursors":{}}`, want: "unsupported schema"},
+		{name: "scope", data: `{"schema_version":2,"scope_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","cursors":{}}`, want: "unsupported schema"},
+		{name: "nil cursors", data: `{"schema_version":2,"scope_sha256":"` + testCheckpointScope + `","cursors":null}`, want: "unsupported schema"},
+		{name: "instrument", data: `{"schema_version":2,"scope_sha256":"` + testCheckpointScope + `","cursors":{"private":{"timestamp":"2026-08-03T12:00:00Z"}}}`, want: "invalid instrument"},
+		{name: "timestamp", data: `{"schema_version":2,"scope_sha256":"` + testCheckpointScope + `","cursors":{"LOAD-A":{"timestamp":"private"}}}`, want: "invalid timestamp"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			store := NewFileCheckpoints("/not-used/private.json")
+			store := NewFileCheckpoints("/not-used/private.json", testCheckpointScope)
 			store.readFile = func(string) ([]byte, error) { return []byte(test.data), nil }
 			_, err := store.Load()
 			if err == nil || !strings.Contains(err.Error(), test.want) {
@@ -92,7 +96,7 @@ func TestFileCheckpointsLoadMissingAndValidationErrors(t *testing.T) {
 		})
 	}
 
-	store := NewFileCheckpoints("/private/checkpoint.json")
+	store := NewFileCheckpoints("/private/checkpoint.json", testCheckpointScope)
 	store.readFile = func(string) ([]byte, error) { return nil, errors.New("FAKEPACA_SECRET") }
 	_, err = store.Load()
 	if err == nil || !strings.Contains(err.Error(), "read private market checkpoint") {
@@ -100,8 +104,41 @@ func TestFileCheckpointsLoadMissingAndValidationErrors(t *testing.T) {
 	}
 }
 
+func TestFileCheckpointsMigratesLegacyStateToScopedReplay(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "checkpoint.json")
+	legacy := []byte(`{"schema_version":1,"cursors":{"LOAD-A":{"timestamp":"2026-08-03T12:00:00Z"}}}`)
+	if err := os.WriteFile(path, legacy, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := NewFileCheckpoints(path, testCheckpointScope)
+	cursors, err := store.Load()
+	if err != nil || len(cursors) != 0 {
+		t.Fatalf("legacy Load() = %#v, %v", cursors, err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document checkpointDocument
+	if err := json.Unmarshal(data, &document); err != nil {
+		t.Fatal(err)
+	}
+	if document.SchemaVersion != 2 || document.ScopeSHA256 != testCheckpointScope || len(document.Cursors) != 0 {
+		t.Fatalf("migrated checkpoint = %#v", document)
+	}
+
+	sentinel := errors.New("migration write failed")
+	failing := NewFileCheckpoints("/private/checkpoint.json", testCheckpointScope)
+	failing.readFile = func(string) ([]byte, error) { return legacy, nil }
+	failing.mkdirAll = func(string, os.FileMode) error { return sentinel }
+	if _, err := failing.Load(); !errors.Is(err, sentinel) || !strings.Contains(err.Error(), "migrate private market checkpoint") {
+		t.Fatalf("legacy migration error = %v", err)
+	}
+}
+
 func TestFileCheckpointsSaveRejectsInvalidCursor(t *testing.T) {
-	store := NewFileCheckpoints(filepath.Join(t.TempDir(), "checkpoint.json"))
+	store := NewFileCheckpoints(filepath.Join(t.TempDir(), "checkpoint.json"), testCheckpointScope)
 	now := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
 	for _, cursors := range []map[string]Cursor{
 		{"private": {Timestamp: now}},
@@ -151,6 +188,7 @@ func TestFileCheckpointsSaveFailureStagesPreservePublishedFile(t *testing.T) {
 			removed := false
 			store := &FileCheckpoints{
 				Path:      "/private/checkpoint.json",
+				Scope:     testCheckpointScope,
 				mkdirAll:  func(string, os.FileMode) error { return nil },
 				writeFile: func(string, []byte, os.FileMode) error { return nil },
 				rename:    func(string, string) error { return nil },
@@ -175,7 +213,7 @@ func TestFileCheckpointsFailedPublishLeavesPriorCheckpoint(t *testing.T) {
 	if err := os.WriteFile(path, prior, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	store := NewFileCheckpoints(path)
+	store := NewFileCheckpoints(path, testCheckpointScope)
 	store.rename = func(string, string) error { return errors.New("publish failure") }
 	err := store.Save(map[string]Cursor{"LOAD-A": {Timestamp: time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)}})
 	if err == nil {
@@ -187,5 +225,30 @@ func TestFileCheckpointsFailedPublishLeavesPriorCheckpoint(t *testing.T) {
 	}
 	if _, statErr := os.Stat(path + ".tmp"); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("temporary checkpoint remains: %v", statErr)
+	}
+}
+
+func TestCheckpointScopeAndScopeValidation(t *testing.T) {
+	config := validTestConfig()
+	scope := CheckpointScope(config)
+	if !validCheckpointScope(scope) || scope != CheckpointScope(config) {
+		t.Fatalf("CheckpointScope() = %q", scope)
+	}
+	config.TenantID = "another-private-tenant"
+	if scope == CheckpointScope(config) {
+		t.Fatal("checkpoint scope did not change with feed identity")
+	}
+	for _, invalid := range []string{"", strings.Repeat("A", 64), strings.Repeat("a", 63), strings.Repeat("g", 64)} {
+		if validCheckpointScope(invalid) {
+			t.Fatalf("validCheckpointScope(%q) = true", invalid)
+		}
+	}
+
+	store := NewFileCheckpoints(filepath.Join(t.TempDir(), "checkpoint.json"), "invalid")
+	if _, err := store.Load(); err == nil || !strings.Contains(err.Error(), "scope is invalid") {
+		t.Fatalf("Load() invalid scope error = %v", err)
+	}
+	if err := store.Save(map[string]Cursor{}); err == nil {
+		t.Fatal("Save() accepted an invalid scope")
 	}
 }

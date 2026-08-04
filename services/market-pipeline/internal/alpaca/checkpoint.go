@@ -2,6 +2,7 @@ package alpaca
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +25,7 @@ type Checkpoints interface {
 
 type checkpointDocument struct {
 	SchemaVersion int                         `json:"schema_version"`
+	ScopeSHA256   string                      `json:"scope_sha256"`
 	Cursors       map[string]checkpointCursor `json:"cursors"`
 }
 
@@ -33,6 +35,7 @@ type checkpointCursor struct {
 
 type FileCheckpoints struct {
 	Path      string
+	Scope     string
 	readFile  func(string) ([]byte, error)
 	mkdirAll  func(string, os.FileMode) error
 	writeFile func(string, []byte, os.FileMode) error
@@ -41,9 +44,10 @@ type FileCheckpoints struct {
 	remove    func(string) error
 }
 
-func NewFileCheckpoints(path string) *FileCheckpoints {
+func NewFileCheckpoints(path, scope string) *FileCheckpoints {
 	return &FileCheckpoints{
 		Path:      path,
+		Scope:     scope,
 		readFile:  os.ReadFile,
 		mkdirAll:  os.MkdirAll,
 		writeFile: os.WriteFile,
@@ -54,6 +58,9 @@ func NewFileCheckpoints(path string) *FileCheckpoints {
 }
 
 func (store *FileCheckpoints) Load() (map[string]Cursor, error) {
+	if !validCheckpointScope(store.Scope) {
+		return nil, errors.New("private market checkpoint scope is invalid")
+	}
 	data, err := store.readFile(store.Path)
 	if errors.Is(err, os.ErrNotExist) {
 		return map[string]Cursor{}, nil
@@ -71,7 +78,14 @@ func (store *FileCheckpoints) Load() (map[string]Cursor, error) {
 	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
 		return nil, errors.New("private market checkpoint contains multiple JSON values")
 	}
-	if document.SchemaVersion != 1 || document.Cursors == nil {
+	if document.SchemaVersion == 1 && document.ScopeSHA256 == "" && document.Cursors != nil {
+		cursors := map[string]Cursor{}
+		if err := store.Save(cursors); err != nil {
+			return nil, fmt.Errorf("migrate private market checkpoint: %w", err)
+		}
+		return cursors, nil
+	}
+	if document.SchemaVersion != 2 || document.ScopeSHA256 != store.Scope || document.Cursors == nil {
 		return nil, errors.New("private market checkpoint has an unsupported schema")
 	}
 	cursors := make(map[string]Cursor, len(document.Cursors))
@@ -89,7 +103,14 @@ func (store *FileCheckpoints) Load() (map[string]Cursor, error) {
 }
 
 func (store *FileCheckpoints) Save(cursors map[string]Cursor) error {
-	document := checkpointDocument{SchemaVersion: 1, Cursors: make(map[string]checkpointCursor, len(cursors))}
+	if !validCheckpointScope(store.Scope) {
+		return errors.New("refuse to persist an invalid private market checkpoint")
+	}
+	document := checkpointDocument{
+		SchemaVersion: 2,
+		ScopeSHA256:   store.Scope,
+		Cursors:       make(map[string]checkpointCursor, len(cursors)),
+	}
 	for instrument, cursor := range cursors {
 		if !event.ValidInstrument(instrument) || cursor.Timestamp.IsZero() {
 			return errors.New("refuse to persist an invalid private market checkpoint")
@@ -119,4 +140,23 @@ func (store *FileCheckpoints) Save(cursors map[string]Cursor) error {
 		return fmt.Errorf("protect published private market checkpoint: %w", err)
 	}
 	return nil
+}
+
+// CheckpointScope binds cursors to one private tenant/provider feed without
+// writing those identifiers to disk.
+func CheckpointScope(config Config) string {
+	value := config.TenantID + "\x00" + config.Source + "\x00" + config.Feed
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(value)))
+}
+
+func validCheckpointScope(value string) bool {
+	if len(value) != sha256.Size*2 {
+		return false
+	}
+	for _, character := range value {
+		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
+			return false
+		}
+	}
+	return true
 }

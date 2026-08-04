@@ -57,6 +57,8 @@ func Messages(scenario string) ([]Message, error) {
 			fixture("DEMO-ASSET-C", "100.0000", 100, "33333333333333333333333333333333", "2026-07-21T00:01:00Z"),
 			fixture("DEMO-BENCH-D", "1000.0000", 101, "44444444444444444444444444444444", "2026-07-21T00:01:30Z"),
 		)
+	case "private-portfolio-acceptance":
+		return privatePortfolioMessages()
 	case "single":
 		instrument := envOrDefault("EVENT_INSTRUMENT", "DEMO-ASSET-C")
 		price := envOrDefault("EVENT_PRICE", "100.0000")
@@ -82,6 +84,20 @@ func Messages(scenario string) ([]Message, error) {
 	default:
 		return nil, fmt.Errorf("unknown PRODUCER_SCENARIO %q", scenario)
 	}
+}
+
+func privatePortfolioMessages() ([]Message, error) {
+	fixtures := []event.Envelope{
+		fixture("DEMO-LIVE-A", "100.0000", 201, "55555555555555555555555555555555", "2026-08-03T16:00:00Z"),
+		fixture("DEMO-LIVE-B", "200.0000", 202, "66666666666666666666666666666666", "2026-08-03T16:00:01Z"),
+		fixture("DEMO-LIVE-C", "500.0000", 203, "77777777777777777777777777777777", "2026-08-03T16:00:02Z"),
+	}
+	for index := range fixtures {
+		fixtures[index].Source = "private-acceptance"
+		fixtures[index].TenantID = "private"
+		fixtures[index].EventID = fmt.Sprintf("acceptance:private:%s", strings.ToLower(fixtures[index].PartitionKey))
+	}
+	return validMessages(fixtures...)
 }
 
 // LoadConfigFromEnvironment reads the bounded public scale controls. Instrument
