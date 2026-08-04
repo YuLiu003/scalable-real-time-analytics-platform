@@ -141,10 +141,51 @@ deleted. Stop any other running Colima profile first; the benchmark checks this
 at startup and never mutates the other profile. See the capacity contract before
 presenting any result.
 
-For a private live stock/ETF allocation and projection dashboard, create the
-three absolute-path, mode-`0600` input files described in the
-[`private portfolio workflow`](docs/features/cloud-native-investment-platform/private-portfolio-workflow.md),
-then run:
+Run the production-like Jenkins path:
+
+```bash
+make -C platform/jenkins e2e-ephemeral
+```
+
+That command also uses a dedicated disposable Colima VM and deletes its
+container data when it finishes.
+
+## Use the application
+
+The `e2e-*` commands above are verification workflows: they delete their
+runtime when finished and do not leave a dashboard running. Use one of the
+persistent workflows below when you want to interact with the application.
+
+### Explore the fictional demo
+
+Start the cluster, event pipeline, analytics, and dashboard in order:
+
+```bash
+make -C platform/local bootstrap
+make -C platform/local bootstrap-data-path
+make -C platform/local bootstrap-analytics
+make -C platform/local portfolio-dashboard
+```
+
+Keep the last command running and open <http://127.0.0.1:8080>. This demo needs
+no credentials or access token and labels all holdings and prices as synthetic.
+Press `Ctrl-C` to close the dashboard tunnel; the cluster continues running.
+
+If port 8080 is occupied, use another loopback port:
+
+```bash
+make -C platform/local portfolio-dashboard PORTFOLIO_DASHBOARD_PORT=18080
+```
+
+Then open <http://127.0.0.1:18080>.
+
+### Use a private live stock/ETF portfolio
+
+Create the three absolute-path, mode-`0600` input files described in the
+[`private portfolio workflow`](docs/features/cloud-native-investment-platform/private-portfolio-workflow.md).
+Those files hold the Alpaca credentials and selected instruments, portfolio
+quantities, and dashboard token; keep them outside this repository. Start the
+private workflow with:
 
 ```bash
 PRIVATE_FEED_ENV_FILE=/absolute/path/alpaca-market-feed.env \
@@ -155,27 +196,57 @@ PRIVATE_ACCESS_TOKEN_FILE=/absolute/path/portfolio.token \
 make -C platform/local private-portfolio-dashboard
 ```
 
-Open `http://127.0.0.1:8080` and enter the token from the third file. Stop the
-private workloads and remove their runtime Secrets and checkpoint with:
+Keep the last command running, open <http://127.0.0.1:8080>, and enter the token
+from `portfolio.token`. The token remains only in the page's memory. Instruments
+come from the private input files rather than a source-controlled portfolio.
+
+### Read and model the portfolio
+
+The dashboard shows the current total value, selected benchmark and observation
+time, allocation by market value, and each holding's quantity, price, value,
+and allocation percentage.
+
+In **Long-term contribution projection**, enter:
+
+- the starting value, contribution amount, and monthly or biweekly cadence;
+- the number of years and assumed annual return;
+- the return range, inflation rate, and annual expense ratio.
+
+The application calculates conservative, base, and optimistic scenarios. Each
+scenario reports the ending balance, inflation-adjusted balance, total
+contributions, investment growth, and estimated fee drag. Contributions are
+modeled at the end of each period. These are hypothetical calculations, not
+forecasts, recommendations, or trade execution.
+
+### Refresh, change inputs, and clean up
+
+Private analytics publishes a new snapshot every five minutes. The browser does
+not poll automatically, so reload the page to display a newer snapshot. Rerun
+`bootstrap-private-portfolio` with the three input paths to change credentials,
+instruments, quantities, or the access token.
+
+Stop the private workloads and remove their runtime Secrets and checkpoint:
 
 ```bash
 CONFIRM_DESTROY_PRIVATE_PORTFOLIO=private-portfolio \
   make -C platform/local destroy-private-portfolio
 ```
 
-The credential-free PS2 acceptance proves this wiring with fictional records;
-it does not contact Alpaca or prove a live provider subscription. The separate
-[`cash-flow ledger contract`](docs/features/cloud-native-investment-platform/personal-portfolio-ledger-contract.md)
-remains an offline input for future transaction-grounded performance work.
-
-Run the production-like Jenkins path:
+Kafka and Garage retain shared market and derived data after that command. Use
+the explicit all-data purge documented in the private workflow when those data
+must also be removed. To delete the entire project-owned local cluster,
+containers, volumes, and Colima VM disk, run:
 
 ```bash
-make -C platform/jenkins e2e-ephemeral
+CONFIRM_RUNTIME_CLEANUP=investment-platform \
+  make -C platform/local reclaim-runtime
 ```
 
-That command also uses a dedicated disposable Colima VM and deletes its
-container data when it finishes.
+The credential-free PS2 acceptance proves the private wiring with fictional
+records; it does not contact Alpaca or prove a live provider subscription.
+Transaction-grounded performance based on the separate
+[`cash-flow ledger contract`](docs/features/cloud-native-investment-platform/personal-portfolio-ledger-contract.md)
+remains future work.
 
 ## Cloud learning boundary
 
