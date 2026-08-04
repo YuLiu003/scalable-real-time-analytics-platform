@@ -28,6 +28,11 @@ archive delay, and before/after Prometheus snapshots. Replay remains in the
 correctness profile because duplicate `HeadObject` work has a different cost
 than an original `HeadObject` plus `PutObject` effect.
 
+The runner captures each partition's newest offset immediately before the
+producer and after durable completion. Ordering inspection reads only that
+exact offset window. It rejects a window whose total delta is not `N`, avoiding
+history-growing verification work as earlier trials accumulate in the topic.
+
 ## Measurement boundaries
 
 | Measurement | Exact boundary |
@@ -56,6 +61,12 @@ before submission. Producer-container resources are not reported because a
 short producer Job can finish before its first scrape; its acknowledgement
 throughput and latency come from application telemetry.
 
+Instant counter and histogram queries also retry for at most thirty seconds,
+cap each Kubernetes API request at ten seconds, validate the required labeled
+vector, and publish through an atomic rename. A suite-level pod snapshot makes
+any baseline pod replacement or container restart fail the trial, so retrying
+a recovering Prometheus endpoint cannot hide a platform interruption.
+
 ## Correctness assertions
 
 A trial is rejected unless all of the following hold:
@@ -69,6 +80,8 @@ A trial is rejected unless all of the following hold:
 - The durable-latency histogram delta contains exactly `N` observations.
 - All three consumers remain available and measured CPU/memory series exist
   for the consumers, Kafka, and Garage.
+- No baseline Kubernetes pod is replaced and no container restart count
+  changes during the measured suite.
 - The durable-completion window is long enough to contain a complete
   twenty-five-second CPU rate sample.
 
@@ -90,6 +103,9 @@ artifacts/kafka-capacity/<suite-id>/
     └── raw/
 ```
 
+Raw evidence also contains trial-bounded Kafka offsets and the post-trial pod
+stability snapshot; it contains no event payloads or archive keys.
+
 Reports may contain the Git revision, clean/dirty state, CPU/memory/disk
 allocation, component versions, aggregate counts, partition numbers, and
 timings. They must not contain payloads, instrument names, watchlists,
@@ -104,6 +120,12 @@ Run the default full matrix in a dedicated Colima profile:
 ```bash
 make -C platform/local e2e-capacity-ephemeral
 ```
+
+For reproducible local evidence, the command refuses to start while another
+Colima profile is running and never stops that profile automatically. Stop an
+existing development profile first (for example,
+`colima stop investment-platform`). On macOS, the workflow uses `caffeinate`
+when available to prevent idle sleep for its lifetime.
 
 The workflow bootstraps the data path, runs the scale/recovery acceptance once,
 runs the capacity matrix, preserves host-side aggregate artifacts, and deletes

@@ -164,6 +164,7 @@ grep -q '^make -C .*/platform/local bootstrap$' "${log_file}"
 grep -q '^make -C .*/platform/local bootstrap-data-path$' "${log_file}"
 grep -q '^make -C .*/platform/local verify-scale-lab$' "${log_file}"
 grep -q '^make -C .*/platform/local verify-capacity-benchmark$' "${log_file}"
+grep -Eq '^caffeinate -dimsu -w [0-9]+$' "${log_file}"
 if grep -q '^make -C .*/platform/local bootstrap-analytics$' "${log_file}"; then
   printf 'capacity workflow bootstrapped unrelated analytics services\n' >&2
   exit 1
@@ -171,6 +172,20 @@ fi
 grep -q '^kind delete cluster --name investment-platform$' "${log_file}"
 grep -q '^colima delete investment-platform-capacity-ephemeral --force --data$' "${log_file}"
 assert_runtime_config_isolated_and_removed
+
+: >"${log_file}"
+if EPHEMERAL_WORKFLOW=capacity \
+  EPHEMERAL_COLIMA_PROFILE=investment-platform-capacity-ephemeral \
+  FAKE_PROFILE_NAME=investment-platform \
+  FAKE_PROFILE_PRESENT=1 \
+    "${repo_root}/platform/local/scripts/run-ephemeral.sh" >/dev/null 2>&1; then
+  printf 'capacity workflow accepted another running Colima profile\n' >&2
+  exit 1
+fi
+if grep -q '^colima start ' "${log_file}" || grep -q '^colima delete ' "${log_file}"; then
+  printf 'capacity isolation failure mutated a Colima profile\n' >&2
+  exit 1
+fi
 
 : >"${log_file}"
 if EPHEMERAL_WORKFLOW=capacity \

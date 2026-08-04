@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/YuLiu003/real-time-analytics-platform/services/market-pipeline/internal/event"
@@ -36,8 +35,14 @@ type Settings struct {
 }
 
 type Store struct {
-	client *s3.Client
+	client objectClient
 	bucket string
+}
+
+type objectClient interface {
+	HeadObject(context.Context, *s3.HeadObjectInput, ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
+	PutObject(context.Context, *s3.PutObjectInput, ...func(*s3.Options)) (*s3.PutObjectOutput, error)
+	ListObjectsV2(context.Context, *s3.ListObjectsV2Input, ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
 }
 
 func New(ctx context.Context, settings Settings) (*Store, error) {
@@ -101,8 +106,8 @@ func (s *Store) PutEvent(ctx context.Context, envelope event.Envelope, raw []byt
 	return Created, key, nil
 }
 
-func (s *Store) ListKeys(ctx context.Context, prefix string) ([]string, error) {
-	var keys []string
+func (s *Store) CountKeys(ctx context.Context, prefix string) (int64, error) {
+	var count int64
 	var continuation *string
 	for {
 		output, err := s.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
@@ -111,18 +116,15 @@ func (s *Store) ListKeys(ctx context.Context, prefix string) ([]string, error) {
 			ContinuationToken: continuation,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("list archive objects: %w", err)
+			return 0, fmt.Errorf("list archive objects: %w", err)
 		}
-		for _, object := range output.Contents {
-			keys = append(keys, aws.ToString(object.Key))
-		}
+		count += int64(len(output.Contents))
 		if !aws.ToBool(output.IsTruncated) {
 			break
 		}
 		continuation = output.NextContinuationToken
 	}
-	sort.Strings(keys)
-	return keys, nil
+	return count, nil
 }
 
 func contentHash(data []byte) string {

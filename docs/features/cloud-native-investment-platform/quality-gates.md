@@ -143,6 +143,10 @@ than a merge-blocking workload.
 This is `local_kind_synthetic` evidence, not AWS runtime, provider-data,
 availability, or production-capacity evidence.
 
+Credential-free unit checks also exercise bounded Prometheus retry, atomic
+evidence publication, pod-restart detection, disposable-runtime isolation, and
+the Kafka offset-window validation used by the full manual matrix.
+
 ## Repository enforcement
 
 The `main` ruleset requires the single `jenkins / presubmit` result. Jenkins

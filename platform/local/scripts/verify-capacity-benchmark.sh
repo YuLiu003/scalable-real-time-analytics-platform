@@ -8,6 +8,8 @@ MARKET_DIR="${REPO_ROOT}/services/market-pipeline"
 
 # shellcheck disable=SC1091
 source "${LOCAL_DIR}/versions.lock"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/capacity-observability-lib.sh"
 
 context="${KUBERNETES_CONTEXT}"
 namespace="${APPLICATION_NAMESPACE}"
@@ -20,6 +22,8 @@ inspection_timeout_seconds="${CAPACITY_INSPECTION_TIMEOUT_SECONDS:-300}"
 sample_interval_seconds="${CAPACITY_SAMPLE_INTERVAL_SECONDS:-2}"
 cpu_rate_window_seconds=25
 resource_ingestion_timeout_seconds=30
+prometheus_query_recovery_timeout_seconds=30
+prometheus_request_timeout_cap_seconds=10
 artifact_root="${CAPACITY_ARTIFACT_DIR:-${REPO_ROOT}/artifacts/kafka-capacity}"
 reporter=""
 go_cache="${CAPACITY_GOCACHE:-${TMPDIR:-/tmp}/market-capacity-gocache}"
@@ -40,6 +44,7 @@ run_matrix_path="${suite_dir}/runs.tsv"
 environment_path="${suite_dir}/environment.json"
 summary_path="${suite_dir}/summary.json"
 failure_path="${suite_dir}/failure-state.txt"
+stability_baseline_path="${suite_dir}/pod-stability-baseline.txt"
 
 mkdir -p "${artifact_root}"
 if [[ -e "${suite_dir}" ]]; then
@@ -124,13 +129,26 @@ capture_failure() {
     printf 'repetitions=%s\n' "${repetitions}"
     printf 'target_rate=%s\n' "${target_rate}"
     printf 'active_job=%s\n' "${active_job:-none}"
-    kubectl --context "${context}" --namespace "${namespace}" \
+    kubectl --context "${context}" --request-timeout=10s --namespace "${namespace}" \
       get deployment/scale-event-archiver horizontalpodautoscaler/keda-hpa-scale-event-archiver \
-      scaledobject/scale-event-archiver 2>&1 || true
-    kubectl --context "${context}" --namespace "${namespace}" \
-      get pods --selector app.kubernetes.io/name=scale-event-archiver 2>&1 || true
-    kubectl --context "${context}" --namespace "${namespace}" \
-      get jobs --selector app.kubernetes.io/name=scale-load-producer 2>&1 || true
+      scaledobject/scale-event-archiver 2>/dev/null || printf 'scale controllers unavailable\n'
+    kubectl --context "${context}" --request-timeout=10s --namespace "${namespace}" \
+      get pods --selector app.kubernetes.io/name=scale-event-archiver 2>/dev/null || \
+      printf 'scale pods unavailable\n'
+    kubectl --context "${context}" --request-timeout=10s --namespace "${namespace}" \
+      get jobs --selector app.kubernetes.io/name=scale-load-producer 2>/dev/null || \
+      printf 'scale jobs unavailable\n'
+    kubectl --context "${context}" --request-timeout=10s --namespace "${OBSERVABILITY_NAMESPACE}" \
+      get statefulset/prometheus-monitoring-kube-prometheus-prometheus \
+      --output=custom-columns='NAME:.metadata.name,READY:.status.readyReplicas,CURRENT:.status.currentReplicas,UPDATED:.status.updatedReplicas' \
+      2>/dev/null || printf 'Prometheus StatefulSet unavailable\n'
+    kubectl --context "${context}" --request-timeout=10s --namespace "${OBSERVABILITY_NAMESPACE}" \
+      get endpoints/monitoring-kube-prometheus-prometheus \
+      --output=jsonpath='ready={range .subsets[*].addresses[*]}x{end} not_ready={range .subsets[*].notReadyAddresses[*]}x{end}{"\n"}' \
+      2>/dev/null || printf 'Prometheus endpoints unavailable\n'
+    kubectl --context "${context}" --request-timeout=10s get pods --all-namespaces \
+      --output=custom-columns='NAMESPACE:.metadata.namespace,NAME:.metadata.name,PHASE:.status.phase' \
+      2>/dev/null || printf 'cluster pods unavailable\n'
   } >"${failure_path}"
 }
 
@@ -159,12 +177,12 @@ now_milliseconds() {
 
 prometheus_query_to_file() {
   local query="$1"
-  local output_file="$2"
-  local encoded
-  encoded="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "${query}")"
-  kubectl --context "${context}" get --raw \
-    "/api/v1/namespaces/${OBSERVABILITY_NAMESPACE}/services/http:monitoring-kube-prometheus-prometheus:9090/proxy/api/v1/query?query=${encoded}" \
-    >"${output_file}"
+  local required_label="$2"
+  local output_file="$3"
+  capacity_prometheus_query_to_file \
+    "${context}" "${OBSERVABILITY_NAMESPACE}" "${query}" "${required_label}" "${output_file}" \
+    "${prometheus_query_recovery_timeout_seconds}" "${sample_interval_seconds}" \
+    "${prometheus_request_timeout_cap_seconds}"
 }
 
 prometheus_range_to_file() {
@@ -199,6 +217,12 @@ lag_snapshot() {
     --lag \
     --expected-partitions 3 \
     --output json
+}
+
+topic_offsets_to_file() {
+  local output_file="$1"
+  kubectl --context "${context}" --namespace "${namespace}" exec deployment/scale-event-archiver -- \
+    /topic-inspector --topic market.prices.scale --offsets --output json >"${output_file}"
 }
 
 total_lag() {
@@ -368,6 +392,7 @@ run_capacity_trial() {
   local raw_dir="${run_dir}/raw"
   local started_ms completed_ms duration_ms start_seconds end_seconds deadline
   local lag_json lag available producer_complete=false archive_ready=false
+  local start_offsets end_offsets
   mkdir -p "${raw_dir}"
   : >"${raw_dir}/samples.jsonl"
 
@@ -375,10 +400,13 @@ run_capacity_trial() {
     "${run_id}" "${event_count}" "${repetition}" "${rate}"
   prometheus_query_to_file \
     'sum by (le) (market_archiver_durable_latency_seconds_bucket{scope="scale"})' \
+    le \
     "${raw_dir}/latency-before.json"
   prometheus_query_to_file \
     'sum by (outcome) (market_archiver_events_total{scope="scale"})' \
+    outcome \
     "${raw_dir}/outcomes-before.json"
+  topic_offsets_to_file "${raw_dir}/topic-offsets-before.json"
 
   started_ms="$(now_milliseconds)"
   start_seconds="$(python3 -c 'import sys; print(int(sys.argv[1]) / 1000)' "${started_ms}")"
@@ -422,6 +450,9 @@ run_capacity_trial() {
   fi
   duration_ms=$((completed_ms - started_ms))
   end_seconds="$(python3 -c 'import sys; print(int(sys.argv[1]) / 1000)' "${completed_ms}")"
+  topic_offsets_to_file "${raw_dir}/topic-offsets-after.json"
+  start_offsets="$(<"${raw_dir}/topic-offsets-before.json")"
+  end_offsets="$(<"${raw_dir}/topic-offsets-after.json")"
 
   kubectl --context "${context}" --namespace "${namespace}" logs "job/${run_id}" \
     >"${raw_dir}/producer.jsonl"
@@ -431,15 +462,19 @@ run_capacity_trial() {
     --run-id "${run_id}" \
     --phase original \
     --expected "${event_count}" \
+    --start-offsets "${start_offsets}" \
+    --end-offsets "${end_offsets}" \
     --output json \
     --timeout "${inspection_timeout_seconds}s" >"${raw_dir}/ordering.json"
 
   sleep 6
   prometheus_query_to_file \
     'sum by (le) (market_archiver_durable_latency_seconds_bucket{scope="scale"})' \
+    le \
     "${raw_dir}/latency-after.json"
   prometheus_query_to_file \
     'sum by (outcome) (market_archiver_events_total{scope="scale"})' \
+    outcome \
     "${raw_dir}/outcomes-after.json"
   wait_for_resource_ranges "${raw_dir}" "${start_seconds}" "${end_seconds}"
 
@@ -455,6 +490,8 @@ run_capacity_trial() {
   kubectl --context "${context}" --namespace "${namespace}" \
     delete job "${run_id}" --wait=true >/dev/null
   active_job=""
+  capacity_capture_pod_stability "${context}" "${raw_dir}/pod-stability-after.txt"
+  capacity_assert_pod_stability "${stability_baseline_path}" "${raw_dir}/pod-stability-after.txt"
 }
 
 printf 'Preparing fixed-worker Kafka capacity benchmark %s...\n' "${suite_id}"
@@ -487,6 +524,7 @@ fi
 kubectl --context "${context}" --namespace "${namespace}" delete job "${warmup_job}" --wait=true >/dev/null
 active_job=""
 sleep 6
+capacity_capture_pod_stability "${context}" "${stability_baseline_path}"
 
 git_revision="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
 tracked_tree_clean=true

@@ -138,7 +138,9 @@ make -C platform/local e2e-capacity-ephemeral
 This runs the scale/recovery acceptance once, then five zero-delay trials at
 10K, 50K, and 100K events. Generated reports remain under the ignored
 `artifacts/kafka-capacity/` path while the owned VM and all container data are
-deleted. See the capacity contract before presenting any result.
+deleted. Stop any other running Colima profile first; the benchmark checks this
+at startup and never mutates the other profile. See the capacity contract before
+presenting any result.
 
 For private product inputs, follow the
 [`cash-flow ledger contract`](docs/features/cloud-native-investment-platform/personal-portfolio-ledger-contract.md)

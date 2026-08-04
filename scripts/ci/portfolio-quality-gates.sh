@@ -78,6 +78,7 @@ while IFS= read -r script; do
   bash -n "${REPO_ROOT}/${script}"
 done < <(cd "${REPO_ROOT}" && rg --files platform/local/scripts scripts/ci scripts/cloud -g '*.sh' | sort)
 "${REPO_ROOT}/scripts/ci/test-local-runtime-cleanup.sh"
+"${REPO_ROOT}/scripts/ci/test-capacity-observability.sh"
 "${PYTHON_BIN}" "${REPO_ROOT}/scripts/ci/validate-public-fixtures.py"
 scale_config_log="${COVERAGE_DIR}/scale-config-validation.log"
 scale_config_artifact_dir="${COVERAGE_DIR}/invalid-scale-config-artifacts"

@@ -186,6 +186,10 @@ The `investment-platform-capacity-ephemeral` profile is never reused. The
 workflow verifies autoscaling/recovery once, measures the zero-delay capacity
 profile, preserves ignored reports under `artifacts/kafka-capacity/`, and then
 deletes the kind cluster and Colima VM on success, failure, or interruption.
+At startup it refuses to run while another Colima profile is running and uses
+`caffeinate` on macOS when available. Stop a persistent development profile
+first with `colima stop investment-platform`; the benchmark never stops or
+deletes another profile automatically.
 
 To reduce the matrix while developing the benchmark itself:
 

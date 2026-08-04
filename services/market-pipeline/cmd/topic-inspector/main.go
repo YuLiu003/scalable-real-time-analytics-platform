@@ -20,6 +20,9 @@ func main() {
 	phase := flag.String("phase", "original", "scale run phase to validate")
 	group := flag.String("group", "", "validate this consumer group")
 	lag := flag.Bool("lag", false, "report committed-offset lag for every topic partition")
+	offsets := flag.Bool("offsets", false, "report the current newest offset for every topic partition")
+	startOffsets := flag.String("start-offsets", "", "JSON partition offsets at the start of a bounded run")
+	endOffsets := flag.String("end-offsets", "", "JSON partition offsets at the end of a bounded run")
 	requiredClientHost := flag.String("require-client-host", "", "require this client host in the consumer group")
 	expectedMembers := flag.Int("expected-members", 0, "expected consumer group member count")
 	expectedPartitions := flag.Int("expected-partitions", 0, "expected assigned topic partition count")
@@ -141,11 +144,28 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	if *offsets {
+		snapshot, err := newestOffsets(client, *topic, partitions)
+		if err != nil {
+			fatal(err)
+		}
+		if *output != "json" {
+			fatal(fmt.Errorf("--offsets requires --output json"))
+		}
+		if err := json.NewEncoder(os.Stdout).Encode(snapshot); err != nil {
+			fatal(err)
+		}
+		return
+	}
 	if *runID != "" {
 		if *expected < 0 {
 			fatal(fmt.Errorf("--expected is required with --run-id"))
 		}
-		records, err := readRecords(client, *topic, partitions, *runID, *phase, time.Now().Add(*timeout))
+		window, err := scale.NewOffsetWindow(*startOffsets, *endOffsets, partitions, *expected)
+		if err != nil {
+			fatal(err)
+		}
+		records, err := readRecords(client, *topic, partitions, window, *runID, *phase, time.Now().Add(*timeout))
 		if err != nil {
 			fatal(err)
 		}
@@ -199,7 +219,19 @@ func main() {
 	}
 }
 
-func readRecords(client sarama.Client, topic string, partitions []int32, runID, phase string, deadline time.Time) ([]scale.Record, error) {
+func newestOffsets(client sarama.Client, topic string, partitions []int32) (map[int32]int64, error) {
+	offsets := make(map[int32]int64, len(partitions))
+	for _, partition := range partitions {
+		newest, err := client.GetOffset(topic, partition, sarama.OffsetNewest)
+		if err != nil {
+			return nil, err
+		}
+		offsets[partition] = newest
+	}
+	return offsets, nil
+}
+
+func readRecords(client sarama.Client, topic string, partitions []int32, window scale.OffsetWindow, runID, phase string, deadline time.Time) ([]scale.Record, error) {
 	consumer, err := sarama.NewConsumerFromClient(client)
 	if err != nil {
 		return nil, fmt.Errorf("create topic consumer: %w", err)
@@ -215,11 +247,15 @@ func readRecords(client sarama.Client, topic string, partitions []int32, runID, 
 		if err != nil {
 			return nil, err
 		}
-		partitionConsumer, err := consumer.ConsumePartition(topic, partition, oldest)
+		start, end, err := window.Bounds(partition, oldest, newest)
+		if err != nil {
+			return nil, err
+		}
+		partitionConsumer, err := consumer.ConsumePartition(topic, partition, start)
 		if err != nil {
 			return nil, fmt.Errorf("consume partition %d: %w", partition, err)
 		}
-		for offset := oldest; offset < newest; offset++ {
+		for offset := start; offset < end; offset++ {
 			wait := time.Until(deadline)
 			if wait <= 0 {
 				partitionConsumer.Close()

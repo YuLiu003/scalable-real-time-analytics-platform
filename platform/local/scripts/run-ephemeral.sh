@@ -57,6 +57,11 @@ profile_exists() {
   colima list 2>/dev/null | awk 'NR > 1 { print $1 }' | grep -Fxq "${profile}"
 }
 
+other_running_profiles() {
+  colima list 2>/dev/null | awk -v target="${profile}" \
+    'NR > 1 && $2 == "Running" && $1 != target { print $1 }'
+}
+
 cleanup() {
   original_status=$?
   cleanup_status=0
@@ -89,6 +94,20 @@ if profile_exists; then
   printf 'ERROR: profile %s already exists; refusing to delete a runtime this script did not create.\n' "${profile}" >&2
   printf 'Choose another EPHEMERAL_COLIMA_PROFILE or explicitly reclaim the existing dedicated profile.\n' >&2
   exit 1
+fi
+if [[ "${workflow}" == "capacity" ]]; then
+  shared_profiles="$(other_running_profiles)"
+  if [[ -n "${shared_profiles}" ]]; then
+    printf 'ERROR: capacity evidence requires no other running Colima profiles. Stop these profiles first:\n%s\n' \
+      "${shared_profiles}" >&2
+    printf 'Profiles are never stopped or deleted automatically.\n' >&2
+    exit 1
+  fi
+fi
+
+if command -v caffeinate >/dev/null 2>&1; then
+  printf 'Preventing macOS idle sleep during disposable %s validation.\n' "${workflow}"
+  caffeinate -dimsu -w "$$" &
 fi
 
 runtime_config_dir="$(mktemp -d "${TMPDIR:-/tmp}/investment-platform-runtime-config.XXXXXX")"
