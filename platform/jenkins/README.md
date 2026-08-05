@@ -53,11 +53,24 @@ quality gate. The disposable VM defaults to 8 CPUs, 16 GiB of memory, and
 ## Run
 
 ```bash
-PYTHON_BIN="$PWD/.venv/bin/python" make -C platform/jenkins quality
-make -C platform/jenkins e2e-ephemeral
-platform/jenkins/scripts/report-github-status.py \
-  --pr "$PR_NUMBER" \
-  --log /absolute/path/to/retained-operator.log
+(
+  set -eu
+  set -o pipefail
+  : "${PR_NUMBER:?set PR_NUMBER to the open pull-request number}"
+  PYTHON_BIN="$PWD/.venv/bin/python" make -C platform/jenkins quality
+  operator_log="$(mktemp "${TMPDIR:-/tmp}/jenkins-operator.XXXXXX")"
+  chmod 0600 "${operator_log}"
+  if ! make -C platform/jenkins e2e-ephemeral 2>&1 | tee "${operator_log}"; then
+    printf 'Jenkins failed; retained log: %s\n' "${operator_log}" >&2
+    exit 1
+  fi
+  if ! platform/jenkins/scripts/report-github-status.py \
+    --pr "${PR_NUMBER}" --log "${operator_log}"; then
+    printf 'Status reporting failed; retained log: %s\n' "${operator_log}" >&2
+    exit 1
+  fi
+  rm -f "${operator_log}"
+)
 ```
 
 The ephemeral target creates a dedicated Colima VM, deploys Jenkins to kind,
@@ -93,6 +106,34 @@ JENKINS_TRUSTED_PIPELINE_BRANCH="$(git branch --show-current)" \
 Do not set this override to an unreviewed PR branch. It changes which code is
 allowed to define privileged CI orchestration; it does not change the source
 commit being tested.
+
+### Temporary web UI
+
+The automated workflow uses an isolated Kubernetes configuration and removes
+the runtime when verification finishes, so no Jenkins login remains afterward.
+For an active, manually bootstrapped lab, forward the controller:
+
+```bash
+kubectl --context kind-jenkins-platform --namespace jenkins-system \
+  port-forward service/jenkins 18080:8080
+```
+
+Open `http://127.0.0.1:18080` and sign in as `admin`. There is no static
+password: bootstrap generates a new password for each runtime and stores it
+only in the live `jenkins-admin` Kubernetes Secret. Retrieve it from another
+trusted terminal that owns the lab's Kubernetes configuration:
+
+```bash
+kubectl --context kind-jenkins-platform --namespace jenkins-system \
+  get secret jenkins-admin \
+  --output='jsonpath={.data.jenkins-admin-password}' | base64 --decode
+printf '\n'
+```
+
+Treat the output as a secret: do not paste it into logs, issues, chat, or Git.
+Teardown removes the Secret, so no active password exists after the runtime
+stops. The normal `e2e-ephemeral` workflow is unattended and does not require
+UI login.
 
 The nested CI topology is deliberately smaller than the normal three-node local
 topology because it runs inside privileged DinD. Multi-node scheduling remains

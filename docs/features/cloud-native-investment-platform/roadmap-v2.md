@@ -3,7 +3,7 @@
 | Field | Decision |
 | --- | --- |
 | Status | Active |
-| Last updated | 2026-08-04 |
+| Last updated | 2026-08-05 |
 | Product objective | Private, transparent long-term portfolio planning |
 | Engineering objective | Observable, recoverable event-driven cloud platform |
 | Cost boundary | Required work must run locally or in included CI without a paid cloud apply |
@@ -46,7 +46,7 @@ proof.
 | V2-5C | `feature/private-portfolio-inputs` | Private stock/ETF allocation and contribution-planning workflow over the live-feed contract | Strict external inputs, fictional end-to-end Kubernetes acceptance, private logging, protected API, and no committed private data | Complete locally; credential-free PS2 acceptance passed, while real provider smoke remains operator-run and unverified |
 | V2-6 | `feature/platform-observability-rollback` | OpenTelemetry, actionable alerts, Argo CD reconciliation, rollback | Trace across the event path and a detected, rolled-back bad release | Not started |
 | V2-7 | `feature/presubmit-quality-gates` | Credential-free Jenkins Pipeline calling repository-owned `PS0`/`PS1`/`PS2` targets | Isolated agents, exact-commit gate, GitHub status, automatic cleanup | Implemented; per-head proof is `jenkins / presubmit` |
-| V2-7A | `feature/jenkins-garage-retention` | Bounded Jenkins history and dedicated Garage artifact storage across disposable lab runs | Cross-run restore/readback, three-day/20-build controller policy, three-day Garage lifecycle, 1 GiB bucket quota, least-privilege key, owner-token fencing, local-disk report, at-most-4-GiB guard, and VM cleanup | In progress; implementation and contract tests pass, full disposable and cross-run proof pending |
+| V2-7A | `feature/jenkins-garage-retention` | Bounded Jenkins history and dedicated Garage artifact storage across disposable lab runs | Cross-run restore/readback, three-day/20-build controller policy, three-day Garage lifecycle, 1 GiB bucket quota, least-privilege key, owner-token fencing, local-disk report, at-most-4-GiB guard, and VM cleanup | Complete locally; two clean runs on `6197e8a` passed PS0/PS1/PS2, restored build `#1`, returned its retained Garage artifact with HTTP `200`, and removed the disposable runtime |
 | V2-8 | `feature/free-cloud-provider-contracts` | AWS/GCP/Azure IaC mocks and provider responsibility comparison | Validated configuration and documented emulator gaps; no paid apply | Not started |
 
 ## Verified V2-5B capacity evidence
@@ -82,6 +82,19 @@ Generated reports remain ignored under `artifacts/kafka-capacity/`; this
 committed record preserves only aggregate, privacy-safe results. These are
 local synthetic burst measurements, not live-provider, sustained-feed, AWS,
 multi-broker, multi-zone, failover, public-deployment, or production evidence.
+
+## Verified V2-7A local retention evidence
+
+At commit `6197e8a7acdb5e47dbd7c41616b3ef679669cb2c`, two consecutive
+Jenkins builds each ran `PS0`, `PS1`, and `PS2` in a fresh disposable
+Colima/kind runtime using the same bounded host-retained directory. The second
+runtime restored build `#1`, and one of that build's Garage-backed artifacts
+returned HTTP `200`. The reports recorded post-bootstrap build-window growth
+of 6,311,936 and 692,224 allocated bytes and a second-run peak of 375,136,256
+bytes, approximately 358 MiB. Both runs removed the dedicated Colima profile
+and left no active owner lock. This is local cross-run persistence and cleanup
+evidence, not total growth from empty state, production, AWS runtime, off-host
+backup, high-availability, or cloud durability evidence.
 
 ## Required free boundary
 
