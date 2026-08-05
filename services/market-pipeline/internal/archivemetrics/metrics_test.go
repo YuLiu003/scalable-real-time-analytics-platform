@@ -53,6 +53,7 @@ func TestMetricsHandlerRendersBoundedPrometheusState(t *testing.T) {
 		`market_archiver_processing_duration_seconds_bucket{scope="scale",le="0.005"} 1`,
 		`market_archiver_processing_duration_seconds_bucket{scope="scale",le="+Inf"} 2`,
 		`market_archiver_durable_latency_seconds_bucket{scope="scale",le="10"} 1`,
+		`market_archiver_durable_latency_seconds_bucket{scope="scale",le="300"} 2`,
 		`market_archiver_durable_latency_seconds_bucket{scope="scale",le="+Inf"} 2`,
 		`market_archiver_processing_duration_seconds_count{scope="scale"} 2`,
 	} {

@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -18,23 +20,53 @@ type ResultReader interface {
 }
 
 type Server struct {
-	reader    ResultReader
-	portfolio string
-	dashboard []byte
+	reader              ResultReader
+	portfolio           string
+	dashboard           []byte
+	authorizationHash   [sha256.Size]byte
+	accessTokenRequired bool
 }
 
-func New(reader ResultReader, portfolio string, dashboard []byte) *Server {
-	return &Server{reader: reader, portfolio: portfolio, dashboard: dashboard}
+func New(reader ResultReader, portfolio string, dashboard []byte, accessToken string) *Server {
+	return &Server{
+		reader:              reader,
+		portfolio:           portfolio,
+		dashboard:           dashboard,
+		authorizationHash:   sha256.Sum256([]byte("Bearer " + accessToken)),
+		accessTokenRequired: accessToken != "",
+	}
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("GET /readyz", s.ready)
+	mux.HandleFunc("GET /api/v1/config", s.config)
 	mux.HandleFunc("GET /api/v1/portfolios/{portfolio}/allocation", s.allocation)
 	mux.HandleFunc("POST /api/v1/projections/contributions", s.contributionProjection)
 	mux.HandleFunc("GET /", s.index)
 	return mux
+}
+
+func (s *Server) config(writer http.ResponseWriter, _ *http.Request) {
+	dataMode := "synthetic"
+	if s.accessTokenRequired {
+		dataMode = "private"
+	}
+	writer.Header().Set("Content-Type", "application/json")
+	writer.Header().Set("Cache-Control", "no-store")
+	writer.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(writer).Encode(struct {
+		SchemaVersion       int    `json:"schema_version"`
+		PortfolioID         string `json:"portfolio_id"`
+		DataMode            string `json:"data_mode"`
+		AccessTokenRequired bool   `json:"access_token_required"`
+	}{
+		SchemaVersion:       1,
+		PortfolioID:         s.portfolio,
+		DataMode:            dataMode,
+		AccessTokenRequired: s.accessTokenRequired,
+	})
 }
 
 func (s *Server) health(writer http.ResponseWriter, _ *http.Request) {
@@ -56,8 +88,14 @@ func (s *Server) ready(writer http.ResponseWriter, request *http.Request) {
 }
 
 func (s *Server) allocation(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Cache-Control", "no-store")
 	if request.PathValue("portfolio") != s.portfolio {
 		http.NotFound(writer, request)
+		return
+	}
+	if s.accessTokenRequired && !authorizationMatches(request.Header.Values("Authorization"), s.authorizationHash) {
+		writer.Header().Set("WWW-Authenticate", "Bearer")
+		http.Error(writer, "unauthorized", http.StatusUnauthorized)
 		return
 	}
 	ctx, cancel := context.WithTimeout(request.Context(), 5*time.Second)
@@ -68,9 +106,16 @@ func (s *Server) allocation(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	writer.Header().Set("Content-Type", "application/json")
-	writer.Header().Set("Cache-Control", "no-store")
 	writer.WriteHeader(http.StatusOK)
 	_, _ = writer.Write(data)
+}
+
+func authorizationMatches(values []string, expected [sha256.Size]byte) bool {
+	if len(values) != 1 {
+		return false
+	}
+	provided := sha256.Sum256([]byte(values[0]))
+	return subtle.ConstantTimeCompare(provided[:], expected[:]) == 1
 }
 
 func (s *Server) contributionProjection(writer http.ResponseWriter, request *http.Request) {

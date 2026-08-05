@@ -6,7 +6,7 @@
 | Coverage threshold | 100% in every measured application scope |
 | CI workflows | `Presubmit` and `Portfolio Platform Quality` |
 | Required merge check | `jenkins / presubmit` |
-| Last verified | 2026-07-30 |
+| Last verified | 2026-08-03 |
 
 ## Policy
 
@@ -23,23 +23,25 @@ producer/consumer failures, and a clean kind deployment.
 
 | Scope | Metric | Required | Current evidence |
 | --- | --- | ---: | ---: |
-| `portfolio_analytics` Python package | Statements and branches | 100% | 358/358 statements; 96/96 branches |
+| `portfolio_analytics` Python package | Statements and branches | 100% | 658/658 statements; 196/196 branches |
 | Portfolio API `internal/...` packages | Go statements with `-race` | 100% | 100.0% |
-| Market `internal/event`, `internal/synthetic`, `internal/archivemetrics`, and `internal/scale` | Go statements with `-race` | 100% | 100.0% |
+| Market `internal/alpaca`, `internal/event`, `internal/kafkaclient`, `internal/synthetic`, `internal/archivemetrics`, `internal/scale`, and `internal/benchmark` | Go statements with `-race` | 100% | 100.0% |
 
 The Python denominator contains the analytical model, transformation, S3
 adapter, build command, and independent Parquet query command. Only structural
 `if __name__ == "__main__"` launch guards are excluded; their `main()` functions
 are called by tests and their real module entrypoints run in Kubernetes.
 
-The Go denominator contains the portfolio API's HTTP, result-validation, and S3
-packages plus the market event, synthetic-fixture, archive-metrics, and scale
-verification domain packages. Thin Go process entrypoints, Kafka/S3 SDK wiring
-from the prior slice, generated artifacts, Kubernetes YAML, shell, and embedded
-HTML are not mislabeled as unit-covered statements. They are still built,
-race-tested where applicable, rendered, and exercised by the end-to-end gate.
-New domain logic must live in a measured package; moving logic into an
-entrypoint to evade coverage violates this policy.
+The Go denominator contains the portfolio API's access configuration, HTTP,
+result-validation, and S3 packages plus the market event, private-provider, synthetic-fixture,
+Kafka-client configuration, archive-metrics, scale-verification, and
+capacity-report domain packages. Thin
+Go process entrypoints, Kafka/S3 SDK wiring from the prior slice, generated
+artifacts, Kubernetes YAML, shell, and embedded HTML are not mislabeled as
+unit-covered statements. They are still built, race-tested where applicable,
+rendered, and exercised by the end-to-end gate. New domain logic must live in a
+measured package; moving logic into an entrypoint to evade coverage violates
+this policy.
 
 Run the local gate after installing the pinned development dependencies:
 
@@ -76,6 +78,9 @@ branches, and manual dispatch.
    The acceptance run also posts the source-controlled zero-return contribution
    scenario through the Kubernetes service proxy and requires its deterministic
    $2,200 ending balance, contribution total, and end-of-period timing contract.
+   A separate fictional private-mode case publishes stock/ETF observations,
+   builds a private result, rejects missing and wrong tokens, accepts the exact
+   token, checks privacy-safe logs, and removes its temporary resources.
 4. `portfolio / aws infrastructure` verifies the pinned OpenTofu and AWS
    provider configuration, reusable Kustomize bases, AWS overlays, Kafka
    replication settings, Pod Identity service accounts, and absence of static
@@ -95,10 +100,17 @@ rollback procedure, and GitOps reconciliation target.
 
 ## Verification record
 
-The local-equivalent gate completed with 358/358 Python statements, 96/96
+The local-equivalent gate completed with 658/658 Python statements, 196/196
 Python branches, and 100.0% Go statement coverage in both measured profiles.
-All three production images built, and all 28 analytics tests passed again from
+All three production images built, and all 56 analytics tests passed again from
 inside the non-root production image.
+
+The private-provider package uses local fake WebSocket and historical HTTP
+servers to cover authentication, exact subscription acknowledgement, pages,
+disconnects, rate limits, backfill, overflow, stable identity, checkpoint
+scope/pruning, requested-instrument enforcement, Kafka configuration, ordering,
+and privacy. This is contract evidence; no CI or local verification
+claim here depends on real provider credentials.
 
 The AWS static gate validated both OpenTofu roots with AWS provider 6.55.0,
 passed 2 state-foundation and 5 platform architecture tests, rendered every AWS
@@ -126,8 +138,23 @@ ready replica. Aggregate samples and a failure snapshot are retained with the
 run, while exact measurements remain generated evidence rather than committed
 capacity claims.
 
+PS2 also runs one 10,000-event, fixed-three-consumer capacity smoke trial at a
+controlled 250 events per second. The rate guarantees a complete in-boundary
+CPU window while validating exact acknowledged/topic/archive counts, zero
+unexpected outcomes, trial-scoped durable-latency observations, per-partition
+committed lag, and consumer/Kafka/Garage CPU and memory series. It is not a
+burst-capacity claim. The unbounded five-repeat 10K/50K/100K matrix remains a
+manual or scheduled disposable benchmark rather than a merge-blocking workload.
+That matrix predeclares CPU/memory as omitted for the short unbounded 10K
+scenario and mandatory for 50K/100K; all other correctness and performance
+measurements remain mandatory at every size.
+
 This is `local_kind_synthetic` evidence, not AWS runtime, provider-data,
 availability, or production-capacity evidence.
+
+Credential-free unit checks also exercise bounded Prometheus retry, atomic
+evidence publication, pod-restart detection, disposable-runtime isolation, and
+the Kafka offset-window validation used by the full manual matrix.
 
 ## Repository enforcement
 

@@ -48,6 +48,18 @@ func TestValidateAcceptsMatchingDataProductKeys(t *testing.T) {
 	}
 }
 
+func TestValidateAcceptsStockPositionAndETFBenchmark(t *testing.T) {
+	snapshot := validSnapshot()
+	snapshot.Positions[0].AssetType = "stock"
+	for _, benchmarkType := range []string{"stock", "etf"} {
+		snapshot.Benchmark.AssetType = benchmarkType
+		snapshot.Benchmark.ValuationType = "market_price"
+		if err := snapshot.Validate(); err != nil {
+			t.Fatalf("Validate() %s benchmark error = %v", benchmarkType, err)
+		}
+	}
+}
+
 func TestValidateRejectsMismatchedDataProductKey(t *testing.T) {
 	snapshot := validSnapshot()
 	snapshot.GoldParquetObject = "gold/portfolio_allocations/v2/portfolio=other/run=" + testSHA + "/allocation.parquet"
@@ -110,11 +122,17 @@ func TestDisplayNameAndPositionSemanticsValidation(t *testing.T) {
 	if !validDisplayName("Synthetic Benchmark D") {
 		t.Fatal("validDisplayName() rejected a valid name")
 	}
-	if !validPositionSemantics("etf", "market_price") || !validPositionSemantics("mutual_fund", "nav") {
+	if !validPositionSemantics("stock", "market_price") || !validPositionSemantics("etf", "market_price") || !validPositionSemantics("mutual_fund", "nav") {
 		t.Fatal("validPositionSemantics() rejected a supported position")
 	}
 	if validPositionSemantics("index", "index_level") {
 		t.Fatal("validPositionSemantics() accepted an index position")
+	}
+	if !validBenchmarkSemantics("stock", "market_price") || !validBenchmarkSemantics("etf", "market_price") || !validBenchmarkSemantics("index", "index_level") {
+		t.Fatal("validBenchmarkSemantics() rejected a supported benchmark")
+	}
+	if validBenchmarkSemantics("etf", "index_level") {
+		t.Fatal("validBenchmarkSemantics() accepted mismatched semantics")
 	}
 }
 

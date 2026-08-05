@@ -1,0 +1,72 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: private-portfolio-acceptance-producer
+  namespace: analytics-apps
+  labels:
+    app.kubernetes.io/name: private-portfolio-acceptance
+    app.kubernetes.io/component: producer
+    app.kubernetes.io/part-of: investment-analytics-platform
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: private-portfolio-acceptance
+        app.kubernetes.io/component: producer
+    spec:
+      serviceAccountName: scale-load-producer
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: producer
+          image: local/market-pipeline:slice5
+          imagePullPolicy: Never
+          command:
+            - /synthetic-producer
+          env:
+            - name: PRODUCER_SCENARIO
+              value: private-portfolio-acceptance
+            - name: KAFKA_BROKERS
+              value: market-kafka-kafka-bootstrap.analytics-data.svc.cluster.local:9093
+            - name: KAFKA_TOPIC
+              value: market.prices.scale
+            - name: KAFKA_TLS_CA_FILE
+              value: /etc/kafka-cluster-ca/ca.crt
+            - name: KAFKA_TLS_CERT_FILE
+              value: /etc/kafka/user.crt
+            - name: KAFKA_TLS_KEY_FILE
+              value: /etc/kafka/user.key
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: kafka-user
+              mountPath: /etc/kafka
+              readOnly: true
+            - name: kafka-cluster-ca
+              mountPath: /etc/kafka-cluster-ca
+              readOnly: true
+      volumes:
+        - name: kafka-user
+          secret:
+            secretName: scale-load-producer
+        - name: kafka-cluster-ca
+          configMap:
+            name: market-kafka-cluster-ca

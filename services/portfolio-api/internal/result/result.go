@@ -115,7 +115,7 @@ func (s Snapshot) Validate() error {
 		seen[position.Instrument] = struct{}{}
 	}
 	if !instrument.MatchString(s.Benchmark.Instrument) || !validDisplayName(s.Benchmark.DisplayName) ||
-		s.Benchmark.AssetType != "index" || s.Benchmark.ValuationType != "index_level" ||
+		!validBenchmarkSemantics(s.Benchmark.AssetType, s.Benchmark.ValuationType) ||
 		!decimal8.MatchString(s.Benchmark.Price) {
 		return fmt.Errorf("%w: benchmark", errInvalidResult)
 	}
@@ -141,6 +141,11 @@ func validDisplayName(value string) bool {
 }
 
 func validPositionSemantics(assetType, valuationType string) bool {
-	return (assetType == "etf" && valuationType == "market_price") ||
+	return ((assetType == "stock" || assetType == "etf") && valuationType == "market_price") ||
 		(assetType == "mutual_fund" && valuationType == "nav")
+}
+
+func validBenchmarkSemantics(assetType, valuationType string) bool {
+	return ((assetType == "stock" || assetType == "etf") && valuationType == "market_price") ||
+		(assetType == "index" && valuationType == "index_level")
 }

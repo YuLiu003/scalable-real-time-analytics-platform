@@ -53,6 +53,25 @@ func TestPortfolioCompleteMessagesSupplyAnalyticsInputs(t *testing.T) {
 	}
 }
 
+func TestPrivatePortfolioAcceptanceMessagesUsePrivateContract(t *testing.T) {
+	messages, err := Messages("private-portfolio-acceptance")
+	if err != nil {
+		t.Fatalf("Messages(private-portfolio-acceptance) error = %v", err)
+	}
+	if len(messages) != 3 {
+		t.Fatalf("message count = %d, want 3", len(messages))
+	}
+	for _, message := range messages {
+		var envelope event.Envelope
+		if err := json.Unmarshal(message.Value, &envelope); err != nil {
+			t.Fatalf("decode private acceptance fixture: %v", err)
+		}
+		if envelope.Source != "private-acceptance" || envelope.TenantID != "private" || message.Key != envelope.PartitionKey {
+			t.Fatalf("private acceptance envelope = %+v", envelope)
+		}
+	}
+}
+
 func TestSingleMessageDefaultsAndOverrides(t *testing.T) {
 	message, err := Messages("single")
 	if err != nil {

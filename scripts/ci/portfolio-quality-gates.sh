@@ -59,7 +59,7 @@ assert_go_coverage \
   "${MARKET_DIR}" \
   "${TMPDIR:-/tmp}/market-quality-gocache" \
   "${COVERAGE_DIR}/market-domain.out" \
-  ./internal/archivemetrics ./internal/event ./internal/scale ./internal/synthetic
+  ./internal/alpaca ./internal/archivemetrics ./internal/benchmark ./internal/event ./internal/kafkaclient ./internal/scale ./internal/synthetic
 
 printf 'Building and race-testing every Go package in the feature services...\n'
 (
@@ -78,6 +78,7 @@ while IFS= read -r script; do
   bash -n "${REPO_ROOT}/${script}"
 done < <(cd "${REPO_ROOT}" && rg --files platform/local/scripts scripts/ci scripts/cloud -g '*.sh' | sort)
 "${REPO_ROOT}/scripts/ci/test-local-runtime-cleanup.sh"
+"${REPO_ROOT}/scripts/ci/test-capacity-observability.sh"
 "${PYTHON_BIN}" "${REPO_ROOT}/scripts/ci/validate-public-fixtures.py"
 scale_config_log="${COVERAGE_DIR}/scale-config-validation.log"
 scale_config_artifact_dir="${COVERAGE_DIR}/invalid-scale-config-artifacts"
@@ -96,6 +97,74 @@ if [[ -e "${scale_config_artifact_dir}/report.json" ]]; then
   printf 'ERROR: invalid scale configuration left stale evidence available.\n' >&2
   exit 1
 fi
+capacity_config_log="${COVERAGE_DIR}/capacity-config-validation.log"
+capacity_config_artifact_dir="$(mktemp -d "${COVERAGE_DIR}/invalid-capacity-config-artifacts.XXXXXX")"
+capacity_path_log="${COVERAGE_DIR}/capacity-path-validation.log"
+printf 'protected evidence\n' >"${COVERAGE_DIR}/summary.json"
+if CAPACITY_SUITE_ID=.. \
+  CAPACITY_ALLOCATED_CPUS=4 CAPACITY_ALLOCATED_MEMORY_GIB=8 CAPACITY_ALLOCATED_DISK_GIB=30 \
+  CAPACITY_ARTIFACT_DIR="${capacity_config_artifact_dir}" \
+  "${REPO_ROOT}/platform/local/scripts/verify-capacity-benchmark.sh" \
+  >"${capacity_path_log}" 2>&1; then
+  printf 'ERROR: capacity benchmark accepted an unsafe suite ID.\n' >&2
+  exit 1
+fi
+grep -Fq 'CAPACITY_SUITE_ID' "${capacity_path_log}"
+grep -Fqx 'protected evidence' "${COVERAGE_DIR}/summary.json"
+if CAPACITY_SUITE_ID=badcfg CAPACITY_EVENT_COUNTS=1 \
+  CAPACITY_ALLOCATED_CPUS=4 CAPACITY_ALLOCATED_MEMORY_GIB=8 CAPACITY_ALLOCATED_DISK_GIB=30 \
+  CAPACITY_ARTIFACT_DIR="${capacity_config_artifact_dir}" \
+  "${REPO_ROOT}/platform/local/scripts/verify-capacity-benchmark.sh" \
+  >"${capacity_config_log}" 2>&1; then
+  printf 'ERROR: capacity benchmark accepted an event count below its contract.\n' >&2
+  exit 1
+fi
+grep -Fq 'event counts must be comma-separated integers' "${capacity_config_log}"
+if [[ -e "${capacity_config_artifact_dir}/badcfg" ]]; then
+  printf 'ERROR: invalid capacity configuration reserved an artifact suite.\n' >&2
+  exit 1
+fi
+capacity_existing_log="${COVERAGE_DIR}/capacity-existing-suite.log"
+mkdir "${capacity_config_artifact_dir}/preserve"
+printf 'stale evidence\n' >"${capacity_config_artifact_dir}/preserve/summary.json"
+if CAPACITY_SUITE_ID=preserve CAPACITY_EVENT_COUNTS=600 \
+  CAPACITY_ALLOCATED_CPUS=4 CAPACITY_ALLOCATED_MEMORY_GIB=8 CAPACITY_ALLOCATED_DISK_GIB=30 \
+  CAPACITY_ARTIFACT_DIR="${capacity_config_artifact_dir}" \
+  "${REPO_ROOT}/platform/local/scripts/verify-capacity-benchmark.sh" \
+  >"${capacity_existing_log}" 2>&1; then
+  printf 'ERROR: capacity benchmark reused an existing suite.\n' >&2
+  exit 1
+fi
+grep -Fq 'already exists' "${capacity_existing_log}"
+grep -Fqx 'stale evidence' "${capacity_config_artifact_dir}/preserve/summary.json"
 "${PYTHON_BIN}" -m json.tool "${REPO_ROOT}/contracts/fixtures/demo-fund-portfolio.v2.json" >/dev/null
+if ! grep -Fqx 'cpu_rate_window_seconds=25' \
+  "${REPO_ROOT}/platform/local/scripts/verify-capacity-benchmark.sh"; then
+  printf 'ERROR: capacity CPU window must retain the reviewed scrape-jitter margin.\n' >&2
+  exit 1
+fi
+if ! grep -Fqx $'\tCAPACITY_EVENT_COUNTS=10000 CAPACITY_REPETITIONS=1 CAPACITY_TARGET_RATE=250 ./scripts/verify-capacity-benchmark.sh' \
+  "${REPO_ROOT}/platform/local/Makefile"; then
+  printf 'ERROR: capacity smoke must retain a controlled rate long enough for its CPU window.\n' >&2
+  exit 1
+fi
+if ! grep -Fqx 'resource_ingestion_timeout_seconds=30' \
+  "${REPO_ROOT}/platform/local/scripts/verify-capacity-benchmark.sh"; then
+  printf 'ERROR: capacity resource queries must retain the bounded ingestion retry.\n' >&2
+  exit 1
+fi
+if ! grep -Fqx '    wait_for_resource_ranges "${raw_dir}" "${start_seconds}" "${end_seconds}"' \
+  "${REPO_ROOT}/platform/local/scripts/verify-capacity-benchmark.sh"; then
+  printf 'ERROR: capacity reporting must wait on the original resource-query boundaries.\n' >&2
+  exit 1
+fi
+if ! grep -Fqx '  if [[ "${resource_measurements_required}" == "true" ]]; then' \
+  "${REPO_ROOT}/platform/local/scripts/verify-capacity-benchmark.sh"; then
+  printf 'ERROR: capacity resource collection must follow the predeclared run policy.\n' >&2
+  exit 1
+fi
+kubectl kustomize "${REPO_ROOT}/platform/gitops/apps/private/market-feed" >/dev/null
+kubectl kustomize "${REPO_ROOT}/platform/gitops/apps/private/portfolio-analytics" >/dev/null
+kubectl kustomize "${REPO_ROOT}/platform/gitops/apps/private/portfolio-analytics-acceptance" >/dev/null
 
 printf 'Portfolio feature quality gates passed with 100%% measured application coverage.\n'

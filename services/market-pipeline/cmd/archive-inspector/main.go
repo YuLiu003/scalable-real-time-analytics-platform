@@ -24,18 +24,18 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	keys, err := store.ListKeys(context.Background(), *prefix)
+	count, err := store.CountKeys(context.Background(), *prefix)
 	if err != nil {
 		fatal(err)
 	}
 	result := struct {
 		Prefix string `json:"prefix"`
-		Count  int    `json:"count"`
-	}{Prefix: *prefix, Count: len(keys)}
+		Count  int64  `json:"count"`
+	}{Prefix: *prefix, Count: count}
 	encoded, _ := json.Marshal(result)
 	fmt.Println(string(encoded))
-	if *expected >= 0 && len(keys) != *expected {
-		fatal(fmt.Errorf("object count = %d, want %d", len(keys), *expected))
+	if *expected >= 0 && count != int64(*expected) {
+		fatal(fmt.Errorf("object count = %d, want %d", count, *expected))
 	}
 }
 

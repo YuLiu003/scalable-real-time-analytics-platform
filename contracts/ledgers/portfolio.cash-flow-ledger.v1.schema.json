@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yuliu.dev/schemas/portfolio.cash-flow-ledger.v1.schema.json",
+  "title": "Portfolio Cash-Flow Ledger v1",
+  "description": "A normalized, single-currency record of external portfolio deposits and withdrawals.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "portfolio_id", "base_currency", "transactions", "totals"],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "portfolio_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+    },
+    "base_currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "transactions": {
+      "type": "array",
+      "$comment": "transaction_id values are unique and items are ordered by occurred_at instant, then transaction_id.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["transaction_id", "occurred_at", "cash_flow_type", "amount"],
+        "properties": {
+          "transaction_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$"
+          },
+          "cash_flow_type": {
+            "enum": ["deposit", "withdrawal"]
+          },
+          "amount": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*\\.[0-9]{8}$|^0\\.(?!00000000)[0-9]{8}$"
+          }
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "$comment": "Totals are the exact deposit sum, withdrawal sum, and deposits minus withdrawals for transactions.",
+      "additionalProperties": false,
+      "required": ["total_deposits", "total_withdrawals", "net_external_cash_flow"],
+      "properties": {
+        "total_deposits": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{8}$"
+        },
+        "total_withdrawals": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{8}$"
+        },
+        "net_external_cash_flow": {
+          "type": "string",
+          "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{8}$"
+        }
+      }
+    }
+  }
+}

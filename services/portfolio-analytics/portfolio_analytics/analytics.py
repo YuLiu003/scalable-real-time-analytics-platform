@@ -18,6 +18,27 @@ def _rfc3339(value) -> str:
     return value.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
+def latest_required_objects(objects: list[BronzeObject], holdings_data: bytes) -> list[BronzeObject]:
+    portfolio = parse_portfolio(holdings_data)
+    required = {item.instrument for item in portfolio.positions} | {portfolio.benchmark.instrument}
+    seen_event_ids: set[str] = set()
+    latest: dict[str, tuple[tuple, BronzeObject]] = {}
+    for obj in sorted(objects, key=lambda item: item.key):
+        observation = parse_price(obj)
+        if observation.event_id in seen_event_ids:
+            raise ValueError("bronze input contains duplicate event_id values")
+        seen_event_ids.add(observation.event_id)
+        if observation.tenant_id != portfolio.portfolio_id:
+            raise ValueError("bronze input contains an unexpected tenant_id")
+        if observation.instrument not in required:
+            continue
+        rank = (observation.occurred_at, observation.provider_sequence, observation.event_id)
+        current = latest.get(observation.instrument)
+        if current is None or rank > current[0]:
+            latest[observation.instrument] = (rank, obj)
+    return sorted((item[1] for item in latest.values()), key=lambda item: item.key)
+
+
 def build_products(objects: list[BronzeObject], holdings_data: bytes, output_dir: Path) -> dict:
     if not objects:
         raise ValueError("no bronze market-price objects found")

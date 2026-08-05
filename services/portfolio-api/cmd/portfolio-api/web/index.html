@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Synthetic Fund Portfolio</title>
+  <title>Fund Portfolio</title>
   <style>
     :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #08111f; color: #edf4ff; }
     * { box-sizing: border-box; }
@@ -46,6 +46,7 @@
     .tag { display: inline-block; margin-top: .35rem; padding: .2rem .45rem; border-radius: 999px; background: #1d3850; color: #acd7ff; font-size: .68rem; }
     .warning { color: #ffd98a; }
     .error { margin-top: 1rem; color: #ff9a9a; }
+    [hidden] { display: none !important; }
     footer { margin-top: 1rem; color: #8298b3; font-size: .8rem; line-height: 1.55; }
     @media (max-width: 760px) {
       .grid, .projection-grid, .form-grid { grid-template-columns: 1fr; }
@@ -56,15 +57,26 @@
 </head>
 <body>
 <main>
-  <div class="notice">Synthetic demonstration data · Not live market data · Not financial advice</div>
+  <div id="data-mode-notice" class="notice">Loading portfolio configuration · Not financial advice</div>
   <header>
-    <p class="eyebrow">Kubernetes analytics lab</p>
+    <p id="portfolio-eyebrow" class="eyebrow">Portfolio analytics</p>
     <h1 id="portfolio-name">Fund portfolio</h1>
-    <p id="meta" class="muted">Loading the latest deterministic snapshot…</p>
+    <p id="meta" class="muted">Loading configuration…</p>
   </header>
 
-  <div id="summary" class="grid" aria-live="polite"></div>
   <div id="error" class="error" role="alert"></div>
+  <section id="access-panel" class="panel" aria-labelledby="access-title" hidden>
+    <h2 id="access-title">Private portfolio access</h2>
+    <p class="muted">Enter the access token supplied by the portfolio operator. It is kept only in this page's memory.</p>
+    <form id="access-token-form">
+      <label>Access token
+        <input id="access-token" type="password" minlength="32" maxlength="512" autocomplete="off" required>
+      </label>
+      <button type="submit">Load private portfolio</button>
+    </form>
+  </section>
+
+  <div id="summary" class="grid" aria-live="polite"></div>
 
   <section class="panel" aria-labelledby="projection-title">
     <h2 id="projection-title">Long-term contribution projection</h2>
@@ -112,28 +124,31 @@
   </section>
 
   <section class="panel" aria-labelledby="positions-title">
-    <h2 id="positions-title">Illustrative holdings</h2>
+    <h2 id="positions-title">Holdings</h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Fund</th><th>Quantity</th><th>Valuation</th><th>Unit value</th><th>Market value</th><th>Allocation</th></tr></thead>
+        <thead><tr><th>Instrument</th><th>Quantity</th><th>Valuation</th><th>Unit value</th><th>Market value</th><th>Allocation</th></tr></thead>
         <tbody id="positions"></tbody>
       </table>
     </div>
   </section>
 
-  <section class="panel">
+  <section id="fixture-note" class="panel">
     <h2>Fixture note</h2>
     <p class="warning">The displayed instruments are fictional examples and do not encode a real portfolio, issuer, or index.</p>
     <p class="muted">DEMO-ASSET-C uses a daily mutual-fund NAV. DEMO-BENCH-D is a synthetic benchmark level, not a purchasable portfolio position.</p>
   </section>
 
-  <footer>The displayed quantities and values are source-controlled fixtures used to prove object storage, DuckDB, Kubernetes Jobs, API readiness, and deterministic replay. Replace them only with data you are authorized to store.</footer>
+  <footer id="portfolio-footer">Portfolio values are educational and are not financial advice.</footer>
 </main>
 <script>
   const text = (value) => document.createTextNode(value);
   const valuationLabel = {market_price: 'Market price', nav: 'Daily NAV', index_level: 'Index level'};
+  const assetTypeLabel = {stock: 'Stock', etf: 'ETF', mutual_fund: 'Mutual fund', index: 'Index'};
   const money = (value, currency) => new Intl.NumberFormat('en-US', {style: 'currency', currency}).format(Number(value));
   const percent = (value) => `${Number(value).toFixed(2)}%`;
+  let configuration;
+  let accessToken = '';
 
   function card(label, value, detail) {
     const node = document.createElement('section');
@@ -219,21 +234,44 @@
     }
   });
 
-  fetch('/api/v1/portfolios/demo/allocation', {cache: 'no-store'})
-    .then((response) => { if (!response.ok) throw new Error(`result unavailable (${response.status})`); return response.json(); })
-    .then((result) => {
+  function applyMode(config) {
+    const privateMode = config.data_mode === 'private';
+    document.getElementById('data-mode-notice').textContent = privateMode
+      ? 'Private portfolio data · Authorized access required · Not financial advice'
+      : 'Synthetic demonstration data · Not live market data · Not financial advice';
+    document.getElementById('portfolio-eyebrow').textContent = privateMode ? 'Private portfolio analytics' : 'Kubernetes analytics lab';
+    document.getElementById('positions-title').textContent = privateMode ? 'Holdings' : 'Illustrative holdings';
+    document.getElementById('access-panel').hidden = !config.access_token_required;
+    document.getElementById('fixture-note').hidden = privateMode;
+    document.getElementById('portfolio-footer').textContent = privateMode
+      ? 'Private portfolio values are shown only for authorized educational use. Not financial advice.'
+      : 'The displayed quantities and values are source-controlled fixtures used to prove object storage, DuckDB, Kubernetes Jobs, API readiness, and deterministic replay.';
+    document.getElementById('meta').textContent = privateMode
+      ? 'Enter an access token to load the latest portfolio snapshot.'
+      : 'Loading the latest deterministic snapshot…';
+  }
+
+  function renderPortfolio(result) {
       document.getElementById('portfolio-name').textContent = result.display_name;
       document.getElementById('meta').textContent = `As of ${result.as_of} · ${result.input_object_count} immutable bronze objects`;
+      document.title = result.display_name;
 
       const summary = document.getElementById('summary');
+      const benchmarkIsIndex = result.benchmark.asset_type === 'index';
+      const benchmarkValue = benchmarkIsIndex
+        ? Number(result.benchmark.price).toLocaleString('en-US')
+        : money(result.benchmark.price, result.base_currency);
+      summary.replaceChildren();
       summary.append(
-        card('Illustrative value', money(result.total_market_value, result.base_currency), `${result.positions.length} holdings`),
-        card('Benchmark', result.benchmark.display_name, `${result.benchmark.instrument} · ${valuationLabel[result.benchmark.valuation_type]}`),
-        card('Benchmark level', Number(result.benchmark.price).toLocaleString('en-US'), `As of ${result.benchmark.price_as_of}`)
+        card(configuration.data_mode === 'private' ? 'Portfolio value' : 'Illustrative value', money(result.total_market_value, result.base_currency), `${result.positions.length} holdings`),
+        card('Benchmark', result.benchmark.display_name, `${result.benchmark.instrument} · ${assetTypeLabel[result.benchmark.asset_type] || result.benchmark.asset_type} · ${valuationLabel[result.benchmark.valuation_type]}`),
+        card(benchmarkIsIndex ? 'Benchmark level' : 'Benchmark price', benchmarkValue, `As of ${result.benchmark.price_as_of}`)
       );
 
       const allocation = document.getElementById('allocation');
       const body = document.getElementById('positions');
+      allocation.replaceChildren();
+      body.replaceChildren();
       result.positions.forEach((position) => {
         const allocationRow = document.createElement('div');
         allocationRow.className = 'allocation';
@@ -260,17 +298,59 @@
         name.appendChild(text(position.display_name));
         const tag = document.createElement('span');
         tag.className = 'tag';
-        tag.appendChild(text(position.asset_type === 'mutual_fund' ? 'Mutual fund' : 'ETF'));
+        tag.appendChild(text(assetTypeLabel[position.asset_type] || position.asset_type));
         identity.append(symbol, name, tag);
         const values = [position.quantity, valuationLabel[position.valuation_type], money(position.price, result.base_currency), money(position.market_value, result.base_currency), `${position.allocation_pct}%`];
         row.appendChild(identity);
         values.forEach((value) => { const cell = document.createElement('td'); cell.appendChild(text(value)); row.appendChild(cell); });
         body.appendChild(row);
       });
-    })
-    .catch((error) => { document.getElementById('error').textContent = error.message; });
+      projectionForm.elements.initial_investment.value = Number(result.total_market_value).toFixed(2);
+      projectionForm.requestSubmit();
+  }
+
+  async function loadPortfolio() {
+    document.getElementById('error').textContent = '';
+    const headers = configuration.access_token_required ? {Authorization: `Bearer ${accessToken}`} : {};
+    const portfolioPath = encodeURIComponent(configuration.portfolio_id);
+    const response = await fetch(`/api/v1/portfolios/${portfolioPath}/allocation`, {cache: 'no-store', headers});
+    if (response.status === 401) throw new Error('Access token was not accepted.');
+    if (!response.ok) throw new Error(`result unavailable (${response.status})`);
+    renderPortfolio(await response.json());
+  }
+
+  document.getElementById('access-token-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const input = document.getElementById('access-token');
+    accessToken = input.value;
+    input.value = '';
+    try {
+      await loadPortfolio();
+    } catch (error) {
+      accessToken = '';
+      document.getElementById('error').textContent = error.message;
+    }
+  });
+
+  async function initialize() {
+    try {
+      const response = await fetch('/api/v1/config', {cache: 'no-store'});
+      if (!response.ok) throw new Error(`configuration unavailable (${response.status})`);
+      configuration = await response.json();
+      const validMode = configuration.data_mode === 'synthetic' || configuration.data_mode === 'private';
+      if (configuration.schema_version !== 1 || typeof configuration.portfolio_id !== 'string' || !validMode ||
+          configuration.access_token_required !== (configuration.data_mode === 'private')) {
+        throw new Error('configuration response is invalid');
+      }
+      applyMode(configuration);
+      if (!configuration.access_token_required) await loadPortfolio();
+    } catch (error) {
+      document.getElementById('error').textContent = error.message;
+    }
+  }
 
   projectionForm.requestSubmit();
+  initialize();
 </script>
 </body>
 </html>
