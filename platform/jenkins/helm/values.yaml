@@ -127,8 +127,6 @@ controller:
       system-hardening: |-
         jenkins:
           systemMessage: "Investment Platform Jenkins - configuration managed by Git"
-          remotingSecurity:
-            enabled: true
       artifact-storage: |-
         credentials:
           system:
@@ -148,12 +146,12 @@ controller:
         aws:
           awsCredentials:
             credentialsId: "jenkins-artifacts"
-            region: "garage"
+            region: "us-east-1"
           s3:
             container: "jenkins-artifacts"
             prefix: "jenkins/"
             customEndpoint: "127.0.0.1:13900"
-            customSigningRegion: "garage"
+            customSigningRegion: "us-east-1"
             usePathStyleUrl: true
             useHttp: true
             disableSessionToken: true

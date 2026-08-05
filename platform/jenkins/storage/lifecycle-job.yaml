@@ -18,6 +18,9 @@ spec:
     spec:
       restartPolicy: Never
       automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: configure
           image: local/jenkins-presubmit-agent:0.1.0

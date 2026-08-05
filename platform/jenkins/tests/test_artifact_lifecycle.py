@@ -53,7 +53,7 @@ class ArtifactLifecycleTests(unittest.TestCase):
 
         MODULE.apply(self.environ, factory)
         self.assertEqual(calls[0][0], ("s3",))
-        self.assertEqual(calls[0][1]["region_name"], "garage")
+        self.assertEqual(calls[0][1]["region_name"], "us-east-1")
         self.assertEqual(client.bucket, "jenkins-artifacts")
         self.assertEqual(
             client.put["LifecycleConfiguration"],

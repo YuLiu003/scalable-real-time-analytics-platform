@@ -107,6 +107,14 @@ class JenkinsContractTests(unittest.TestCase):
         )
         pod_spec = statefulset["spec"]["template"]["spec"]
         image = pod_spec["containers"][0]["image"]
+        artifact_bootstrap = (
+            JENKINS_DIR / "scripts" / "bootstrap-artifact-store.sh"
+        ).read_text(encoding="utf-8")
+        lifecycle_job = yaml.safe_load(
+            (JENKINS_DIR / "storage" / "lifecycle-job.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
 
         self.assertIn("daysToKeep(3)", values_text)
         self.assertIn("numToKeep(20)", values_text)
@@ -118,11 +126,22 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertIn("scope: SYSTEM", values_text)
         self.assertNotIn("scope: GLOBAL", values_text)
         self.assertIn('customEndpoint: "127.0.0.1:13900"', values_text)
+        self.assertIn('region: "us-east-1"', values_text)
+        self.assertIn('customSigningRegion: "us-east-1"', values_text)
+        self.assertIn('s3_region = "us-east-1"', artifact_bootstrap)
+        self.assertIn(
+            "<customSigningRegion>us-east-1</customSigningRegion>",
+            (JENKINS_DIR / "scripts" / "verify.sh").read_text(encoding="utf-8"),
+        )
         self.assertIn("disableSessionToken: true", values_text)
         self.assertEqual(image, "local/jenkins-garage:2.3.0")
         self.assertEqual(pod_spec["containers"][0]["imagePullPolicy"], "Never")
         self.assertEqual(values_text.count("image: local/jenkins-socat:1.8.0.3"), 3)
         self.assertEqual(values_text.count("imagePullPolicy: Never"), 3)
+        self.assertEqual(
+            lifecycle_job["spec"]["template"]["spec"]["securityContext"],
+            {"seccompProfile": {"type": "RuntimeDefault"}},
+        )
         self.assertNotIn("market-raw", values_text)
         self.assertNotIn("minio", values_text.lower())
         self.assertNotIn("minio", image.lower())

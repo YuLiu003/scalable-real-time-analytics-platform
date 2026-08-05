@@ -66,7 +66,7 @@ for expected_setting in \
   '<useHttp>true</useHttp>' \
   '<disableSessionToken>true</disableSessionToken>' \
   '<customEndpoint>127.0.0.1:13900</customEndpoint>' \
-  '<customSigningRegion>garage</customSigningRegion>'; do
+  '<customSigningRegion>us-east-1</customSigningRegion>'; do
   if ! kubectl --context "${JENKINS_CONTEXT}" --namespace "${JENKINS_NAMESPACE}" \
     exec statefulset/jenkins -- grep -Fq "${expected_setting}" "${artifact_config}"; then
     printf 'ERROR: Jenkins artifact manager is missing required Garage configuration.\n' >&2

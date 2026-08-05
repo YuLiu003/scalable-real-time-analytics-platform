@@ -36,7 +36,7 @@ printf '%s\n' \
   'rpc_public_addr = "jenkins-artifacts-0.jenkins-artifacts-internal.jenkins-system.svc.cluster.local:3901"' \
   "rpc_secret = \"${rpc_secret}\"" \
   '[s3_api]' \
-  's3_region = "garage"' \
+  's3_region = "us-east-1"' \
   'api_bind_addr = "[::]:3900"' \
   'root_domain = ".s3.garage.local"' \
   '[admin]' \
