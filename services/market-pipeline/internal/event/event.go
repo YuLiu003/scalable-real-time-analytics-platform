@@ -124,6 +124,21 @@ func (e Envelope) Validate() error {
 	return nil
 }
 
+// ValidSource reports whether value is a canonical event-source slug.
+func ValidSource(value string) bool {
+	return sourcePattern.MatchString(value)
+}
+
+// ValidTenantID reports whether value is a canonical tenant identifier.
+func ValidTenantID(value string) bool {
+	return tenantIDPattern.MatchString(value)
+}
+
+// ValidInstrument reports whether value is a canonical instrument identifier.
+func ValidInstrument(value string) bool {
+	return instrumentPattern.MatchString(value)
+}
+
 func (e Envelope) Marshal() ([]byte, error) {
 	if err := e.Validate(); err != nil {
 		return nil, err

@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: private-portfolio-analytics
+  namespace: analytics-apps
+  labels:
+    app.kubernetes.io/name: private-portfolio-analytics
+    app.kubernetes.io/part-of: investment-analytics-platform
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: private-portfolio-api
+  namespace: analytics-apps
+  labels:
+    app.kubernetes.io/name: private-portfolio-api
+    app.kubernetes.io/part-of: investment-analytics-platform
+automountServiceAccountToken: false

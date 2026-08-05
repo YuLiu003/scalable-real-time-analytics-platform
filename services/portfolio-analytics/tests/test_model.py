@@ -144,6 +144,18 @@ class PortfolioContractTests(unittest.TestCase):
         )
         self.assertEqual(portfolio.benchmark.instrument, "DEMO-BENCH-D")
 
+    def test_parse_portfolio_accepts_stock_positions_and_market_benchmarks(self) -> None:
+        for benchmark_asset_type in ["stock", "etf"]:
+            with self.subTest(benchmark_asset_type=benchmark_asset_type):
+                value = holdings_value()
+                value["positions"][0]["asset_type"] = "stock"
+                value["benchmark"]["asset_type"] = benchmark_asset_type
+                value["benchmark"]["valuation_type"] = "market_price"
+                portfolio = parse_portfolio(json.dumps(value).encode())
+                self.assertEqual(portfolio.positions[0].asset_type, "stock")
+                self.assertEqual(portfolio.benchmark.asset_type, benchmark_asset_type)
+                self.assertEqual(portfolio.benchmark.valuation_type, "market_price")
+
     def test_parse_portfolio_rejects_invalid_json_and_shape(self) -> None:
         for data in [b"{", b"\xff"]:
             with self.subTest(data=data), self.assertRaisesRegex(ValueError, "invalid JSON"):
@@ -168,13 +180,20 @@ class PortfolioContractTests(unittest.TestCase):
             (lambda value: value["positions"][0].update({"unknown": True}), "fields mismatch"),
             (lambda value: value["positions"][0].__setitem__("instrument", "lower"), "instrument"),
             (lambda value: value["positions"].append(value["positions"][0]), "duplicate"),
-            (lambda value: value["positions"][0].__setitem__("asset_type", "stock"), "asset_type"),
+            (lambda value: value["positions"][0].__setitem__("asset_type", "bond"), "asset_type"),
             (lambda value: value["positions"][0].__setitem__("valuation_type", "close"), "valuation_type"),
             (
                 lambda value: value["positions"][2].__setitem__("valuation_type", "market_price"),
                 "mutual fund",
             ),
             (lambda value: value["positions"][0].__setitem__("valuation_type", "nav"), "ETF"),
+            (
+                lambda value: (
+                    value["positions"][0].__setitem__("asset_type", "stock"),
+                    value["positions"][0].__setitem__("valuation_type", "nav"),
+                ),
+                "stock",
+            ),
             (lambda value: value["positions"][0].__setitem__("display_name", " padded"), "display_name"),
             (lambda value: value["positions"][0].__setitem__("quantity", "0"), "greater than zero"),
         ]
@@ -188,8 +207,8 @@ class PortfolioContractTests(unittest.TestCase):
             (lambda value: value["benchmark"].update({"unknown": True}), "fields mismatch"),
             (lambda value: value["benchmark"].__setitem__("instrument", "lower"), "instrument"),
             (lambda value: value["benchmark"].__setitem__("instrument", "DEMO-ASSET-A"), "must not also"),
-            (lambda value: value["benchmark"].__setitem__("asset_type", "etf"), "index level"),
-            (lambda value: value["benchmark"].__setitem__("valuation_type", "market_price"), "index level"),
+            (lambda value: value["benchmark"].__setitem__("asset_type", "bond"), "incompatible"),
+            (lambda value: value["benchmark"].__setitem__("valuation_type", "market_price"), "incompatible"),
             (lambda value: value["benchmark"].__setitem__("display_name", " padded"), "display_name"),
         ]
         for index, (mutate, message) in enumerate(mutations):

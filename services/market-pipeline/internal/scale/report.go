@@ -52,6 +52,21 @@ type GroupReport struct {
 	RequiredClientHostPresent bool   `json:"required_client_host_present"`
 }
 
+// PartitionOffsets is the broker and consumer-group state for one partition.
+type PartitionOffsets struct {
+	Oldest    int64
+	Newest    int64
+	Committed int64
+}
+
+// LagReport contains exact committed-offset lag without event or instrument labels.
+type LagReport struct {
+	PartitionCount  int             `json:"partition_count"`
+	TotalLag        int64           `json:"total_lag"`
+	MaxPartitionLag int64           `json:"max_partition_lag"`
+	LagByPartition  map[int32]int64 `json:"lag_by_partition"`
+}
+
 // ValidateRun proves key/envelope agreement, per-instrument ordering, and the
 // exact record count for one run phase without exposing instrument names.
 func ValidateRun(records []Record, runID, phase string, expected int64) (Report, error) {
@@ -173,6 +188,42 @@ func ValidateConsumerGroup(
 		AssignedPartitionCount:    len(partitions),
 		RequiredClientHostPresent: true,
 	}, nil
+}
+
+// CalculateLag validates a complete partition snapshot and computes lag from
+// broker end offsets and committed consumer-group offsets. An uninitialized
+// committed offset starts at the retained oldest offset.
+func CalculateLag(offsets map[int32]PartitionOffsets, expectedPartitions int) (LagReport, error) {
+	if expectedPartitions < 1 || len(offsets) != expectedPartitions {
+		return LagReport{}, errors.New("a complete positive partition set is required")
+	}
+	report := LagReport{
+		PartitionCount: expectedPartitions,
+		LagByPartition: make(map[int32]int64, expectedPartitions),
+	}
+	for partition := range int32(expectedPartitions) {
+		offset, exists := offsets[partition]
+		if !exists {
+			return LagReport{}, fmt.Errorf("partition %d is missing from the lag snapshot", partition)
+		}
+		if offset.Oldest < 0 || offset.Newest < offset.Oldest {
+			return LagReport{}, fmt.Errorf("partition %d has invalid broker offsets", partition)
+		}
+		committed := offset.Committed
+		if committed == -1 {
+			committed = offset.Oldest
+		}
+		if committed < offset.Oldest || committed > offset.Newest {
+			return LagReport{}, fmt.Errorf("partition %d has an invalid committed offset", partition)
+		}
+		lag := offset.Newest - committed
+		report.LagByPartition[partition] = lag
+		report.TotalLag += lag
+		if lag > report.MaxPartitionLag {
+			report.MaxPartitionLag = lag
+		}
+	}
+	return report, nil
 }
 
 // PercentileMilliseconds uses the nearest-rank definition on a defensive copy.

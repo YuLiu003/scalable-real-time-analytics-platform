@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	portfolioaccess "github.com/YuLiu003/real-time-analytics-platform/services/portfolio-api/internal/access"
 	"github.com/YuLiu003/real-time-analytics-platform/services/portfolio-api/internal/httpapi"
 	"github.com/YuLiu003/real-time-analytics-platform/services/portfolio-api/internal/store"
 )
@@ -27,15 +28,20 @@ func main() {
 		logger.Error("invalid configuration", "error", err)
 		os.Exit(1)
 	}
+	portfolio := envOrDefault("PORTFOLIO_ID", "demo")
+	accessToken, err := portfolioaccess.Load(portfolio, os.Getenv("PORTFOLIO_ACCESS_TOKEN_FILE"))
+	if err != nil {
+		logger.Error("invalid portfolio access configuration", "error", err)
+		os.Exit(1)
+	}
 	objectStore, err := store.New(ctx, settings)
 	if err != nil {
 		logger.Error("create object store client", "error", err)
 		os.Exit(1)
 	}
-	portfolio := envOrDefault("PORTFOLIO_ID", "demo")
 	server := &http.Server{
 		Addr:              envOrDefault("HTTP_ADDRESS", ":8080"),
-		Handler:           httpapi.New(objectStore, portfolio, dashboard).Handler(),
+		Handler:           httpapi.New(objectStore, portfolio, dashboard, accessToken).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
@@ -47,7 +53,7 @@ func main() {
 		defer stop()
 		_ = server.Shutdown(shutdownContext)
 	}()
-	logger.Info("portfolio API started", "address", server.Addr, "portfolio_id", portfolio)
+	logger.Info("portfolio API started", "address", server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logger.Error("portfolio API stopped", "error", err)
 		os.Exit(1)

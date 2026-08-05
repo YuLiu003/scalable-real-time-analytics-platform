@@ -171,6 +171,15 @@ func (h *consumerHandler) ConsumeClaim(session sarama.ConsumerGroupSession, clai
 				return err
 			}
 			_ = h.metrics.Observe(outcome, processing, durable)
+			if outcome == string(archive.Created) && h.postWriteDelay > 0 {
+				timer := time.NewTimer(h.postWriteDelay)
+				select {
+				case <-session.Context().Done():
+					timer.Stop()
+					return session.Context().Err()
+				case <-timer.C:
+				}
+			}
 			session.MarkMessage(message, "archive effect durable")
 		}
 	}
@@ -193,13 +202,6 @@ func (h *consumerHandler) process(ctx context.Context, message *sarama.ConsumerM
 	}
 	if result == archive.Created && h.postWriteDelay > 0 {
 		h.logger.Info("post-write failure window open", "event_ref", event.IDReference(envelope.EventID), "delay", h.postWriteDelay.String())
-		timer := time.NewTimer(h.postWriteDelay)
-		defer timer.Stop()
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		case <-timer.C:
-		}
 	}
 	return string(result), nil
 }

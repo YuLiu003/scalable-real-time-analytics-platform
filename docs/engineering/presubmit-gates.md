@@ -11,7 +11,7 @@ they targeted removed services and included floating or fail-open checks.
 | --- | --- | --- |
 | `PS0` | Fast local and PR policy | Clean diff, changed-file syntax, credential-material guard, SHA-pinned workflows, secure Jenkinsfile, completed PR checklist |
 | `PS1` | Deterministic correctness | Unit and race tests, static checks, application coverage, plugin coverage, presubmit-runner coverage |
-| `PS2` | System and infrastructure behavior | OpenTofu validation/tests, Kubernetes render, complete disposable kind workflow, failure diagnostics, automatic cluster/runtime cleanup |
+| `PS2` | System and infrastructure behavior | OpenTofu validation/tests, Kubernetes render, disposable kind workflow, scale/recovery acceptance, bounded capacity smoke, diagnostics, automatic cleanup |
 
 All three gates fail closed. Warnings are informational only when the check is
 explicitly outside the gate contract.
@@ -29,6 +29,14 @@ Go test dependencies. `PS2` requires Docker, kind, kubectl, Helm, and OpenTofu.
 On a local Mac, `PS2` uses the disposable Colima path and deletes its dedicated
 VM and data. Linux CI/Jenkins agents delete the kind cluster and should
 themselves be ephemeral.
+
+The bounded capacity gate is one 10,000-event trial paced at 250 events per
+second so it contains the required CPU measurement window. It validates the
+benchmark path but is not a burst-capacity claim. The unbounded 10K/50K/100K
+five-run matrix is separate because shared-runner contention and merge-gate
+timeouts would make capacity comparisons misleading. That manual matrix omits
+CPU/memory for unbounded 10K only and keeps strict resource evidence for
+50K/100K; PS2's paced 10K continues to exercise the strict path.
 
 ## PR review checklist
 

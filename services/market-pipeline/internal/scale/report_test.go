@@ -192,6 +192,42 @@ func TestValidateConsumerGroupRequiresStableAssignedReplacement(t *testing.T) {
 	}
 }
 
+func TestCalculateLagReportsEveryPartition(t *testing.T) {
+	report, err := CalculateLag(map[int32]PartitionOffsets{
+		0: {Oldest: 5, Newest: 20, Committed: 12},
+		1: {Oldest: 7, Newest: 11, Committed: -1},
+	}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.PartitionCount != 2 || report.TotalLag != 12 || report.MaxPartitionLag != 8 ||
+		report.LagByPartition[0] != 8 || report.LagByPartition[1] != 4 {
+		t.Fatalf("CalculateLag() = %+v", report)
+	}
+}
+
+func TestCalculateLagRejectsIncompleteOrInvalidOffsets(t *testing.T) {
+	tests := []struct {
+		name       string
+		offsets    map[int32]PartitionOffsets
+		partitions int
+		want       string
+	}{
+		{name: "empty", offsets: nil, partitions: 0, want: "complete"},
+		{name: "missing", offsets: map[int32]PartitionOffsets{1: {}}, partitions: 1, want: "missing"},
+		{name: "broker", offsets: map[int32]PartitionOffsets{0: {Oldest: 2, Newest: 1}}, partitions: 1, want: "broker"},
+		{name: "committed before retention", offsets: map[int32]PartitionOffsets{0: {Oldest: 2, Newest: 3, Committed: 1}}, partitions: 1, want: "committed"},
+		{name: "committed after end", offsets: map[int32]PartitionOffsets{0: {Oldest: 0, Newest: 3, Committed: 4}}, partitions: 1, want: "committed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := CalculateLag(tt.offsets, tt.partitions); err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("CalculateLag() error = %v", err)
+			}
+		})
+	}
+}
+
 func TestDecodeAssignmentRejectsMalformedEncodings(t *testing.T) {
 	valid := assignment(t, map[string][]int32{"topic": {0}})
 	emptyUserData := append([]byte(nil), valid...)

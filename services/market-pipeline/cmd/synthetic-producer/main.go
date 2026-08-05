@@ -165,7 +165,15 @@ func runLoad(logger *slog.Logger, client kafkaclient.Config, producerConfig *sar
 		return fmt.Errorf("Kafka acknowledged %d of %d scale events", len(acknowledgements.latencies), sent)
 	}
 	duration := time.Since(startedAt)
+	p50, err := scale.PercentileMilliseconds(acknowledgements.latencies, 0.50)
+	if err != nil {
+		return err
+	}
 	p95, err := scale.PercentileMilliseconds(acknowledgements.latencies, 0.95)
+	if err != nil {
+		return err
+	}
+	p99, err := scale.PercentileMilliseconds(acknowledgements.latencies, 0.99)
 	if err != nil {
 		return err
 	}
@@ -174,9 +182,12 @@ func runLoad(logger *slog.Logger, client kafkaclient.Config, producerConfig *sar
 		"run_id", config.RunID,
 		"phase", config.Phase,
 		"messages", sent,
+		"target_rate_events_per_second", config.TargetRate,
 		"duration_milliseconds", float64(duration)/float64(time.Millisecond),
 		"throughput_events_per_second", float64(sent)/duration.Seconds(),
+		"ack_p50_milliseconds", p50,
 		"ack_p95_milliseconds", p95,
+		"ack_p99_milliseconds", p99,
 	)
 	return nil
 }

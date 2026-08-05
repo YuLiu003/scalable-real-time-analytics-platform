@@ -25,7 +25,7 @@ for command in portfolio-api portfolio-inspector derived-reset; do
   )
 done
 
-for command in synthetic-producer raw-event-archiver archive-inspector topic-inspector; do
+for command in synthetic-producer alpaca-market-producer raw-event-archiver archive-inspector topic-inspector; do
   (
     cd "${MARKET_DIR}"
     CGO_ENABLED=0 GOOS=linux GOARCH="${GO_ARCH}" GOWORK=off \
@@ -39,6 +39,9 @@ docker build \
   --build-arg "PYTHON_IMAGE=${PYTHON_IMAGE}" \
   --tag "${IMAGE_PREFIX}/portfolio-analytics:${IMAGE_TAG}" \
   "${ANALYTICS_DIR}"
-docker build --tag "${IMAGE_PREFIX}/market-pipeline:${IMAGE_TAG}" "${MARKET_DIR}"
+docker build \
+  --build-arg "CERTIFICATE_IMAGE=${PYTHON_IMAGE}" \
+  --tag "${IMAGE_PREFIX}/market-pipeline:${IMAGE_TAG}" \
+  "${MARKET_DIR}"
 
 printf 'Built %s/{portfolio-api,portfolio-analytics,market-pipeline}:%s\n' "${IMAGE_PREFIX}" "${IMAGE_TAG}"

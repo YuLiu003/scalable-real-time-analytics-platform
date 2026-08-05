@@ -7,7 +7,7 @@ local_dir="${repo_root}/platform/local"
 # shellcheck disable=SC1091
 source "${local_dir}/versions.lock"
 
-for command_name in tofu kubectl kind helm docker make; do
+for command_name in tofu kubectl kind helm docker go make python3; do
   if ! command -v "${command_name}" >/dev/null 2>&1; then
     printf 'ERROR: PS2 requires %s on the isolated build agent.\n' "${command_name}" >&2
     exit 1
@@ -19,10 +19,13 @@ done
 kubectl kustomize "${repo_root}/platform/gitops/clusters/local" >/dev/null
 kubectl kustomize "${repo_root}/platform/gitops/platform/local/market-data-services" >/dev/null
 kubectl kustomize "${repo_root}/platform/gitops/apps/local/market-pipeline" >/dev/null
+kubectl kustomize "${repo_root}/platform/gitops/apps/private/market-feed" >/dev/null
 kubectl kustomize "${repo_root}/platform/gitops/apps/local/portfolio-analytics" >/dev/null
+kubectl kustomize "${repo_root}/platform/gitops/apps/private/portfolio-analytics" >/dev/null
+kubectl kustomize "${repo_root}/platform/gitops/apps/private/portfolio-analytics-acceptance" >/dev/null
 
 if [[ "$(uname -s)" == "Darwin" && "${CI:-false}" != "true" ]]; then
-  make -C "${local_dir}" e2e-ephemeral
+  EPHEMERAL_CAPACITY_SMOKE=true make -C "${local_dir}" e2e-ephemeral
   exit
 fi
 
@@ -52,7 +55,29 @@ make -C "${local_dir}" bootstrap
 make -C "${local_dir}" bootstrap-data-path
 make -C "${local_dir}" bootstrap-analytics
 make -C "${local_dir}" verify-scale-lab
+docker_cpus="${CAPACITY_ALLOCATED_CPUS:-$(docker info --format '{{.NCPU}}')}"
+if [[ -n "${CAPACITY_ALLOCATED_MEMORY_GIB:-}" ]]; then
+  docker_memory_gib="${CAPACITY_ALLOCATED_MEMORY_GIB}"
+else
+  docker_memory_bytes="$(docker info --format '{{.MemTotal}}')"
+  docker_memory_gib="$(python3 -c 'import sys; print(max(1, int(sys.argv[1]) // (1024 ** 3)))' "${docker_memory_bytes}")"
+fi
+if [[ -n "${CAPACITY_ALLOCATED_DISK_GIB:-}" ]]; then
+  docker_disk_gib="${CAPACITY_ALLOCATED_DISK_GIB}"
+else
+  docker_root="$(docker info --format '{{.DockerRootDir}}')"
+  docker_disk_gib="$(docker run --rm --network none --read-only --cap-drop=ALL \
+    --security-opt no-new-privileges:true \
+    --mount "type=bind,src=${docker_root},dst=/capacity-docker-root,readonly" \
+    --entrypoint /usr/bin/df "${KIND_NODE_IMAGE}" -Pk /capacity-docker-root | \
+    awk 'NR == 2 { gib = int($2 / 1048576); print (gib > 0 ? gib : 1) }')"
+fi
+CAPACITY_ALLOCATED_CPUS="${docker_cpus}" \
+CAPACITY_ALLOCATED_MEMORY_GIB="${docker_memory_gib}" \
+CAPACITY_ALLOCATED_DISK_GIB="${docker_disk_gib}" \
+  make -C "${local_dir}" verify-capacity-smoke
 CONFIRM_DESTROY_ANALYTICS=portfolio-analytics make -C "${local_dir}" destroy-analytics
 make -C "${local_dir}" bootstrap-analytics
+make -C "${local_dir}" verify-private-portfolio
 
 printf 'PS2 integration, Kubernetes, and infrastructure checks passed.\n'

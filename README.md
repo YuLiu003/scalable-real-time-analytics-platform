@@ -2,10 +2,9 @@
 
 This repository is a free, production-like learning platform for Kubernetes,
 event-driven systems, cloud infrastructure, and long-term investment analytics.
-It processes deterministic events for three synthetic assets and one synthetic
-benchmark,
-builds portfolio products, and exposes contribution projections through a Go
-API and dashboard.
+It processes deterministic public fixtures or an optional private stock/ETF
+watchlist, builds portfolio products, normalizes external cash flows, and
+exposes contribution projections through a Go API and dashboard.
 
 The workload is intentionally useful without pretending a personal portfolio
 needs hyperscale infrastructure. Synthetic traffic and fault injection provide
@@ -17,6 +16,14 @@ observability, and cloud-platform engineering.
 - The complete local platform runs on disposable `kind` clusters.
 - Kafka uses Strimzi in KRaft mode.
 - KEDA scales an isolated archive consumer group from Kafka lag.
+- A separate fixed-worker benchmark runs repeatable 10K/50K/100K synthetic
+  trials and rejects incomplete, duplicated, reordered, or unmeasured runs.
+- An opt-in Alpaca WebSocket adapter uses runtime-only credentials and
+  watchlists, historical gap backfill, and stable Kafka event identities.
+- A private local workflow joins that feed to runtime-only stock/ETF holdings,
+  five-minute analytics refreshes, and a bearer-protected dashboard.
+- An offline JSON/CSV importer creates a private normalized cash-flow ledger
+  without confusing deposits or withdrawals with return.
 - Garage provides the local S3-compatible object-storage contract.
 - Python and DuckDB build deterministic Parquet analytics products.
 - The Go portfolio API serves holdings and contribution projections.
@@ -36,22 +43,14 @@ operates a continuously available production service or a live AWS account.
 ## Architecture
 
 ```text
-Synthetic market producer
-          |
-          v
-  Strimzi Kafka topics
-          |
-          v
- Raw event archiver --------> Garage / S3 bronze objects
-                                      |
-                                      v
-                          Python + DuckDB analytics
-                                      |
-                                      v
-                           Parquet portfolio products
-                                      |
-                                      v
-                         Go portfolio API + dashboard
+Synthetic producer -----------\
+                               > Strimzi Kafka -> raw archiver -> Garage / S3 bronze
+Private Alpaca adapter -------/                              |
+                                                             +-> synthetic source + demo holdings
+                                                             |       -> public analytics and API
+                                                             |
+                                                             +-> private source + runtime-only holdings
+                                                                     -> private analytics and protected API
 
 Synthetic scale producer --> isolated Kafka scale topic
                                       |
@@ -62,10 +61,21 @@ Synthetic scale producer --> isolated Kafka scale topic
                              aggregate evidence
 ```
 
+The default analytics Job intentionally selects only the committed synthetic
+source and demo holdings. The opt-in private workflow uses separate Secrets,
+analytics/API workloads, and a fixed private tenant; it never publishes a real
+watchlist or holding to Git or CI artifacts.
+
 The acceptance path injects ambiguous producer acknowledgements, consumer
 crashes, duplicate delivery, replay, dependency loss, and readiness failures.
 Immutable object writes and deterministic input identities prevent a replay
 from silently changing a result.
+
+Capacity evidence is deliberately separate. It removes the artificial archive
+delay, fixes three consumers to the three-partition concurrency ceiling, and
+reports broker-acknowledgement throughput separately from durable
+Kafka-to-object-storage throughput. The roadmap preserves the committed
+aggregate result and its exact local hardware and topology boundary.
 
 ## Repository layout
 
@@ -118,6 +128,19 @@ autoscaling, replay, and recovery acceptance. Use the persistent development
 workflow in the local-platform runbook only when you need to inspect a running
 cluster.
 
+Run the repeated capacity matrix in its own disposable Colima VM:
+
+```bash
+make -C platform/local e2e-capacity-ephemeral
+```
+
+This runs the scale/recovery acceptance once, then five zero-delay trials at
+10K, 50K, and 100K events. Generated reports remain under the ignored
+`artifacts/kafka-capacity/` path while the owned VM and all container data are
+deleted. Stop any other running Colima profile first; the benchmark checks this
+at startup and never mutates the other profile. See the capacity contract before
+presenting any result.
+
 Run the production-like Jenkins path:
 
 ```bash
@@ -126,6 +149,104 @@ make -C platform/jenkins e2e-ephemeral
 
 That command also uses a dedicated disposable Colima VM and deletes its
 container data when it finishes.
+
+## Use the application
+
+The `e2e-*` commands above are verification workflows: they delete their
+runtime when finished and do not leave a dashboard running. Use one of the
+persistent workflows below when you want to interact with the application.
+
+### Explore the fictional demo
+
+Start the cluster, event pipeline, analytics, and dashboard in order:
+
+```bash
+make -C platform/local bootstrap
+make -C platform/local bootstrap-data-path
+make -C platform/local bootstrap-analytics
+make -C platform/local portfolio-dashboard
+```
+
+Keep the last command running and open <http://127.0.0.1:8080>. This demo needs
+no credentials or access token and labels all holdings and prices as synthetic.
+Press `Ctrl-C` to close the dashboard tunnel; the cluster continues running.
+
+If port 8080 is occupied, use another loopback port:
+
+```bash
+make -C platform/local portfolio-dashboard PORTFOLIO_DASHBOARD_PORT=18080
+```
+
+Then open <http://127.0.0.1:18080>.
+
+### Use a private live stock/ETF portfolio
+
+Create the three absolute-path, mode-`0600` input files described in the
+[`private portfolio workflow`](docs/features/cloud-native-investment-platform/private-portfolio-workflow.md).
+Those files hold the Alpaca credentials and selected instruments, portfolio
+quantities, and dashboard token; keep them outside this repository. Start the
+private workflow with:
+
+```bash
+PRIVATE_FEED_ENV_FILE=/absolute/path/alpaca-market-feed.env \
+PRIVATE_HOLDINGS_FILE=/absolute/path/portfolio.json \
+PRIVATE_ACCESS_TOKEN_FILE=/absolute/path/portfolio.token \
+  make -C platform/local bootstrap-private-portfolio
+
+make -C platform/local private-portfolio-dashboard
+```
+
+Keep the last command running, open <http://127.0.0.1:8080>, and enter the token
+from `portfolio.token`. The token remains only in the page's memory. Instruments
+come from the private input files rather than a source-controlled portfolio.
+
+### Read and model the portfolio
+
+The dashboard shows the current total value, selected benchmark and observation
+time, allocation by market value, and each holding's quantity, price, value,
+and allocation percentage.
+
+In **Long-term contribution projection**, enter:
+
+- the starting value, contribution amount, and monthly or biweekly cadence;
+- the number of years and assumed annual return;
+- the return range, inflation rate, and annual expense ratio.
+
+The application calculates conservative, base, and optimistic scenarios. Each
+scenario reports the ending balance, inflation-adjusted balance, total
+contributions, investment growth, and estimated fee drag. Contributions are
+modeled at the end of each period. These are hypothetical calculations, not
+forecasts, recommendations, or trade execution.
+
+### Refresh, change inputs, and clean up
+
+Private analytics publishes a new snapshot every five minutes. The browser does
+not poll automatically, so reload the page to display a newer snapshot. Rerun
+`bootstrap-private-portfolio` with the three input paths to change credentials,
+instruments, quantities, or the access token.
+
+Stop the private workloads and remove their runtime Secrets and checkpoint:
+
+```bash
+CONFIRM_DESTROY_PRIVATE_PORTFOLIO=private-portfolio \
+  make -C platform/local destroy-private-portfolio
+```
+
+Kafka and Garage retain shared market and derived data after that command. Use
+the explicit all-data purge documented in the private workflow when those data
+must also be removed. To delete the entire project-owned local cluster,
+containers, volumes, and Colima VM disk, run:
+
+```bash
+CONFIRM_RUNTIME_CLEANUP=investment-platform \
+  make -C platform/local reclaim-runtime
+```
+
+The credential-free PS2 acceptance proves the private wiring with fictional
+records; it does not contact Alpaca or prove a live provider subscription.
+Transaction-grounded performance based on the separate
+[`cash-flow ledger contract`](docs/features/cloud-native-investment-platform/personal-portfolio-ledger-contract.md)
+remains future work.
 
 ## Cloud learning boundary
 
@@ -147,6 +268,10 @@ operations. A paid apply is outside the required definition of done.
 - [Roadmap](docs/features/cloud-native-investment-platform/roadmap-v2.md)
 - [Quality gates](docs/features/cloud-native-investment-platform/quality-gates.md)
 - [Kafka scale lab](docs/features/cloud-native-investment-platform/kafka-scale-lab-contract.md)
+- [Kafka capacity benchmark](docs/features/cloud-native-investment-platform/kafka-capacity-benchmark-contract.md)
+- [Private market feed](docs/features/cloud-native-investment-platform/private-market-feed-contract.md)
+- [Private portfolio workflow](docs/features/cloud-native-investment-platform/private-portfolio-workflow.md)
+- [Personal cash-flow ledger](docs/features/cloud-native-investment-platform/personal-portfolio-ledger-contract.md)
 - [Local Kubernetes runbook](platform/local/README.md)
 - [Jenkins platform](platform/jenkins/README.md)
 - [AWS OpenTofu lab](infra/opentofu/aws/README.md)

@@ -1,10 +1,11 @@
 SHELL := /usr/bin/env bash
 PORTFOLIO_DASHBOARD_PORT ?= 8080
 
-.PHONY: preflight bootstrap verify diagnose destroy e2e-ephemeral reclaim-runtime grafana prometheus \
+.PHONY: preflight bootstrap verify diagnose destroy e2e-ephemeral e2e-capacity-ephemeral reclaim-runtime grafana prometheus \
 	build-data-path bootstrap-data-path verify-data-path diagnose-data-path destroy-data-path \
-	verify-scale-lab \
+	verify-scale-lab verify-capacity-benchmark verify-capacity-smoke \
 	build-analytics bootstrap-analytics verify-analytics diagnose-analytics destroy-analytics portfolio-dashboard \
+	bootstrap-private-portfolio verify-private-portfolio destroy-private-portfolio private-portfolio-dashboard \
 	quality
 
 quality:
@@ -28,6 +29,9 @@ destroy:
 e2e-ephemeral:
 	./scripts/run-ephemeral.sh
 
+e2e-capacity-ephemeral:
+	EPHEMERAL_WORKFLOW=capacity ./scripts/run-ephemeral.sh
+
 reclaim-runtime:
 	./scripts/cleanup-runtime.sh
 
@@ -50,6 +54,12 @@ verify-data-path:
 
 verify-scale-lab:
 	./scripts/verify-scale-lab.sh
+
+verify-capacity-benchmark:
+	./scripts/verify-capacity-benchmark.sh
+
+verify-capacity-smoke:
+	CAPACITY_EVENT_COUNTS=10000 CAPACITY_REPETITIONS=1 CAPACITY_TARGET_RATE=250 ./scripts/verify-capacity-benchmark.sh
 
 diagnose-data-path:
 	./scripts/diagnose-data-path.sh
@@ -75,3 +85,16 @@ destroy-analytics:
 portfolio-dashboard:
 	kubectl --context kind-investment-platform --namespace analytics-apps \
 		port-forward service/portfolio-api $(PORTFOLIO_DASHBOARD_PORT):8080
+
+bootstrap-private-portfolio:
+	./scripts/bootstrap-private-portfolio.sh
+
+verify-private-portfolio:
+	./scripts/verify-private-portfolio.sh
+
+destroy-private-portfolio:
+	./scripts/destroy-private-portfolio.sh
+
+private-portfolio-dashboard:
+	kubectl --context kind-investment-platform --namespace analytics-apps \
+		port-forward service/private-portfolio-api $(PORTFOLIO_DASHBOARD_PORT):8080

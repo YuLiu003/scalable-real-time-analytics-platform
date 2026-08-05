@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 from botocore.exceptions import ClientError
 
+from portfolio_analytics.model import BronzeObject
 from portfolio_analytics.storage import ObjectStore, S3Settings
 
 
@@ -84,6 +85,48 @@ class StorageTests(unittest.TestCase):
         )
         self.assertEqual(client.get_object.call_count, 2)
         self.assertEqual(store.get("latest.json"), b"payload")
+
+    def test_lists_only_latest_date_partitions_containing_source(self) -> None:
+        client = Mock()
+        client.get_paginator.return_value.paginate.return_value = [
+            {
+                "CommonPrefixes": [
+                    {"Prefix": "bronze/date=2026-07-19/"},
+                    {"Prefix": "bronze/date=2026-07-20/"},
+                    {"Prefix": "bronze/date=2026-07-21/"},
+                    {"Prefix": "bronze/date=2026-07-22/"},
+                    {"Prefix": "bronze/not-a-date/"},
+                    {"Prefix": "other/date=2026-07-23/"},
+                    {"Prefix": 1},
+                    {},
+                ]
+            },
+            {},
+        ]
+        store = object.__new__(ObjectStore)
+        store.bucket = "analytics"
+        store.client = client
+        by_prefix = {
+            "bronze/date=2026-07-22/": [BronzeObject("bronze/date=2026-07-22/b.json", b"b")],
+            "bronze/date=2026-07-21/": [],
+            "bronze/date=2026-07-20/": [BronzeObject("bronze/date=2026-07-20/a.json", b"a")],
+            "bronze/date=2026-07-19/": [BronzeObject("bronze/date=2026-07-19/old.json", b"old")],
+        }
+        with patch.object(store, "list_objects", side_effect=lambda prefix, _: by_prefix[prefix]) as listed:
+            objects = store.list_latest_source_objects("bronze/", "/source=private/", 2)
+        self.assertEqual([item.key for item in objects], ["bronze/date=2026-07-20/a.json", "bronze/date=2026-07-22/b.json"])
+        self.assertEqual(
+            [call.args[0] for call in listed.call_args_list],
+            ["bronze/date=2026-07-22/", "bronze/date=2026-07-21/", "bronze/date=2026-07-20/"],
+        )
+        client.get_paginator.return_value.paginate.assert_called_once_with(
+            Bucket="analytics", Prefix="bronze/", Delimiter="/"
+        )
+        with patch.object(store, "list_objects", side_effect=lambda prefix, _: by_prefix[prefix]):
+            objects = store.list_latest_source_objects("bronze/", "/source=private/", 4)
+        self.assertEqual(len(objects), 3)
+        with self.assertRaisesRegex(ValueError, "positive"):
+            store.list_latest_source_objects("bronze/", "/source=private/", 0)
 
     def test_put_immutable_creates_duplicate_and_rejects_collisions(self) -> None:
         data = b"parquet"

@@ -56,9 +56,10 @@ verify_user_visible_result() {
     exit 1
   fi
   dashboard="$(kubectl --context "${context}" get --raw "${service_proxy}/")"
-  if [[ "${dashboard}" != *'<title>Synthetic Fund Portfolio</title>'* ]] || \
+  if [[ "${dashboard}" != *'<title>Fund Portfolio</title>'* ]] || \
     [[ "${dashboard}" != *'Not live market data'* ]] || \
-    [[ "${dashboard}" != *'id="projection-form"'* ]]; then
+    [[ "${dashboard}" != *'id="projection-form"'* ]] || \
+    [[ "${dashboard}" != *'id="access-token-form"'* ]]; then
     printf 'ERROR: dashboard HTML was not served.\n' >&2
     exit 1
   fi

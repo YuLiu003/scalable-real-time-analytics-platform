@@ -26,6 +26,21 @@ machine-readable report. Its privacy and measurement boundaries are defined in
 the
 [`Kafka scale lab contract`](../../docs/features/cloud-native-investment-platform/kafka-scale-lab-contract.md).
 
+V2-5B adds a fixed-worker, zero-delay capacity profile with repeated trial
+aggregation. Its metric and claim boundaries are defined in the
+[`Kafka capacity benchmark contract`](../../docs/features/cloud-native-investment-platform/kafka-capacity-benchmark-contract.md).
+
+V2-5A adds an opt-in private Alpaca stock/ETF feed. The real adapter is excluded
+from credential-free CI because credentials and the user-selected watchlist
+must stay runtime-only; PS2 uses fictional records through the same contract.
+Its recovery and privacy boundaries are defined in the
+[`private market feed contract`](../../docs/features/cloud-native-investment-platform/private-market-feed-contract.md).
+
+V2-5C joins that feed to runtime-only stock/ETF holdings, a separate analytics
+Job, and a bearer-protected local dashboard. Its supported inputs and cleanup
+boundary are defined in the
+[`private portfolio workflow`](../../docs/features/cloud-native-investment-platform/private-portfolio-workflow.md).
+
 The current baseline replaces the retired Minikube, raw-manifest, and incomplete
 Helm paths. Supported local workflows use kind through the targets documented
 here.
@@ -164,6 +179,40 @@ EPHEMERAL_COLIMA_DISK_GIB=30 \
   make -C platform/local e2e-ephemeral
 ```
 
+### Recommended: disposable capacity benchmark
+
+Run the default 10K/50K/100K matrix five times per size in a separate owned
+runtime:
+
+```bash
+make -C platform/local e2e-capacity-ephemeral
+```
+
+The plan omits CPU/memory only for the short unbounded 10K scenario. Its
+throughput, latency, lag, ordering, and exact-count evidence remains required;
+50K/100K resource series remain mandatory. The paced PS2 10K smoke also keeps
+strict resource checks.
+
+The `investment-platform-capacity-ephemeral` profile is never reused. The
+workflow verifies autoscaling/recovery once, measures the zero-delay capacity
+profile, preserves ignored reports under `artifacts/kafka-capacity/`, and then
+deletes the kind cluster and Colima VM on success, failure, or interruption.
+At startup it refuses to run while another Colima profile is running and uses
+`caffeinate` on macOS when available. Stop a persistent development profile
+first with `colima stop investment-platform`; the benchmark never stops or
+deletes another profile automatically.
+
+To reduce the matrix while developing the benchmark itself:
+
+```bash
+CAPACITY_EVENT_COUNTS=10000,50000 \
+CAPACITY_REPETITIONS=3 \
+  make -C platform/local e2e-capacity-ephemeral
+```
+
+This changes the experiment and must be recorded with any result. It is not
+equivalent to the default five-repeat matrix.
+
 ### Persistent development mode
 
 Optionally supply the Grafana password without writing it to a file:
@@ -217,6 +266,40 @@ This local topology has one Kafka broker and one Garage replica. It tests API,
 identity, persistence, and failure boundaries but does not claim broker or
 object-store availability.
 
+## Private stock/ETF portfolio
+
+Create the three absolute, mode-`0600` files defined in the
+[`private portfolio workflow`](../../docs/features/cloud-native-investment-platform/private-portfolio-workflow.md),
+then start the complete persistent path with one command:
+
+```bash
+PRIVATE_FEED_ENV_FILE=/absolute/path/outside/repository/alpaca-market-feed.env \
+PRIVATE_HOLDINGS_FILE=/absolute/path/outside/repository/portfolio.json \
+PRIVATE_ACCESS_TOKEN_FILE=/absolute/path/outside/repository/portfolio.token \
+  make -C platform/local bootstrap-private-portfolio
+```
+
+The command validates inputs before creating Secrets, starts the provider
+adapter, waits for the archive, publishes a private allocation, and enables a
+five-minute refresh. Open the protected dashboard through loopback only:
+
+```bash
+make -C platform/local private-portfolio-dashboard
+```
+
+Stop the private workloads and remove their Secrets and checkpoint with:
+
+```bash
+CONFIRM_DESTROY_PRIVATE_PORTFOLIO=private-portfolio \
+  make -C platform/local destroy-private-portfolio
+```
+
+Kafka and Garage retain shared market data unless the separate all-data purge
+confirmation in the workflow is supplied. The live adapter becomes ready only
+after provider authentication, exact subscription acknowledgement, and
+historical gap backfill. A credential-free fictional PS2 acceptance does not
+prove a live provider run.
+
 ## Kafka scale, replay, and recovery
 
 After the data path is running, execute the bounded scale acceptance:
@@ -255,6 +338,22 @@ are fictional, and metrics/reporting intentionally omit instrument labels. For
 large runs, prefer `e2e-ephemeral` so the VM, Kafka records, object data, images,
 and volumes are deleted after verification. That complete workflow also
 rebuilds analytics after the scale phase to prove source isolation.
+
+For capacity rather than autoscaling behavior, use
+`verify-capacity-benchmark` only against an already bootstrapped isolated
+cluster. It pins three consumers, removes the artificial delay, performs the
+configured repeated matrix, and restores the normal KEDA bounds afterward.
+`verify-capacity-smoke` is the single-10K-run PS2 gate, paced at 250 events per
+second so its twenty-five-second CPU window is deterministic. Prefer
+`e2e-capacity-ephemeral` for manual full runs so hundreds of thousands of Kafka
+records and archive objects cannot remain on the workstation.
+The full unbounded matrix intentionally omits 10K CPU/memory rather than
+recording unavailable series as zero; it requires those measurements for 50K
+and 100K.
+When invoking either verification target directly, set
+`CAPACITY_ALLOCATED_CPUS`, `CAPACITY_ALLOCATED_MEMORY_GIB`, and
+`CAPACITY_ALLOCATED_DISK_GIB` to the isolated runtime's actual allocation. The
+ephemeral and PS2 workflows record these automatically.
 
 ## Analytics and portfolio dashboard
 

@@ -7,6 +7,11 @@ exceeds consumer capacity. Personal portfolio traffic is deliberately not used
 to justify Kafka or Kubernetes. A configurable generator creates non-personal
 load against the same canonical event, archive, and replay contracts.
 
+This default run is a correctness, autoscaling, and recovery acceptance—not a
+capacity benchmark. The separate
+[capacity benchmark contract](kafka-capacity-benchmark-contract.md) owns
+zero-delay repeated trials and durable throughput/resource comparisons.
+
 ```text
 synthetic load Job -> market.prices.scale (3 partitions)
                          |
@@ -120,7 +125,7 @@ retained bronze inputs and reproduces the neutral portfolio result.
 The versioned JSON report records:
 
 - producer throughput and broker-acknowledgement p95 for each phase;
-- Prometheus Kafka-to-durable-archive p95;
+- a diagnostic cumulative Kafka-to-durable-archive p95;
 - maximum sampled KEDA consumer lag;
 - maximum and settled consumer replicas;
 - assigned Kafka consumer-group recovery time;
@@ -147,6 +152,11 @@ the current run.
 
 Use the disposable end-to-end workflow for large tests so Kafka data, object
 storage, images, volumes, and the Colima VM are deleted afterward.
+
+Do not use the diagnostic latency value in this acceptance as capacity
+evidence: the acceptance includes replay, consumer replacement, and an
+artificial post-write window. The capacity benchmark instead uses exact
+before/after histogram deltas with fixed consumers and no injected delay.
 
 ## Unsupported claims
 

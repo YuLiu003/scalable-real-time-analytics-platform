@@ -1,0 +1,85 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: private-portfolio-analytics
+  namespace: analytics-apps
+  labels:
+    app.kubernetes.io/name: private-portfolio-analytics
+    app.kubernetes.io/part-of: investment-analytics-platform
+spec:
+  schedule: "*/5 * * * *"
+  suspend: true
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/name: private-portfolio-analytics
+        app.kubernetes.io/part-of: investment-analytics-platform
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 300
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: private-portfolio-analytics
+            app.kubernetes.io/part-of: investment-analytics-platform
+        spec:
+          serviceAccountName: private-portfolio-analytics
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: analytics
+              image: local/portfolio-analytics:slice3
+              imagePullPolicy: Never
+              envFrom:
+                - secretRef:
+                    name: market-archive-credentials
+              env:
+                - name: ANALYTICS_PRIVATE_MODE
+                  value: "true"
+                - name: BRONZE_SOURCE
+                  value: alpaca-iex
+                - name: HOLDINGS_FILE
+                  value: /private-inputs/holdings.json
+                - name: WORK_ROOT
+                  value: /work
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: "1"
+                  memory: 1Gi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+                readOnlyRootFilesystem: true
+              volumeMounts:
+                - name: holdings
+                  mountPath: /private-inputs
+                  readOnly: true
+                - name: work
+                  mountPath: /work
+          volumes:
+            - name: holdings
+              secret:
+                secretName: private-portfolio-holdings
+                defaultMode: 0440
+                items:
+                  - key: holdings.json
+                    path: holdings.json
+            - name: work
+              emptyDir:
+                sizeLimit: 512Mi
