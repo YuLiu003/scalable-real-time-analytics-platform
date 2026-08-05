@@ -72,11 +72,13 @@ architecture="$(docker info --format '{{.Architecture}}')"
 case "${architecture}" in
   aarch64 | arm64)
     dind_source="${DOCKER_DIND_ARM64_SOURCE}"
-    platform_arch=arm64
+    garage_source="${GARAGE_ARM64_SOURCE}"
+    socat_source="${SOCAT_ARM64_SOURCE}"
     ;;
   x86_64 | amd64)
     dind_source="${DOCKER_DIND_AMD64_SOURCE}"
-    platform_arch=amd64
+    garage_source="${GARAGE_AMD64_SOURCE}"
+    socat_source="${SOCAT_AMD64_SOURCE}"
     ;;
   *)
     printf 'ERROR: unsupported Docker architecture %s.\n' "${architecture}" >&2
@@ -86,10 +88,10 @@ esac
 docker pull "${dind_source}"
 docker tag "${dind_source}" "${DOCKER_DIND_IMAGE}"
 docker pull "${JENKINS_KIND_NODE_IMAGE}"
-docker pull --platform "linux/${platform_arch}" "${GARAGE_SOURCE_IMAGE}"
-docker tag "${GARAGE_SOURCE_IMAGE}" "${GARAGE_IMAGE}"
-docker pull --platform "linux/${platform_arch}" "${SOCAT_SOURCE_IMAGE}"
-docker tag "${SOCAT_SOURCE_IMAGE}" "${SOCAT_IMAGE}"
+docker pull "${garage_source}"
+docker tag "${garage_source}" "${GARAGE_IMAGE}"
+docker pull "${socat_source}"
+docker tag "${socat_source}" "${SOCAT_IMAGE}"
 if ! docker run --rm \
   --entrypoint sh \
   --volume /var/local/investment-platform/jenkins-retained:/retained:ro \

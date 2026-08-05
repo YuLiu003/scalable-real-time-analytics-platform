@@ -31,14 +31,16 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertRegex(values["DOCKER_DIND_AMD64_SOURCE"], r"@sha256:[0-9a-f]{64}$")
         self.assertRegex(values["DOCKER_DIND_ARM64_SOURCE"], r"@sha256:[0-9a-f]{64}$")
         self.assertRegex(values["JENKINS_KIND_NODE_IMAGE"], r"@sha256:[0-9a-f]{64}$")
-        self.assertRegex(
-            values["GARAGE_SOURCE_IMAGE"],
-            r"^dxflrs/garage:v2\.3\.0@sha256:[0-9a-f]{64}$",
-        )
-        self.assertRegex(
-            values["SOCAT_SOURCE_IMAGE"],
-            r"^alpine/socat:[^@]+@sha256:[0-9a-f]{64}$",
-        )
+        for key in ("GARAGE_AMD64_SOURCE", "GARAGE_ARM64_SOURCE"):
+            self.assertRegex(
+                values[key], r"^dxflrs/garage:v2\.3\.0@sha256:[0-9a-f]{64}$"
+            )
+        for key in ("SOCAT_AMD64_SOURCE", "SOCAT_ARM64_SOURCE"):
+            self.assertRegex(
+                values[key], r"^alpine/socat:[^@]+@sha256:[0-9a-f]{64}$"
+            )
+        self.assertNotEqual(values["GARAGE_AMD64_SOURCE"], values["GARAGE_ARM64_SOURCE"])
+        self.assertNotEqual(values["SOCAT_AMD64_SOURCE"], values["SOCAT_ARM64_SOURCE"])
         self.assertEqual(values["GARAGE_IMAGE"], "local/jenkins-garage:2.3.0")
         self.assertEqual(values["SOCAT_IMAGE"], "local/jenkins-socat:1.8.0.3")
         self.assertRegex(
@@ -256,18 +258,14 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertIn('kind load docker-image "${DOCKER_DIND_IMAGE}"', text)
         self.assertIn("for attempt in 1 2", text)
         self.assertIn("if (( jenkins_ready == 0 ))", text)
-        self.assertIn('platform_arch=arm64', text)
-        self.assertIn('platform_arch=amd64', text)
-        self.assertIn(
-            'docker pull --platform "linux/${platform_arch}" "${GARAGE_SOURCE_IMAGE}"',
-            text,
-        )
-        self.assertIn('docker tag "${GARAGE_SOURCE_IMAGE}" "${GARAGE_IMAGE}"', text)
-        self.assertIn(
-            'docker pull --platform "linux/${platform_arch}" "${SOCAT_SOURCE_IMAGE}"',
-            text,
-        )
-        self.assertIn('docker tag "${SOCAT_SOURCE_IMAGE}" "${SOCAT_IMAGE}"', text)
+        self.assertIn('garage_source="${GARAGE_ARM64_SOURCE}"', text)
+        self.assertIn('garage_source="${GARAGE_AMD64_SOURCE}"', text)
+        self.assertIn('socat_source="${SOCAT_ARM64_SOURCE}"', text)
+        self.assertIn('socat_source="${SOCAT_AMD64_SOURCE}"', text)
+        self.assertIn('docker pull "${garage_source}"', text)
+        self.assertIn('docker tag "${garage_source}" "${GARAGE_IMAGE}"', text)
+        self.assertIn('docker pull "${socat_source}"', text)
+        self.assertIn('docker tag "${socat_source}" "${SOCAT_IMAGE}"', text)
         self.assertIn('kind load docker-image "${GARAGE_IMAGE}"', text)
         self.assertIn('kind load docker-image "${SOCAT_IMAGE}"', text)
         self.assertIn('bootstrap-artifact-store.sh', text)
