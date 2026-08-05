@@ -109,31 +109,54 @@ commit being tested.
 
 ### Temporary web UI
 
-The automated workflow uses an isolated Kubernetes configuration and removes
-the runtime when verification finishes, so no Jenkins login remains afterward.
-For an active, manually bootstrapped lab, forward the controller:
+Start a temporary operator session in the first terminal:
 
 ```bash
-kubectl --context kind-jenkins-platform --namespace jenkins-system \
-  port-forward service/jenkins 18080:8080
+make -C platform/jenkins ui
 ```
 
-Open `http://127.0.0.1:18080` and sign in as `admin`. There is no static
-password: bootstrap generates a new password for each runtime and stores it
-only in the live `jenkins-admin` Kubernetes Secret. Retrieve it from another
-trusted terminal that owns the lab's Kubernetes configuration:
+This creates an isolated Colima VM, kind cluster, and Jenkins runtime, then
+forwards Jenkins to `http://127.0.0.1:18080` and Garage to
+`http://127.0.0.1:13900`. It stays in the foreground for 7,200 seconds by
+default. `JENKINS_UI_TIMEOUT_SECONDS` may shorten that interval or extend it to
+at most 14,400 seconds. Press Ctrl-C to stop earlier. Normal exit, timeout, and
+handled interruption tear down kind and Colima; if runtime deletion cannot be
+proven, the command fails and retains its ownership fences for diagnosis.
+If local port `18080` is already in use, set `JENKINS_LOCAL_PORT` on the `ui`
+command and open the URL it prints.
+
+In a second trusted terminal, explicitly retrieve the current runtime's
+password:
 
 ```bash
-kubectl --context kind-jenkins-platform --namespace jenkins-system \
-  get secret jenkins-admin \
-  --output='jsonpath={.data.jenkins-admin-password}' | base64 --decode
-printf '\n'
+make -C platform/jenkins ui-password
 ```
 
-Treat the output as a secret: do not paste it into logs, issues, chat, or Git.
-Teardown removes the Secret, so no active password exists after the runtime
-stops. The normal `e2e-ephemeral` workflow is unattended and does not require
-UI login.
+Sign in as `admin`. Treat the password output as a secret: do not paste it into
+logs, issues, chat, or Git. Bootstrap creates a fresh administrator password
+for each runtime, and that current password unlocks all bounded history
+restored into the controller. No live password can be retrieved after the
+runtime stops. Garage artifact links use signed URLs through the automatic
+port `13900` forward and require no separate Garage login.
+
+UI mode does not trigger a Jenkins build or run PS0, PS1, or PS2. The Colima
+VM, kind cluster, controller, and port-forwards consume local compute and disk
+only while the session is live; the bounded Jenkins history and Garage
+artifacts described below remain on local disk afterward. If overriding the
+retained-state location, pass the same absolute path to both terminals:
+
+```bash
+# Terminal 1
+JENKINS_RETAINED_STATE_DIR=/absolute/private/path \
+  make -C platform/jenkins ui
+
+# Terminal 2
+JENKINS_RETAINED_STATE_DIR=/absolute/private/path \
+  make -C platform/jenkins ui-password
+```
+
+The normal `e2e-ephemeral` workflow remains unattended and does not require UI
+login.
 
 The nested CI topology is deliberately smaller than the normal three-node local
 topology because it runs inside privileged DinD. Multi-node scheduling remains

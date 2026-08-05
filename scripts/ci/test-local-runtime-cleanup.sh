@@ -103,6 +103,33 @@ case "${command_name}" in
   kubectl)
     if [[ " $* " == *" get secret jenkins-retained-lock-owner "* ]]; then
       printf '%s' "${FAKE_RETAINED_LOCK_TOKEN:-}"
+    elif [[ " $* " == *" get secret jenkins-admin "* ]]; then
+      printf 'password-kubeconfig %s\n' "${KUBECONFIG:-}" >>"${FAKE_LOG}"
+      printf '%s' "${FAKE_JENKINS_PASSWORD:-cccccccccccccccccccccccccccccccccccccccccccccccc}"
+    elif [[ " $* " == *" port-forward service/"* ]]; then
+      forwarded_service=""
+      for ((index = 1; index <= $#; index += 1)); do
+        if [[ "${!index}" == "port-forward" ]]; then
+          service_index=$((index + 1))
+          forwarded_service="${!service_index#service/}"
+          break
+        fi
+      done
+      if [[ -z "${forwarded_service}" ]]; then
+        exit 1
+      fi
+      if [[ "${FAKE_FAIL_PORT_FORWARD_SERVICE:-}" == "${forwarded_service}" ]]; then
+        exit 1
+      fi
+      if [[ "${FAKE_PORT_FORWARD_BLOCK:-0}" == "1" ]]; then
+        marker="${FAKE_PORT_FORWARD_MARKER_DIR}/${forwarded_service}"
+        mkdir -p "${FAKE_PORT_FORWARD_MARKER_DIR}"
+        : >"${marker}"
+        trap 'rm -f -- "${marker}"; exit 143' HUP INT TERM
+        while true; do
+          sleep 0.05
+        done
+      fi
     elif [[ " $* " == *" get namespace ${FAKE_JENKINS_NAMESPACE:-jenkins-system} "* ]]; then
       if [[ "${FAKE_FAIL_NAMESPACE_LOOKUP:-0}" == "1" ]]; then
         exit 1
@@ -194,6 +221,30 @@ assert_runtime_config_isolated_and_removed() {
   grep -Fxq 'caller-docker-config' "${HOME}/.docker/config.json"
   grep -Fxq 'caller-kubeconfig' "${HOME}/.kube/config"
   [[ ! -e "${HOME}/.docker/colima-context" ]]
+}
+
+assert_ui_runtime_removed() {
+  local state="$1"
+  local profile="$2"
+
+  grep -Fxq \
+    "runtime-config ${state}/.ui-runtime/docker ${state}/.ui-runtime/kubeconfig" \
+    "${log_file}"
+  [[ ! -e "${state}/.ui-runtime" ]]
+  [[ ! -e "${state}/.active-lock" ]]
+  [[ ! -e "${HOME}/.colima/.investment-platform-locks/${profile}" ]]
+  grep -Fxq 'caller-docker-config' "${HOME}/.docker/config.json"
+  grep -Fxq 'caller-kubeconfig' "${HOME}/.kube/config"
+  [[ ! -e "${HOME}/.docker/colima-context" ]]
+}
+
+assert_port_forwards_stopped() {
+  local marker_dir="$1"
+  if [[ -d "${marker_dir}" ]] &&
+    [[ -n "$(find "${marker_dir}" -type f -print -quit)" ]]; then
+    printf 'Jenkins UI left a port-forward process running\n' >&2
+    exit 1
+  fi
 }
 
 assert_jenkins_quiesce_failure_retains_runtime() {
@@ -461,6 +512,187 @@ if (( jenkins_scale_line >= garage_scale_line || garage_scale_line >= kind_delet
 fi
 grep -q '^colima delete investment-platform-jenkins-ephemeral --force --data$' "${log_file}"
 assert_runtime_config_isolated_and_removed
+
+: >"${log_file}"
+absent_ui_state="${test_root}/absent-ui-state"
+if JENKINS_RETAINED_STATE_DIR="${absent_ui_state}" \
+  "${repo_root}/platform/jenkins/scripts/ui-password.sh" >/dev/null 2>&1; then
+  printf 'Jenkins UI password helper accepted an absent session\n' >&2
+  exit 1
+fi
+
+password_ui_state="${test_root}/password-ui-state"
+password_ui_runtime="${password_ui_state}/.ui-runtime"
+password_ui_output="${test_root}/password-ui-output"
+fake_jenkins_password=cccccccccccccccccccccccccccccccccccccccccccccccc
+password_owner_token="$(JENKINS_RETAINED_STATE_DIR="${password_ui_state}" \
+  "${repo_root}/platform/jenkins/scripts/retained-state.sh" acquire)"
+JENKINS_RETAINED_STATE_DIR="${password_ui_state}" \
+JENKINS_RETAINED_LOCK_TOKEN="${password_owner_token}" \
+  "${repo_root}/platform/jenkins/scripts/retained-state.sh" prepare >/dev/null
+mkdir "${password_ui_runtime}"
+chmod 0700 "${password_ui_runtime}"
+printf 'generated-kind-context\n' >"${password_ui_runtime}/kubeconfig"
+chmod 0600 "${password_ui_runtime}/kubeconfig"
+JENKINS_RETAINED_STATE_DIR="${password_ui_state}" \
+FAKE_JENKINS_PASSWORD="${fake_jenkins_password}" \
+  "${repo_root}/platform/jenkins/scripts/ui-password.sh" >"${password_ui_output}"
+grep -Fxq "${fake_jenkins_password}" "${password_ui_output}"
+grep -Fxq \
+  "password-kubeconfig ${password_ui_runtime}/kubeconfig" "${log_file}"
+grep -Fq \
+  'kubectl --context kind-jenkins-platform --namespace jenkins-system --request-timeout=5s get secret jenkins-admin' \
+  "${log_file}"
+JENKINS_RETAINED_STATE_DIR="${password_ui_state}" \
+JENKINS_RETAINED_LOCK_TOKEN="${password_owner_token}" \
+  "${repo_root}/platform/jenkins/scripts/retained-state.sh" release
+if JENKINS_RETAINED_STATE_DIR="${password_ui_state}" \
+  FAKE_JENKINS_PASSWORD="${fake_jenkins_password}" \
+    "${repo_root}/platform/jenkins/scripts/ui-password.sh" >/dev/null 2>&1; then
+  printf 'Jenkins UI password helper accepted runtime config without an active lock\n' >&2
+  exit 1
+fi
+
+: >"${log_file}"
+ui_profile=investment-platform-jenkins-ui-success
+ui_state="${test_root}/ui-success-state"
+ui_output="${test_root}/ui-success-output"
+ui_forward_markers="${test_root}/ui-success-port-forwards"
+JENKINS_COLIMA_PROFILE="${ui_profile}" \
+JENKINS_RETAINED_STATE_DIR="${ui_state}" \
+JENKINS_UI_TIMEOUT_SECONDS=1 \
+FAKE_PROFILE_NAME="${ui_profile}" \
+FAKE_PROFILE_PRESENT=0 \
+FAKE_CLUSTER_NAME=jenkins-platform \
+FAKE_CLUSTER_PRESENT=1 \
+FAKE_PORT_FORWARD_BLOCK=1 \
+FAKE_PORT_FORWARD_MARKER_DIR="${ui_forward_markers}" \
+DOCKER_CONTEXT=caller-context \
+DOCKER_HOST=unix:///caller/docker.sock \
+  "${repo_root}/platform/jenkins/scripts/run-ephemeral.sh" ui >"${ui_output}"
+grep -q '^make -C .*/platform/jenkins bootstrap$' "${log_file}"
+if grep -q '^make -C .*/platform/jenkins trigger$' "${log_file}"; then
+  printf 'Jenkins UI session triggered a presubmit build\n' >&2
+  exit 1
+fi
+grep -Fxq \
+  'kubectl --context kind-jenkins-platform --namespace jenkins-system port-forward service/jenkins 18080:8080' \
+  "${log_file}"
+grep -Fxq \
+  'kubectl --context kind-jenkins-platform --namespace jenkins-system port-forward service/jenkins-artifacts 13900:3900' \
+  "${log_file}"
+grep -Fxq 'URL: http://127.0.0.1:18080' "${ui_output}"
+grep -Fxq 'Username: admin' "${ui_output}"
+grep -Fq 'make -C platform/jenkins ui-password' "${ui_output}"
+if grep -Fq "${fake_jenkins_password}" "${ui_output}"; then
+  printf 'Jenkins UI session printed the administrator password\n' >&2
+  exit 1
+fi
+grep -q '^kind delete cluster --name jenkins-platform$' "${log_file}"
+grep -q "^colima delete ${ui_profile} --force --data$" "${log_file}"
+assert_ui_runtime_removed "${ui_state}" "${ui_profile}"
+assert_port_forwards_stopped "${ui_forward_markers}"
+
+: >"${log_file}"
+ui_term_profile=investment-platform-jenkins-ui-term
+ui_term_state="${test_root}/ui-term-state"
+ui_term_output="${test_root}/ui-term-output"
+ui_term_markers="${test_root}/ui-term-port-forwards"
+JENKINS_COLIMA_PROFILE="${ui_term_profile}" \
+JENKINS_RETAINED_STATE_DIR="${ui_term_state}" \
+JENKINS_UI_TIMEOUT_SECONDS=300 \
+FAKE_PROFILE_NAME="${ui_term_profile}" \
+FAKE_PROFILE_PRESENT=0 \
+FAKE_CLUSTER_NAME=jenkins-platform \
+FAKE_CLUSTER_PRESENT=1 \
+FAKE_PORT_FORWARD_BLOCK=1 \
+FAKE_PORT_FORWARD_MARKER_DIR="${ui_term_markers}" \
+DOCKER_CONTEXT=caller-context \
+DOCKER_HOST=unix:///caller/docker.sock \
+  "${repo_root}/platform/jenkins/scripts/run-ephemeral.sh" ui \
+  >"${ui_term_output}" 2>&1 &
+ui_term_pid=$!
+for _ in {1..200}; do
+  grep -Fq 'URL: http://127.0.0.1:18080' "${ui_term_output}" && break
+  sleep 0.05
+done
+if ! grep -Fq 'URL: http://127.0.0.1:18080' "${ui_term_output}"; then
+  printf 'Jenkins UI session did not become ready for TERM testing\n' >&2
+  exit 1
+fi
+kill -TERM "${ui_term_pid}"
+set +e
+wait "${ui_term_pid}"
+ui_term_status=$?
+set -e
+if [[ "${ui_term_status}" != 143 ]]; then
+  printf 'Jenkins UI session did not preserve TERM status\n' >&2
+  exit 1
+fi
+grep -q '^kind delete cluster --name jenkins-platform$' "${log_file}"
+grep -q "^colima delete ${ui_term_profile} --force --data$" "${log_file}"
+assert_ui_runtime_removed "${ui_term_state}" "${ui_term_profile}"
+assert_port_forwards_stopped "${ui_term_markers}"
+
+: >"${log_file}"
+ui_forward_failure_profile=investment-platform-jenkins-ui-forward-failure
+ui_forward_failure_state="${test_root}/ui-forward-failure-state"
+ui_forward_failure_markers="${test_root}/ui-forward-failure-port-forwards"
+if JENKINS_COLIMA_PROFILE="${ui_forward_failure_profile}" \
+  JENKINS_RETAINED_STATE_DIR="${ui_forward_failure_state}" \
+  JENKINS_UI_TIMEOUT_SECONDS=10 \
+  FAKE_PROFILE_NAME="${ui_forward_failure_profile}" \
+  FAKE_PROFILE_PRESENT=0 \
+  FAKE_CLUSTER_NAME=jenkins-platform \
+  FAKE_CLUSTER_PRESENT=1 \
+  FAKE_PORT_FORWARD_BLOCK=1 \
+  FAKE_PORT_FORWARD_MARKER_DIR="${ui_forward_failure_markers}" \
+  FAKE_FAIL_PORT_FORWARD_SERVICE=jenkins-artifacts \
+  DOCKER_CONTEXT=caller-context \
+  DOCKER_HOST=unix:///caller/docker.sock \
+    "${repo_root}/platform/jenkins/scripts/run-ephemeral.sh" ui \
+    >/dev/null 2>&1; then
+  printf 'Jenkins UI session ignored a failed port-forward\n' >&2
+  exit 1
+fi
+grep -q '^kind delete cluster --name jenkins-platform$' "${log_file}"
+grep -q "^colima delete ${ui_forward_failure_profile} --force --data$" \
+  "${log_file}"
+assert_ui_runtime_removed \
+  "${ui_forward_failure_state}" "${ui_forward_failure_profile}"
+assert_port_forwards_stopped "${ui_forward_failure_markers}"
+
+: >"${log_file}"
+ui_delete_failure_profile=investment-platform-jenkins-ui-delete-failure
+ui_delete_failure_state="${test_root}/ui-delete-failure-state"
+ui_delete_failure_markers="${test_root}/ui-delete-failure-port-forwards"
+if JENKINS_COLIMA_PROFILE="${ui_delete_failure_profile}" \
+  JENKINS_RETAINED_STATE_DIR="${ui_delete_failure_state}" \
+  JENKINS_UI_TIMEOUT_SECONDS=1 \
+  FAKE_PROFILE_NAME="${ui_delete_failure_profile}" \
+  FAKE_PROFILE_PRESENT=0 \
+  FAKE_CLUSTER_NAME=jenkins-platform \
+  FAKE_CLUSTER_PRESENT=1 \
+  FAKE_PORT_FORWARD_BLOCK=1 \
+  FAKE_PORT_FORWARD_MARKER_DIR="${ui_delete_failure_markers}" \
+  FAKE_FAIL_COLIMA_DELETE=1 \
+  DOCKER_CONTEXT=caller-context \
+  DOCKER_HOST=unix:///caller/docker.sock \
+    "${repo_root}/platform/jenkins/scripts/run-ephemeral.sh" ui \
+    >/dev/null 2>&1; then
+  printf 'Jenkins UI session ignored failed Colima deletion\n' >&2
+  exit 1
+fi
+grep -q '^kind delete cluster --name jenkins-platform$' "${log_file}"
+grep -q "^colima delete ${ui_delete_failure_profile} --force --data$" \
+  "${log_file}"
+[[ -f "${ui_delete_failure_state}/.ui-runtime/kubeconfig" ]]
+[[ -d "${ui_delete_failure_state}/.active-lock" ]]
+[[ -d \
+  "${HOME}/.colima/.investment-platform-locks/${ui_delete_failure_profile}" ]]
+grep -Fxq 'caller-docker-config' "${HOME}/.docker/config.json"
+grep -Fxq 'caller-kubeconfig' "${HOME}/.kube/config"
+assert_port_forwards_stopped "${ui_delete_failure_markers}"
 
 : >"${log_file}"
 if FAKE_PROFILE_NAME=investment-platform-jenkins-ephemeral \

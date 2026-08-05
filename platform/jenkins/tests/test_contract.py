@@ -360,6 +360,62 @@ class JenkinsContractTests(unittest.TestCase):
         self.assertIn("trap 'cleanup 130' INT", text)
         self.assertIn("trap 'cleanup 143' TERM", text)
 
+    def test_ui_session_is_bounded_protected_and_explicitly_authenticated(
+        self,
+    ) -> None:
+        makefile = (JENKINS_DIR / "Makefile").read_text(encoding="utf-8")
+        ephemeral = (JENKINS_DIR / "scripts" / "run-ephemeral.sh").read_text(
+            encoding="utf-8"
+        )
+        session = (JENKINS_DIR / "scripts" / "ui-session.sh").read_text(
+            encoding="utf-8"
+        )
+        password = (JENKINS_DIR / "scripts" / "ui-password.sh").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("ui:\n\t./scripts/run-ephemeral.sh ui", makefile)
+        self.assertIn("ui-password:\n\t./scripts/ui-password.sh", makefile)
+        self.assertIn('mode="${1:-verify}"', ephemeral)
+        self.assertIn('runtime_config_dir="${retained_state_dir}/.ui-runtime"', ephemeral)
+        self.assertIn('chmod 0700 "${runtime_config_dir}"', ephemeral)
+        self.assertIn('env -u JENKINS_RETAINED_LOCK_TOKEN', ephemeral)
+        self.assertIn('"${script_dir}/ui-session.sh" &', ephemeral)
+        self.assertIn('[[ "${mode}" == "ui" ]] && ! remove_runtime_config', ephemeral)
+
+        self.assertIn('JENKINS_UI_TIMEOUT_SECONDS:-7200', session)
+        self.assertIn("timeout_seconds > 14400", session)
+        self.assertIn("ready_deadline=$((SECONDS + 60))", session)
+        self.assertEqual(session.count("--connect-timeout 1 --max-time 2"), 2)
+        self.assertIn('JENKINS_LOCAL_PORT:-18080', session)
+        self.assertIn("garage_port=13900", session)
+        self.assertIn('--context "${JENKINS_CONTEXT}"', session)
+        self.assertIn('--namespace "${JENKINS_NAMESPACE}"', session)
+        self.assertIn('port-forward service/jenkins "${jenkins_port}:8080"', session)
+        self.assertIn(
+            'port-forward service/jenkins-artifacts "${garage_port}:3900"',
+            session,
+        )
+        self.assertIn("trap 'exit 129' HUP", session)
+        self.assertIn("trap 'exit 130' INT", session)
+        self.assertIn("trap 'exit 143' TERM", session)
+        self.assertIn('chmod 0600 "${KUBECONFIG}"', session)
+        self.assertIn("make -C platform/jenkins ui-password", session)
+        self.assertNotIn("jenkins-admin-password", session)
+        self.assertNotIn("get secret jenkins-admin", session)
+
+        self.assertIn('runtime_dir="${state_dir}/.ui-runtime"', password)
+        self.assertIn('"${state_dir}/.active-lock"', password)
+        self.assertIn('--context "${JENKINS_CONTEXT}"', password)
+        self.assertIn('--namespace "${JENKINS_NAMESPACE}"', password)
+        self.assertIn("--request-timeout=5s", password)
+        self.assertIn("get secret jenkins-admin", password)
+        self.assertIn("jenkins-admin-password", password)
+        self.assertIn("2>/dev/null", password)
+        self.assertIn("^[0-9a-f]{48}$", password)
+        self.assertNotIn("admin_password_file", session)
+        self.assertNotIn("admin_password_file", ephemeral)
+
     def test_retained_state_purge_requires_marker_and_confirmation(self) -> None:
         text = (JENKINS_DIR / "scripts" / "retained-state.sh").read_text(
             encoding="utf-8"

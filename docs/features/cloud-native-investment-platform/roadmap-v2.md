@@ -46,7 +46,7 @@ proof.
 | V2-5C | `feature/private-portfolio-inputs` | Private stock/ETF allocation and contribution-planning workflow over the live-feed contract | Strict external inputs, fictional end-to-end Kubernetes acceptance, private logging, protected API, and no committed private data | Complete locally; credential-free PS2 acceptance passed, while real provider smoke remains operator-run and unverified |
 | V2-6 | `feature/platform-observability-rollback` | OpenTelemetry, actionable alerts, Argo CD reconciliation, rollback | Trace across the event path and a detected, rolled-back bad release | Not started |
 | V2-7 | `feature/presubmit-quality-gates` | Credential-free Jenkins Pipeline calling repository-owned `PS0`/`PS1`/`PS2` targets | Isolated agents, exact-commit gate, GitHub status, automatic cleanup | Implemented; per-head proof is `jenkins / presubmit` |
-| V2-7A | `feature/jenkins-garage-retention` | Bounded Jenkins history and dedicated Garage artifact storage across disposable lab runs | Cross-run restore/readback, three-day/20-build controller policy, three-day Garage lifecycle, 1 GiB bucket quota, least-privilege key, owner-token fencing, local-disk report, at-most-4-GiB guard, and VM cleanup | Complete locally; two clean runs on `6197e8a` passed PS0/PS1/PS2, restored build `#1`, returned its retained Garage artifact with HTTP `200`, and removed the disposable runtime |
+| V2-7A | `feature/jenkins-garage-retention` | Bounded Jenkins history, dedicated Garage artifact storage, and a foreground operator UI across disposable lab runs | Cross-run restore/readback, three-day/20-build controller policy, three-day Garage lifecycle, 1 GiB bucket quota, least-privilege key, owner-token fencing, local-disk report, at-most-4-GiB guard, VM cleanup, UI lifecycle contracts, and disposable login/artifact smoke | Complete locally; retention, artifact readback, operator login, and cleanup proof are recorded below |
 | V2-8 | `feature/free-cloud-provider-contracts` | AWS/GCP/Azure IaC mocks and provider responsibility comparison | Validated configuration and documented emulator gaps; no paid apply | Not started |
 
 ## Verified V2-5B capacity evidence
@@ -95,6 +95,15 @@ bytes, approximately 358 MiB. Both runs removed the dedicated Colima profile
 and left no active owner lock. This is local cross-run persistence and cleanup
 evidence, not total growth from empty state, production, AWS runtime, off-host
 backup, high-availability, or cloud durability evidence.
+
+On 2026-08-05, the foreground operator UI restored three builds, accepted the
+fresh runtime administrator password returned only by the explicit helper, and
+returned a signed Garage artifact through the local port forward with HTTP
+`200`. Ctrl-C ended the session with status `130`, removed kind and the Colima
+profile, released both ownership locks, removed the runtime kubeconfig, and
+left the UI and password helper unreachable. No presubmit build was triggered.
+This is local operator-path evidence, not public, production, AWS, off-host, or
+high-availability evidence.
 
 ## Required free boundary
 
