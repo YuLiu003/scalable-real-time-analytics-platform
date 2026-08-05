@@ -70,7 +70,7 @@ else
     --security-opt no-new-privileges:true \
     --mount "type=bind,src=${docker_root},dst=/capacity-docker-root,readonly" \
     --entrypoint /usr/bin/df "${KIND_NODE_IMAGE}" -Pk /capacity-docker-root | \
-    awk 'NR == 2 { gib = int($2 / 1048576); print gib > 0 ? gib : 1 }')"
+    awk 'NR == 2 { gib = int($2 / 1048576); print (gib > 0 ? gib : 1) }')"
 fi
 CAPACITY_ALLOCATED_CPUS="${docker_cpus}" \
 CAPACITY_ALLOCATED_MEMORY_GIB="${docker_memory_gib}" \
