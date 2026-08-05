@@ -15,7 +15,14 @@ log_file="$(mktemp)"
 netrc_file="$(mktemp)"
 cookie_file="$(mktemp)"
 headers_file="$(mktemp)"
-chmod 0600 "${netrc_file}" "${cookie_file}" "${headers_file}"
+artifact_headers_file="$(mktemp)"
+artifact_log_file="$(mktemp)"
+chmod 0600 \
+  "${netrc_file}" \
+  "${cookie_file}" \
+  "${headers_file}" \
+  "${artifact_headers_file}" \
+  "${artifact_log_file}"
 printf 'machine 127.0.0.1 login admin password %s\n' "${admin_password}" >"${netrc_file}"
 base_url="http://127.0.0.1:${port}"
 curl_args=(
@@ -30,9 +37,20 @@ curl_args=(
 kubectl --context "${JENKINS_CONTEXT}" --namespace "${JENKINS_NAMESPACE}" \
   port-forward service/jenkins "${port}:8080" >"${log_file}" 2>&1 &
 port_forward_pid=$!
+kubectl --context "${JENKINS_CONTEXT}" --namespace "${JENKINS_NAMESPACE}" \
+  port-forward service/jenkins-artifacts 13900:3900 \
+  >"${artifact_log_file}" 2>&1 &
+artifact_port_forward_pid=$!
 cleanup() {
   kill "${port_forward_pid}" >/dev/null 2>&1 || true
-  rm -f "${log_file}" "${netrc_file}" "${cookie_file}" "${headers_file}"
+  kill "${artifact_port_forward_pid}" >/dev/null 2>&1 || true
+  rm -f \
+    "${log_file}" \
+    "${netrc_file}" \
+    "${cookie_file}" \
+    "${headers_file}" \
+    "${artifact_headers_file}" \
+    "${artifact_log_file}"
 }
 trap cleanup EXIT
 
@@ -52,6 +70,21 @@ if (( ready == 0 )); then
   exit 1
 fi
 
+artifact_ready=0
+for _ in {1..60}; do
+  if curl --silent --output /dev/null \
+    http://127.0.0.1:13900/jenkins-artifacts; then
+    artifact_ready=1
+    break
+  fi
+  sleep 1
+done
+if (( artifact_ready == 0 )); then
+  cat "${artifact_log_file}" >&2
+  printf 'ERROR: trusted Garage port-forward did not become ready.\n' >&2
+  exit 1
+fi
+
 crumb_json="$(curl "${curl_args[@]}" \
   "${base_url}/crumbIssuer/api/json")"
 crumb_field="$(printf '%s' "${crumb_json}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["crumbRequestField"])')"
@@ -68,6 +101,12 @@ if [[ -z "${source_branch}" ]] ||
   printf 'ERROR: source branch must be a valid branch name.\n' >&2
   exit 2
 fi
+trusted_pipeline_branch="${JENKINS_TRUSTED_PIPELINE_BRANCH:-main}"
+if ! git -C "${repo_root}" check-ref-format --branch \
+  "${trusted_pipeline_branch}" >/dev/null; then
+  printf 'ERROR: trusted Pipeline branch must be a valid branch name.\n' >&2
+  exit 2
+fi
 
 curl "${curl_args[@]}" \
   --header "${crumb_field}: ${crumb_value}" \
@@ -76,6 +115,7 @@ curl "${curl_args[@]}" \
   --request POST \
   --data-urlencode "EXPECTED_COMMIT=${expected_commit}" \
   --data-urlencode "SOURCE_BRANCH=${source_branch}" \
+  --data-urlencode "TRUSTED_PIPELINE_BRANCH=${trusted_pipeline_branch}" \
   "${base_url}/job/investment-platform-presubmit/buildWithParameters"
 
 queue_url="$(awk 'BEGIN { IGNORECASE=1 } /^Location:/ { print $2 }' "${headers_file}" |
@@ -109,6 +149,17 @@ if [[ ! "${build_number}" =~ ^[0-9]+$ ]]; then
   printf 'ERROR: Jenkins did not start the queued pipeline within four minutes.\n' >&2
   exit 1
 fi
+if [[ -n "${JENKINS_BUILD_NUMBER_FILE:-}" ]]; then
+  if [[ "${JENKINS_BUILD_NUMBER_FILE}" != /* ]] ||
+    [[ -L "${JENKINS_BUILD_NUMBER_FILE}" ]] ||
+    [[ ! -d "$(dirname "${JENKINS_BUILD_NUMBER_FILE}")" ]]; then
+    printf 'ERROR: JENKINS_BUILD_NUMBER_FILE must be a safe absolute output path.\n' >&2
+    exit 2
+  fi
+  umask 077
+  printf '%s\n' "${build_number}" >"${JENKINS_BUILD_NUMBER_FILE}.tmp"
+  mv "${JENKINS_BUILD_NUMBER_FILE}.tmp" "${JENKINS_BUILD_NUMBER_FILE}"
+fi
 
 build_url="${base_url}/job/investment-platform-presubmit/${build_number}"
 build_timeout_seconds="${JENKINS_BUILD_TIMEOUT_SECONDS:-7800}"
@@ -124,6 +175,32 @@ while (( SECONDS < build_deadline )); do
     python3 -c 'import json,sys; print(json.load(sys.stdin).get("result") or "RUNNING")')"
   case "${result}" in
     SUCCESS)
+      artifact_path="$(curl "${curl_args[@]}" \
+        "${build_url}/api/json?tree=artifacts%5BrelativePath%5D" |
+        python3 -c 'import json,sys; items=json.load(sys.stdin)["artifacts"]; print(items[0]["relativePath"] if items else "")')"
+      if [[ -z "${artifact_path}" ]]; then
+        printf 'ERROR: successful Jenkins build retained no verification artifact.\n' >&2
+        exit 1
+      fi
+      artifact_path_encoded="$(printf '%s' "${artifact_path}" |
+        python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe="/"))')"
+      curl "${curl_args[@]}" \
+        --dump-header "${artifact_headers_file}" \
+        --output /dev/null \
+        "${build_url}/artifact/${artifact_path_encoded}"
+      artifact_url="$(awk 'BEGIN { IGNORECASE=1 } /^Location:/ { print $2 }' \
+        "${artifact_headers_file}" | tr -d '\r' | tail -n 1)"
+      if [[ ! "${artifact_url}" =~ ^http://127\.0\.0\.1:13900/jenkins-artifacts/ ]]; then
+        printf 'ERROR: Jenkins returned an artifact URL outside dedicated Garage.\n' >&2
+        exit 1
+      fi
+      artifact_http_code="$(curl --fail --silent --show-error \
+        --output /dev/null --write-out '%{http_code}' "${artifact_url}")"
+      if [[ "${artifact_http_code}" != "200" ]]; then
+        printf 'ERROR: Garage artifact readback returned HTTP %s instead of 200.\n' \
+          "${artifact_http_code}" >&2
+        exit 1
+      fi
       printf 'Jenkins PS0, PS1, and PS2 pipeline passed for %s.\n' \
         "${expected_commit}"
       exit 0

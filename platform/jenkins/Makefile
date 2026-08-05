@@ -1,6 +1,6 @@
 SHELL := /usr/bin/env bash
 
-.PHONY: quality preflight build-agent bootstrap verify trigger destroy e2e-ephemeral
+.PHONY: quality preflight build-agent bootstrap verify trigger destroy e2e-ephemeral purge-retained
 
 quality:
 	./scripts/quality.sh
@@ -25,3 +25,6 @@ destroy:
 
 e2e-ephemeral:
 	./scripts/run-ephemeral.sh
+
+purge-retained:
+	./scripts/retained-state.sh purge

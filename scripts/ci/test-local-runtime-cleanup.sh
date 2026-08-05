@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/runtime-cleanup-test.XXXXXX")"
+test_root="$(cd "${test_root}" && pwd -P)"
 fake_bin="${test_root}/bin"
 fake_home="${test_root}/home"
 fake_tmp="${test_root}/tmp"
@@ -30,6 +31,9 @@ case "${command_name}" in
     ;;
   colima)
     if [[ "${1:-}" == "list" ]]; then
+      if [[ "${FAKE_FAIL_COLIMA_LIST:-0}" == "1" ]]; then
+        exit 1
+      fi
       printf 'PROFILE STATUS ARCH CPUS MEMORY DISK RUNTIME ADDRESS\n'
       if [[ "${FAKE_PROFILE_PRESENT:-0}" == "1" ]]; then
         printf '%s Running aarch64 4 8GiB 30GiB docker -\n' "${FAKE_PROFILE_NAME}"
@@ -52,16 +56,98 @@ case "${command_name}" in
       if [[ "${FAKE_FAIL_COLIMA_START:-0}" == "1" ]]; then
         exit 1
       fi
+    elif [[ "${1:-}" == "delete" && "${FAKE_FAIL_COLIMA_DELETE:-0}" == "1" ]]; then
+      exit 1
     fi
     ;;
   docker)
-    [[ "${1:-}" == "info" ]]
+    case "${1:-}" in
+      info)
+        if [[ "${2:-}" == "--format" ]]; then
+          printf 'arm64\n'
+        fi
+        ;;
+      build | pull | tag | run) ;;
+      *) exit 1 ;;
+    esac
+    ;;
+  git)
+    if [[ "${1:-}" == "-C" && "${3:-}" == "rev-parse" ]]; then
+      printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n'
+    fi
     ;;
   kind)
-    if [[ "${1:-}" == "get" && "${2:-}" == "clusters" ]]; then
-      if [[ "${FAKE_CLUSTER_PRESENT:-0}" == "1" ]]; then
-        printf 'investment-platform\n'
+    if [[ "${1:-}" == "version" ]]; then
+      printf 'kind v0.31.0\n'
+    elif [[ "${1:-}" == "get" && "${2:-}" == "clusters" ]]; then
+      if [[ "${FAKE_FAIL_KIND_LIST:-0}" == "1" ]]; then
+        exit 1
       fi
+      if [[ "${FAKE_CLUSTER_PRESENT:-0}" == "1" ]] ||
+        [[ -n "${FAKE_KIND_CREATED_MARKER:-}" && -e "${FAKE_KIND_CREATED_MARKER}" ]]; then
+        printf '%s\n' "${FAKE_CLUSTER_NAME:-investment-platform}"
+      fi
+    elif [[ "${1:-}" == "create" && "${2:-}" == "cluster" &&
+      "${FAKE_KIND_CREATE_PARTIAL:-0}" == "1" ]]; then
+      : >"${FAKE_KIND_CREATED_MARKER}"
+      exit 1
+    elif [[ "${1:-}" == "delete" && "${2:-}" == "cluster" ]]; then
+      if [[ "${FAKE_FAIL_KIND_DELETE:-0}" == "1" ]]; then
+        exit 1
+      fi
+      if [[ -n "${FAKE_KIND_CREATED_MARKER:-}" ]]; then
+        rm -f "${FAKE_KIND_CREATED_MARKER}"
+      fi
+    fi
+    ;;
+  kubectl)
+    if [[ " $* " == *" get secret jenkins-retained-lock-owner "* ]]; then
+      printf '%s' "${FAKE_RETAINED_LOCK_TOKEN:-}"
+    elif [[ " $* " == *" get namespace ${FAKE_JENKINS_NAMESPACE:-jenkins-system} "* ]]; then
+      if [[ "${FAKE_FAIL_NAMESPACE_LOOKUP:-0}" == "1" ]]; then
+        exit 1
+      fi
+      if [[ "${FAKE_NAMESPACE_PRESENT:-1}" == "1" ]]; then
+        printf 'namespace/%s\n' "${FAKE_JENKINS_NAMESPACE:-jenkins-system}"
+      fi
+    elif [[ " $* " == *" get statefulset "* ]]; then
+      if [[ "${FAKE_FAIL_WORKLOAD_LOOKUP:-0}" == "1" ]]; then
+        exit 1
+      fi
+      if [[ "${FAKE_WORKLOADS_PRESENT:-1}" == "1" ]]; then
+        for ((index = 1; index <= $#; index += 1)); do
+          if [[ "${!index}" == "statefulset" ]]; then
+            name_index=$((index + 1))
+            printf 'statefulset.apps/%s\n' "${!name_index}"
+            break
+          fi
+        done
+      fi
+    elif [[ " $* " == *" get pods "* ]]; then
+      if [[ "${FAKE_FAIL_POD_LIST:-0}" == "1" ]]; then
+        exit 1
+      fi
+      if [[ "${FAKE_PODS_PRESENT:-0}" == "1" ]]; then
+        printf 'pod/fake-jenkins-pod\n'
+      fi
+    elif [[ " $* " == *" scale statefulset/"* ]]; then
+      if [[ "${FAKE_FAIL_QUIESCE_STAGE:-}" == "scale" ]]; then
+        exit 1
+      fi
+    elif [[ " $* " == *" wait pod "* ]]; then
+      if [[ "${FAKE_FAIL_QUIESCE_STAGE:-}" == "wait" ]]; then
+        exit 1
+      fi
+    fi
+    ;;
+  helm)
+    if [[ "${1:-}" == "version" && "${2:-}" == "--short" ]]; then
+      printf 'v3.20.0+fake\n'
+    fi
+    ;;
+  openssl)
+    if [[ "${1:-}" == "rand" && "${2:-}" == "-hex" ]]; then
+      printf 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n'
     fi
     ;;
   make)
@@ -108,6 +194,39 @@ assert_runtime_config_isolated_and_removed() {
   grep -Fxq 'caller-docker-config' "${HOME}/.docker/config.json"
   grep -Fxq 'caller-kubeconfig' "${HOME}/.kube/config"
   [[ ! -e "${HOME}/.docker/colima-context" ]]
+}
+
+assert_jenkins_quiesce_failure_retains_runtime() {
+  local case_name="$1"
+  shift
+  local profile="investment-platform-jenkins-${case_name}"
+  local state="${test_root}/${case_name}-state"
+
+  : >"${log_file}"
+  if env \
+    JENKINS_COLIMA_PROFILE="${profile}" \
+    JENKINS_RETAINED_STATE_DIR="${state}" \
+    FAKE_PROFILE_NAME="${profile}" \
+    FAKE_PROFILE_PRESENT=0 \
+    FAKE_CLUSTER_NAME=jenkins-platform \
+    FAKE_CLUSTER_PRESENT=1 \
+    JENKINS_STORAGE_METRICS_ENABLED=false \
+    DOCKER_CONTEXT=caller-context \
+    DOCKER_HOST=unix:///caller/docker.sock \
+    "$@" \
+      "${repo_root}/platform/jenkins/scripts/run-ephemeral.sh" >/dev/null 2>&1; then
+    printf 'Jenkins run-ephemeral accepted %s quiesce failure\n' "${case_name}" >&2
+    exit 1
+  fi
+  if grep -q '^kind delete cluster --name jenkins-platform$' "${log_file}" ||
+    grep -q "^colima delete ${profile} " "${log_file}"; then
+    printf 'Jenkins run-ephemeral deleted runtime after %s quiesce failure\n' \
+      "${case_name}" >&2
+    exit 1
+  fi
+  [[ -d "${state}/.active-lock" ]]
+  [[ -d "${HOME}/.colima/.investment-platform-locks/${profile}" ]]
+  assert_runtime_config_isolated_and_removed
 }
 
 if CONFIRM_RUNTIME_CLEANUP= FAKE_PROFILE_PRESENT=1 \
@@ -304,21 +423,52 @@ grep -q '^colima delete investment-platform-ephemeral --force --data$' "${log_fi
 assert_runtime_config_isolated_and_removed
 
 : >"${log_file}"
+FAKE_NAMESPACE_PRESENT=0 \
+  "${repo_root}/platform/jenkins/scripts/quiesce.sh"
+if grep -q ' scale statefulset/' "${log_file}"; then
+  printf 'Jenkins quiesce scaled workloads in an absent namespace\n' >&2
+  exit 1
+fi
+
+: >"${log_file}"
+FAKE_NAMESPACE_PRESENT=1 \
+FAKE_WORKLOADS_PRESENT=0 \
+FAKE_PODS_PRESENT=0 \
+  "${repo_root}/platform/jenkins/scripts/quiesce.sh"
+if grep -q ' scale statefulset/' "${log_file}"; then
+  printf 'Jenkins quiesce scaled absent retained workloads\n' >&2
+  exit 1
+fi
+
+: >"${log_file}"
 FAKE_PROFILE_NAME=investment-platform-jenkins-ephemeral \
 FAKE_PROFILE_PRESENT=0 \
+FAKE_CLUSTER_NAME=jenkins-platform \
+FAKE_CLUSTER_PRESENT=1 \
+JENKINS_STORAGE_METRICS_ENABLED=false \
 DOCKER_CONTEXT=caller-context \
 DOCKER_HOST=unix:///caller/docker.sock \
   "${repo_root}/platform/jenkins/scripts/run-ephemeral.sh" >/dev/null
 grep -Eq '^caffeinate -dimsu -w [0-9]+$' "${log_file}"
 grep -q '^make -C .*/platform/jenkins bootstrap$' "${log_file}"
 grep -q '^make -C .*/platform/jenkins trigger$' "${log_file}"
+jenkins_scale_line="$(grep -n 'kubectl --context kind-jenkins-platform --namespace jenkins-system scale statefulset/jenkins --replicas=0' "${log_file}" | cut -d: -f1)"
+garage_scale_line="$(grep -n 'kubectl --context kind-jenkins-platform --namespace jenkins-system scale statefulset/jenkins-artifacts --replicas=0' "${log_file}" | cut -d: -f1)"
+kind_delete_line="$(grep -n '^kind delete cluster --name jenkins-platform$' "${log_file}" | cut -d: -f1)"
+if (( jenkins_scale_line >= garage_scale_line || garage_scale_line >= kind_delete_line )); then
+  printf 'Jenkins cleanup did not quiesce retained workloads before kind deletion\n' >&2
+  exit 1
+fi
 grep -q '^colima delete investment-platform-jenkins-ephemeral --force --data$' "${log_file}"
 assert_runtime_config_isolated_and_removed
 
 : >"${log_file}"
 if FAKE_PROFILE_NAME=investment-platform-jenkins-ephemeral \
   FAKE_PROFILE_PRESENT=0 \
+  FAKE_CLUSTER_NAME=jenkins-platform \
+  FAKE_CLUSTER_PRESENT=1 \
   FAKE_FAIL_TARGET=trigger \
+  JENKINS_STORAGE_METRICS_ENABLED=false \
   DOCKER_CONTEXT=caller-context \
   DOCKER_HOST=unix:///caller/docker.sock \
     "${repo_root}/platform/jenkins/scripts/run-ephemeral.sh" >/dev/null 2>&1; then
@@ -329,11 +479,31 @@ grep -q '^colima delete investment-platform-jenkins-ephemeral --force --data$' "
 assert_runtime_config_isolated_and_removed
 
 : >"${log_file}"
+if FAKE_PROFILE_NAME=investment-platform-jenkins-ephemeral \
+  FAKE_PROFILE_PRESENT=0 \
+  JENKINS_STORAGE_METRICS_ENABLED=true \
+  DOCKER_CONTEXT=caller-context \
+  DOCKER_HOST=unix:///caller/docker.sock \
+    "${repo_root}/platform/jenkins/scripts/run-ephemeral.sh" >/dev/null 2>&1; then
+  printf 'Jenkins run-ephemeral accepted a failed storage peak monitor\n' >&2
+  exit 1
+fi
+if grep -q '^make -C .*/platform/jenkins trigger$' "${log_file}"; then
+  printf 'Jenkins run-ephemeral triggered a build after its storage monitor failed\n' >&2
+  exit 1
+fi
+grep -q '^colima delete investment-platform-jenkins-ephemeral --force --data$' "${log_file}"
+assert_runtime_config_isolated_and_removed
+
+: >"${log_file}"
 block_ready="${test_root}/jenkins-block-ready"
 block_release="${test_root}/jenkins-block-release"
 FAKE_PROFILE_NAME=investment-platform-jenkins-ephemeral \
 FAKE_PROFILE_PRESENT=0 \
+FAKE_CLUSTER_NAME=jenkins-platform \
+FAKE_CLUSTER_PRESENT=1 \
 FAKE_BLOCK_TARGET=trigger \
+JENKINS_STORAGE_METRICS_ENABLED=false \
 FAKE_BLOCK_READY="${block_ready}" \
 FAKE_BLOCK_RELEASE="${block_release}" \
 DOCKER_CONTEXT=caller-context \
@@ -348,6 +518,30 @@ if [[ ! -e "${block_ready}" ]]; then
   printf 'Jenkins run-ephemeral did not reach the blocking phase\n' >&2
   exit 1
 fi
+if JENKINS_COLIMA_PROFILE=investment-platform-jenkins-secondary \
+  FAKE_PROFILE_NAME=investment-platform-jenkins-secondary \
+  FAKE_PROFILE_PRESENT=0 \
+  JENKINS_STORAGE_METRICS_ENABLED=false \
+  DOCKER_CONTEXT=caller-context \
+  DOCKER_HOST=unix:///caller/docker.sock \
+    "${repo_root}/platform/jenkins/scripts/run-ephemeral.sh" >/dev/null 2>&1; then
+  printf 'Concurrent Jenkins run acquired retained state already in use\n' >&2
+  exit 1
+fi
+if grep -q '^colima start investment-platform-jenkins-secondary ' "${log_file}"; then
+  printf 'Concurrent Jenkins run started a second retained-state writer\n' >&2
+  exit 1
+fi
+if JENKINS_RETAINED_STATE_DIR="${test_root}/other-jenkins-state" \
+  FAKE_PROFILE_NAME=investment-platform-jenkins-ephemeral \
+  FAKE_PROFILE_PRESENT=0 \
+  JENKINS_STORAGE_METRICS_ENABLED=false \
+  DOCKER_CONTEXT=caller-context \
+  DOCKER_HOST=unix:///caller/docker.sock \
+    "${repo_root}/platform/jenkins/scripts/run-ephemeral.sh" >/dev/null 2>&1; then
+  printf 'Concurrent Jenkins run acquired a Colima profile already in use\n' >&2
+  exit 1
+fi
 kill -TERM "${jenkins_pid}"
 : >"${block_release}"
 set +e
@@ -359,6 +553,171 @@ if [[ "${jenkins_status}" != 143 ]]; then
   exit 1
 fi
 grep -q '^colima delete investment-platform-jenkins-ephemeral --force --data$' "${log_file}"
+assert_runtime_config_isolated_and_removed
+
+assert_jenkins_quiesce_failure_retains_runtime \
+  namespace-error FAKE_FAIL_NAMESPACE_LOOKUP=1
+assert_jenkins_quiesce_failure_retains_runtime \
+  workload-lookup-error FAKE_FAIL_WORKLOAD_LOOKUP=1
+assert_jenkins_quiesce_failure_retains_runtime \
+  pod-list-error FAKE_FAIL_POD_LIST=1
+assert_jenkins_quiesce_failure_retains_runtime \
+  scale-error FAKE_FAIL_QUIESCE_STAGE=scale
+assert_jenkins_quiesce_failure_retains_runtime \
+  wait-error FAKE_PODS_PRESENT=1 FAKE_FAIL_QUIESCE_STAGE=wait
+
+owner_state="${test_root}/owner-mismatch-state"
+owner_token="$(JENKINS_RETAINED_STATE_DIR="${owner_state}" \
+  "${repo_root}/platform/jenkins/scripts/retained-state.sh" acquire)"
+wrong_owner_token=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+if JENKINS_RETAINED_STATE_DIR="${owner_state}" \
+  JENKINS_RETAINED_LOCK_TOKEN="${wrong_owner_token}" \
+    "${repo_root}/platform/jenkins/scripts/retained-state.sh" prepare >/dev/null 2>&1; then
+  printf 'Retained-state preparation accepted another owner token\n' >&2
+  exit 1
+fi
+JENKINS_RETAINED_STATE_DIR="${owner_state}" \
+JENKINS_RETAINED_LOCK_TOKEN="${owner_token}" \
+  "${repo_root}/platform/jenkins/scripts/retained-state.sh" prepare >/dev/null
+: >"${log_file}"
+if FAKE_CLUSTER_NAME=jenkins-platform \
+  FAKE_CLUSTER_PRESENT=1 \
+  FAKE_RETAINED_LOCK_TOKEN="${owner_token}" \
+  JENKINS_RETAINED_STATE_DIR="${owner_state}" \
+  JENKINS_RETAINED_LOCK_TOKEN="${wrong_owner_token}" \
+    "${repo_root}/platform/jenkins/scripts/destroy.sh" >/dev/null 2>&1; then
+  printf 'Jenkins destroy released another owner token\n' >&2
+  exit 1
+fi
+[[ -d "${owner_state}/.active-lock" ]]
+if grep -q '^kind delete cluster --name jenkins-platform$' "${log_file}"; then
+  printf 'Jenkins destroy mutated a cluster before owner validation\n' >&2
+  exit 1
+fi
+FAKE_CLUSTER_NAME=jenkins-platform \
+FAKE_CLUSTER_PRESENT=1 \
+FAKE_RETAINED_LOCK_TOKEN="${owner_token}" \
+JENKINS_RETAINED_STATE_DIR="${owner_state}" \
+  "${repo_root}/platform/jenkins/scripts/destroy.sh" >/dev/null
+grep -q '^kind delete cluster --name jenkins-platform$' "${log_file}"
+[[ ! -e "${owner_state}/.active-lock" ]]
+
+bootstrap_failure_state="${test_root}/bootstrap-failure-state"
+if FAKE_CLUSTER_NAME=jenkins-platform \
+  FAKE_CLUSTER_PRESENT=1 \
+  JENKINS_RETAINED_STATE_DIR="${bootstrap_failure_state}" \
+    "${repo_root}/platform/jenkins/scripts/bootstrap.sh" >/dev/null 2>&1; then
+  printf 'Jenkins bootstrap accepted a pre-existing cluster\n' >&2
+  exit 1
+fi
+if [[ -e "${bootstrap_failure_state}/.active-lock" ]]; then
+  printf 'Failed standalone Jenkins bootstrap stranded its owned lock\n' >&2
+  exit 1
+fi
+
+bootstrap_list_failure_state="${test_root}/bootstrap-list-failure-state"
+: >"${log_file}"
+if FAKE_FAIL_KIND_LIST=1 \
+  JENKINS_RETAINED_STATE_DIR="${bootstrap_list_failure_state}" \
+    "${repo_root}/platform/jenkins/scripts/bootstrap.sh" >/dev/null 2>&1; then
+  printf 'Jenkins bootstrap ignored a failed cluster listing\n' >&2
+  exit 1
+fi
+if grep -q '^kind create cluster ' "${log_file}"; then
+  printf 'Jenkins bootstrap created a cluster after list failure\n' >&2
+  exit 1
+fi
+[[ ! -e "${bootstrap_list_failure_state}/.active-lock" ]]
+
+partial_cluster_marker="${test_root}/partial-kind-cluster"
+partial_bootstrap_state="${test_root}/partial-bootstrap-state"
+: >"${log_file}"
+if FAKE_CLUSTER_NAME=jenkins-platform \
+  FAKE_CLUSTER_PRESENT=0 \
+  FAKE_KIND_CREATE_PARTIAL=1 \
+  FAKE_KIND_CREATED_MARKER="${partial_cluster_marker}" \
+  JENKINS_RETAINED_STATE_DIR="${partial_bootstrap_state}" \
+    "${repo_root}/platform/jenkins/scripts/bootstrap.sh" >/dev/null 2>&1; then
+  printf 'Jenkins bootstrap accepted a partial kind creation\n' >&2
+  exit 1
+fi
+grep -q '^kind delete cluster --name jenkins-platform$' "${log_file}"
+[[ ! -e "${partial_cluster_marker}" ]]
+[[ ! -e "${partial_bootstrap_state}/.active-lock" ]]
+
+failed_bootstrap_quiesce_marker="${test_root}/failed-bootstrap-quiesce-cluster"
+failed_bootstrap_quiesce_state="${test_root}/failed-bootstrap-quiesce-state"
+: >"${log_file}"
+if FAKE_CLUSTER_NAME=jenkins-platform \
+  FAKE_CLUSTER_PRESENT=0 \
+  FAKE_KIND_CREATE_PARTIAL=1 \
+  FAKE_KIND_CREATED_MARKER="${failed_bootstrap_quiesce_marker}" \
+  FAKE_FAIL_NAMESPACE_LOOKUP=1 \
+  JENKINS_RETAINED_STATE_DIR="${failed_bootstrap_quiesce_state}" \
+    "${repo_root}/platform/jenkins/scripts/bootstrap.sh" >/dev/null 2>&1; then
+  printf 'Jenkins bootstrap accepted a partial cluster with failed quiesce\n' >&2
+  exit 1
+fi
+if grep -q '^kind delete cluster --name jenkins-platform$' "${log_file}"; then
+  printf 'Jenkins bootstrap deleted a partially quiesced cluster\n' >&2
+  exit 1
+fi
+[[ -e "${failed_bootstrap_quiesce_marker}" ]]
+[[ -d "${failed_bootstrap_quiesce_state}/.active-lock" ]]
+
+failed_kind_delete_marker="${test_root}/failed-kind-delete-cluster"
+failed_kind_delete_state="${test_root}/failed-kind-delete-state"
+: >"${log_file}"
+if FAKE_CLUSTER_NAME=jenkins-platform \
+  FAKE_CLUSTER_PRESENT=0 \
+  FAKE_KIND_CREATE_PARTIAL=1 \
+  FAKE_KIND_CREATED_MARKER="${failed_kind_delete_marker}" \
+  FAKE_FAIL_KIND_DELETE=1 \
+  JENKINS_RETAINED_STATE_DIR="${failed_kind_delete_state}" \
+    "${repo_root}/platform/jenkins/scripts/bootstrap.sh" >/dev/null 2>&1; then
+  printf 'Jenkins bootstrap accepted a partial kind creation with failed cleanup\n' >&2
+  exit 1
+fi
+[[ -e "${failed_kind_delete_marker}" ]]
+[[ -d "${failed_kind_delete_state}/.active-lock" ]]
+
+list_failure_profile=investment-platform-jenkins-list-failure
+list_failure_state="${test_root}/list-failure-state"
+: >"${log_file}"
+if JENKINS_COLIMA_PROFILE="${list_failure_profile}" \
+  JENKINS_RETAINED_STATE_DIR="${list_failure_state}" \
+  FAKE_FAIL_COLIMA_LIST=1 \
+  JENKINS_STORAGE_METRICS_ENABLED=false \
+    "${repo_root}/platform/jenkins/scripts/run-ephemeral.sh" >/dev/null 2>&1; then
+  printf 'Jenkins run-ephemeral ignored a failed Colima profile listing\n' >&2
+  exit 1
+fi
+[[ ! -e "${list_failure_state}/.active-lock" ]]
+[[ ! -e "${HOME}/.colima/.investment-platform-locks/${list_failure_profile}" ]]
+if grep -q "^colima start ${list_failure_profile} " "${log_file}" ||
+  grep -q "^colima delete ${list_failure_profile} " "${log_file}"; then
+  printf 'Jenkins run-ephemeral mutated a profile after list failure\n' >&2
+  exit 1
+fi
+
+delete_failure_profile=investment-platform-jenkins-delete-failure
+delete_failure_state="${test_root}/delete-failure-state"
+: >"${log_file}"
+if JENKINS_COLIMA_PROFILE="${delete_failure_profile}" \
+  JENKINS_RETAINED_STATE_DIR="${delete_failure_state}" \
+  FAKE_PROFILE_NAME="${delete_failure_profile}" \
+  FAKE_PROFILE_PRESENT=0 \
+  FAKE_CLUSTER_NAME=jenkins-platform \
+  FAKE_CLUSTER_PRESENT=1 \
+  FAKE_FAIL_COLIMA_DELETE=1 \
+  JENKINS_STORAGE_METRICS_ENABLED=false \
+    "${repo_root}/platform/jenkins/scripts/run-ephemeral.sh" >/dev/null 2>&1; then
+  printf 'Jenkins run-ephemeral ignored failed Colima deletion\n' >&2
+  exit 1
+fi
+grep -q "^colima delete ${delete_failure_profile} --force --data$" "${log_file}"
+[[ -d "${delete_failure_state}/.active-lock" ]]
+[[ -d "${HOME}/.colima/.investment-platform-locks/${delete_failure_profile}" ]]
 assert_runtime_config_isolated_and_removed
 
 printf 'Ephemeral-runtime lifecycle and context-isolation tests passed.\n'

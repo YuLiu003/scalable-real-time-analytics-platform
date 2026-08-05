@@ -95,11 +95,13 @@ def evidence_body(commit: str, digest: str, timestamp: str) -> str:
             "- Gates: `PS0`, `PS1`, `PS2`",
             "- Executor: disposable Jenkins controller with isolated Kubernetes agents",
             "- Cleanup: disposable Colima VM and all container data deleted",
+            "- Retention: bounded history and Garage artifacts remain only on the trusted local host",
             f"- Retained operator-log SHA-256: `{digest}`",
             f"- Reported: `{timestamp}`",
             "",
-            "The lab controller and console are intentionally deleted after the run. "
-            "A production installation must retain build logs and use a GitHub App.",
+            "The live lab runtime is intentionally deleted after the run; retained local "
+            "state is not published or an off-host backup. A production installation "
+            "must use durable external storage and a GitHub App.",
         )
     )
 

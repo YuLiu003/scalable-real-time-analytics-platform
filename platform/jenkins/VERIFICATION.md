@@ -6,8 +6,10 @@ The production-like local Jenkins path completed `PS0`, `PS1`, and `PS2` on
 2026-07-29. The proof run started from a clean disposable Colima VM at 13:05
 America/Los_Angeles, passed at 13:21, and deleted the VM and all container data.
 Commit `b7c1f8f1bc66bf53dba0adfa432e9bd834b7b355` is the retained initial runtime
-proof. The `jenkins / presubmit` status on each pull-request head is the
-authoritative evidence for later revisions.
+proof. It predates the dedicated Garage artifact-retention feature and does not
+prove that feature. The `jenkins / presubmit` status on each pull-request head
+is the authoritative evidence for later revisions only after that revision has
+actually completed the disposable run.
 
 ## Observed evidence
 
@@ -31,6 +33,19 @@ authoritative evidence for later revisions.
   source preloaded under a local runtime tag.
 - The success path and a later `TERM` interruption both deleted the dedicated
   Colima profile and its data.
+
+## Retention proof status
+
+The current Garage-retention implementation is contract-tested, but its
+disposable and cross-run proof is pending. Completion requires one exact-commit
+run that proves the two PVCs, three-day/20-build policy, dedicated bucket
+quota/lifecycle, artifact redirect and unauthenticated presigned readback,
+sanitized storage report, retained-state boundary, owner-token fencing, and VM
+cleanup. A second clean Colima recreation using the same host directory must
+prove that build history and artifacts restore across runs. The proof must also
+show that the Pipeline definition came from the explicitly trusted branch while
+source stages checked out the requested exact commit. No storage measurements
+are claimed here until those runs complete.
 
 Reproduce the proof with:
 
@@ -56,9 +71,10 @@ then publishes `jenkins / presubmit`.
   three nodes, and OpenTofu independently tests a three-zone AWS design.
 - Privileged DinD exists only in the disposable integration agent. Production
   needs a separate disposable node pool or account for that workload.
-- The local controller and console are deleted, so the GitHub evidence comment
-  retains only the operator-log digest. Production needs external log and
-  artifact retention.
+- The baseline proof deleted the local controller and console. The current
+  implementation instead retains controller history, console logs, and Garage
+  artifacts on one developer host; it does not publish them in the GitHub
+  evidence comment and is not backup, HA, or cloud-object-storage evidence.
 - The lab reporter uses an authenticated trusted operator after Jenkins exits.
   Production needs GitHub Branch Source and a GitHub App held by the controller
   plugin, never by PR-controlled Pipeline code.

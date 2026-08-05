@@ -7,6 +7,10 @@ networking:
   serviceSubnet: 10.251.0.0/16
 nodes:
   - role: control-plane
+    extraMounts:
+      - hostPath: /var/local/investment-platform/jenkins-retained
+        containerPath: /var/local/investment-platform/jenkins-retained
+        readOnly: false
     kubeadmConfigPatches:
       - |
         kind: InitConfiguration

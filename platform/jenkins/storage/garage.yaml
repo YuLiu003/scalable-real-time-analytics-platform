@@ -1,0 +1,145 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins-artifacts-internal
+  namespace: jenkins-system
+  labels:
+    app.kubernetes.io/name: jenkins-artifact-garage
+    app.kubernetes.io/part-of: investment-platform-jenkins
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: jenkins-artifact-garage
+  ports:
+    - name: rpc
+      port: 3901
+      targetPort: rpc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jenkins-artifacts
+  namespace: jenkins-system
+  labels:
+    app.kubernetes.io/name: jenkins-artifact-garage
+    app.kubernetes.io/part-of: investment-platform-jenkins
+spec:
+  selector:
+    app.kubernetes.io/name: jenkins-artifact-garage
+  ports:
+    - name: s3
+      port: 3900
+      targetPort: s3
+    - name: admin
+      port: 3903
+      targetPort: admin
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: jenkins-artifacts
+  namespace: jenkins-system
+  labels:
+    app.kubernetes.io/name: jenkins-artifact-garage
+    app.kubernetes.io/part-of: investment-platform-jenkins
+spec:
+  serviceName: jenkins-artifacts-internal
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: jenkins-artifact-garage
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: jenkins-artifact-garage
+        app.kubernetes.io/part-of: investment-platform-jenkins
+    spec:
+      automountServiceAccountToken: false
+      nodeSelector:
+        platform.local/role: jenkins-control
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: garage
+          image: dxflrs/garage:v2.3.0@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690
+          imagePullPolicy: IfNotPresent
+          command:
+            - /garage
+          args:
+            - server
+            - --single-node
+            - --default-bucket
+          env:
+            - name: GARAGE_CONFIG_FILE
+              value: /etc/garage.toml
+            - name: GARAGE_DEFAULT_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jenkins-artifact-admin
+                  key: access-key
+            - name: GARAGE_DEFAULT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: jenkins-artifact-admin
+                  key: secret-key
+            - name: GARAGE_DEFAULT_BUCKET
+              value: jenkins-artifacts
+          ports:
+            - name: s3
+              containerPort: 3900
+            - name: rpc
+              containerPort: 3901
+            - name: admin
+              containerPort: 3903
+          readinessProbe:
+            tcpSocket:
+              port: s3
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: admin
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: config
+              mountPath: /etc/garage.toml
+              subPath: garage.toml
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/garage
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          secret:
+            secretName: jenkins-artifact-garage-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: jenkins-artifact-garage
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

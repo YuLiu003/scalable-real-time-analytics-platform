@@ -180,6 +180,9 @@ class GitHubStatusReporterTests(unittest.TestCase):
         self.assertIn(reporter.MARKER, body)
         self.assertIn(self.commit, body)
         self.assertIn("production installation", body)
+        self.assertIn("bounded history and Garage artifacts", body)
+        self.assertIn("not published or an off-host backup", body)
+        self.assertNotIn("controller and console are intentionally deleted", body)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jenkins-retained-home
+  labels:
+    app.kubernetes.io/part-of: investment-platform-jenkins
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: jenkins-retained
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: platform.local/role
+              operator: In
+              values:
+                - jenkins-control
+  hostPath:
+    path: /var/local/investment-platform/jenkins-retained/controller
+    type: Directory
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jenkins-retained-home
+  namespace: jenkins-system
+  labels:
+    app.kubernetes.io/part-of: investment-platform-jenkins
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: jenkins-retained
+  volumeName: jenkins-retained-home
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jenkins-artifact-garage
+  labels:
+    app.kubernetes.io/part-of: investment-platform-jenkins
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: jenkins-retained
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: platform.local/role
+              operator: In
+              values:
+                - jenkins-control
+  hostPath:
+    path: /var/local/investment-platform/jenkins-retained/garage
+    type: Directory
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jenkins-artifact-garage
+  namespace: jenkins-system
+  labels:
+    app.kubernetes.io/part-of: investment-platform-jenkins
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: jenkins-retained
+  volumeName: jenkins-artifact-garage
+  resources:
+    requests:
+      storage: 2Gi

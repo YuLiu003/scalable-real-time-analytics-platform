@@ -24,13 +24,18 @@ observability, and cloud-platform engineering.
   five-minute analytics refreshes, and a bearer-protected dashboard.
 - An offline JSON/CSV importer creates a private normalized cash-flow ledger
   without confusing deposits or withdrawals with return.
-- Garage provides the local S3-compatible object-storage contract.
+- Garage provides the application's local S3-compatible object-storage
+  contract. Jenkins uses a separate Garage instance and bucket so CI artifacts
+  never share market-data credentials or storage.
 - Python and DuckDB build deterministic Parquet analytics products.
 - The Go portfolio API serves holdings and contribution projections.
 - Prometheus and Grafana provide cluster and workload observability.
 - OpenTofu validates the AWS EKS architecture without requiring a paid apply.
 - Jenkins runs repository-owned PS0, PS1, and PS2 gates on isolated Kubernetes
-  agents and publishes exact-commit evidence to GitHub.
+  agents, stores verification artifacts in a dedicated Garage bucket, and
+  publishes exact-commit evidence to GitHub. Native history is limited to three
+  days and 20 builds; its Garage bucket is limited to 1 GiB and 10,000 objects.
+  A trusted Pipeline definition orchestrates the exact source commit under test.
 - A separate Codex plugin routes focused code reviews and reports descriptive
   quality-per-token cohorts without including prompts, diffs, or paths in its
   records.
@@ -147,14 +152,21 @@ Run the production-like Jenkins path:
 make -C platform/jenkins e2e-ephemeral
 ```
 
-That command also uses a dedicated disposable Colima VM and deletes its
-container data when it finishes.
+That command also uses a dedicated disposable Colima VM and automatically
+deletes the profile and container data on success, failure, or handled
+interruption. If deletion itself fails, the command fails and preserves its
+ownership fences instead of allowing another writer. It retains only bounded
+Jenkins metadata, Garage artifacts, credentials, and privacy-safe reports under
+`~/.local/share/investment-platform/jenkins`: builds are limited to three days
+and 20 records, and the artifact bucket is limited to 1 GiB. See the Jenkins
+runbook for retention timing, disk measurements, and the local-only boundary.
 
 ## Use the application
 
-The `e2e-*` commands above are verification workflows: they delete their
-runtime when finished and do not leave a dashboard running. Use one of the
-persistent workflows below when you want to interact with the application.
+The `e2e-*` commands above are verification workflows: they delete their live
+runtime when finished and do not leave a dashboard running. The Jenkins path's
+explicitly mounted retained-state directory is the only exception. Use one of
+the persistent workflows below when you want to interact with the application.
 
 ### Explore the fictional demo
 
@@ -260,7 +272,10 @@ remains future work.
 
 Local emulators teach workload contracts but do not reproduce cloud control
 planes, IAM propagation, managed-service failure modes, billing, or support
-operations. A paid apply is outside the required definition of done.
+operations. In particular, Jenkins' single-host Garage and hostPath persistence
+do not prove cloud object-storage durability, TLS, workload identity,
+backup/restore, or high availability. A paid apply is outside the required
+definition of done.
 
 ## Documentation
 
