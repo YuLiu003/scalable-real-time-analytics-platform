@@ -81,8 +81,8 @@ controller:
       enabled: false
     additionalSidecarContainers:
       - name: artifact-store-proxy
-        image: alpine/socat:1.8.0.3@sha256:beb4a68d9e4fe6b0f21ea774a0fde6c31f580dde6368939ed70100c5385b015e
-        imagePullPolicy: IfNotPresent
+        image: local/jenkins-socat:1.8.0.3
+        imagePullPolicy: Never
         args:
           - TCP-LISTEN:13900,bind=127.0.0.1,fork,reuseaddr
           - TCP:jenkins-artifacts.jenkins-system.svc.cluster.local:3900
@@ -250,8 +250,8 @@ agent:
                     drop:
                       - ALL
               - name: artifact-store-proxy
-                image: alpine/socat:1.8.0.3@sha256:beb4a68d9e4fe6b0f21ea774a0fde6c31f580dde6368939ed70100c5385b015e
-                imagePullPolicy: IfNotPresent
+                image: local/jenkins-socat:1.8.0.3
+                imagePullPolicy: Never
                 args:
                   - TCP-LISTEN:13900,bind=127.0.0.1,fork,reuseaddr
                   - TCP:jenkins-artifacts.jenkins-system.svc.cluster.local:3900
@@ -328,8 +328,8 @@ agent:
                     drop:
                       - ALL
               - name: artifact-store-proxy
-                image: alpine/socat:1.8.0.3@sha256:beb4a68d9e4fe6b0f21ea774a0fde6c31f580dde6368939ed70100c5385b015e
-                imagePullPolicy: IfNotPresent
+                image: local/jenkins-socat:1.8.0.3
+                imagePullPolicy: Never
                 args:
                   - TCP-LISTEN:13900,bind=127.0.0.1,fork,reuseaddr
                   - TCP:jenkins-artifacts.jenkins-system.svc.cluster.local:3900
