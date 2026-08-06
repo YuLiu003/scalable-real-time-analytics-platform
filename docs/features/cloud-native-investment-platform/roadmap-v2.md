@@ -3,7 +3,7 @@
 | Field | Decision |
 | --- | --- |
 | Status | Active |
-| Last updated | 2026-08-03 |
+| Last updated | 2026-08-05 |
 | Product objective | Private, transparent long-term portfolio planning |
 | Engineering objective | Observable, recoverable event-driven cloud platform |
 | Cost boundary | Required work must run locally or in included CI without a paid cloud apply |
@@ -46,6 +46,7 @@ proof.
 | V2-5C | `feature/private-portfolio-inputs` | Private stock/ETF allocation and contribution-planning workflow over the live-feed contract | Strict external inputs, fictional end-to-end Kubernetes acceptance, private logging, protected API, and no committed private data | Complete locally; credential-free PS2 acceptance passed, while real provider smoke remains operator-run and unverified |
 | V2-6 | `feature/platform-observability-rollback` | OpenTelemetry, actionable alerts, Argo CD reconciliation, rollback | Trace across the event path and a detected, rolled-back bad release | Not started |
 | V2-7 | `feature/presubmit-quality-gates` | Credential-free Jenkins Pipeline calling repository-owned `PS0`/`PS1`/`PS2` targets | Isolated agents, exact-commit gate, GitHub status, automatic cleanup | Implemented; per-head proof is `jenkins / presubmit` |
+| V2-7A | `feature/jenkins-garage-retention` | Bounded Jenkins history, dedicated Garage artifact storage, and a foreground operator UI across disposable lab runs | Cross-run restore/readback, three-day/20-build controller policy, three-day Garage lifecycle, 1 GiB bucket quota, least-privilege key, owner-token fencing, local-disk report, at-most-4-GiB guard, VM cleanup, UI lifecycle contracts, and disposable login/artifact smoke | Complete locally; retention, artifact readback, operator login, and cleanup proof are recorded below |
 | V2-8 | `feature/free-cloud-provider-contracts` | AWS/GCP/Azure IaC mocks and provider responsibility comparison | Validated configuration and documented emulator gaps; no paid apply | Not started |
 
 ## Verified V2-5B capacity evidence
@@ -82,6 +83,28 @@ committed record preserves only aggregate, privacy-safe results. These are
 local synthetic burst measurements, not live-provider, sustained-feed, AWS,
 multi-broker, multi-zone, failover, public-deployment, or production evidence.
 
+## Verified V2-7A local retention evidence
+
+At commit `6197e8a7acdb5e47dbd7c41616b3ef679669cb2c`, two consecutive
+Jenkins builds each ran `PS0`, `PS1`, and `PS2` in a fresh disposable
+Colima/kind runtime using the same bounded host-retained directory. The second
+runtime restored build `#1`, and one of that build's Garage-backed artifacts
+returned HTTP `200`. The reports recorded post-bootstrap build-window growth
+of 6,311,936 and 692,224 allocated bytes and a second-run peak of 375,136,256
+bytes, approximately 358 MiB. Both runs removed the dedicated Colima profile
+and left no active owner lock. This is local cross-run persistence and cleanup
+evidence, not total growth from empty state, production, AWS runtime, off-host
+backup, high-availability, or cloud durability evidence.
+
+On 2026-08-05, the foreground operator UI restored three builds, accepted the
+fresh runtime administrator password returned only by the explicit helper, and
+returned a signed Garage artifact through the local port forward with HTTP
+`200`. Ctrl-C ended the session with status `130`, removed kind and the Colima
+profile, released both ownership locks, removed the runtime kubeconfig, and
+left the UI and password helper unreachable. No presubmit build was triggered.
+This is local operator-path evidence, not public, production, AWS, off-host, or
+high-availability evidence.
+
 ## Required free boundary
 
 The local implementations are required curriculum, not optional mentions:
@@ -90,7 +113,8 @@ The local implementations are required curriculum, not optional mentions:
 - AWS SAM local runtime for Lambda-compatible handlers.
 - DynamoDB Local through the real AWS SDK API surface.
 - Real application containers plus validated ECS task and IAM contracts.
-- Real disposable Jenkins controller and pipeline.
+- Real disposable Jenkins runtime backed by explicitly bounded host-local
+  retained state.
 - OpenTofu mocked-provider tests for cloud infrastructure.
 
 A paid AWS, GCP, or Azure apply is not a completion requirement. Local
@@ -115,7 +139,11 @@ identity, session, and financial data remain outside that event boundary.
 - Happy-path, invalid-input, duplicate, dependency-failure, and recovery
   behavior appropriate to the slice are tested.
 - CI and local commands use the same repository-owned gates.
-- Runtime resources are disposable and clean up on success and failure.
+- Runtime resources are disposable and clean up on success and failure, except
+  for intentionally retained state with a documented bound, owner, and purge
+  path.
 - No brokerage credentials, account identifiers, personal exports, cloud
   access keys, state, or secrets enter Git.
+- Retained Jenkins and Garage credentials remain host-local; that persistence
+  is not production security, backup, or durability evidence.
 - The result includes a verification record and honest unsupported boundaries.

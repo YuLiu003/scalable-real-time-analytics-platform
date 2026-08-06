@@ -12,7 +12,8 @@ trap cleanup EXIT
 
 bash -n "${jenkins_dir}"/scripts/*.sh
 COVERAGE_FILE="${coverage_file}" "${python_bin}" -m coverage run \
-  --source="${jenkins_dir}/scripts" \
+  --branch \
+  --source="${jenkins_dir}/scripts,${jenkins_dir}/storage" \
   --omit="${jenkins_dir}/scripts/__pycache__/*" \
   -m unittest discover \
   --start-directory "${jenkins_dir}/tests" \

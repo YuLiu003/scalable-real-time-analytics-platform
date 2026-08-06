@@ -1,8 +1,27 @@
+def checkoutExpectedRevision() {
+    checkout([
+        $class: 'GitSCM',
+        branches: [[name: env.EXPECTED_COMMIT]],
+        extensions: [[
+            $class: 'CloneOption',
+            depth: 1,
+            honorRefspec: true,
+            noTags: true,
+            shallow: true,
+            timeout: 5
+        ]],
+        userRemoteConfigs: [[
+            refspec: "+refs/heads/${env.SOURCE_BRANCH}:refs/remotes/origin/${env.SOURCE_BRANCH}",
+            url: 'https://github.com/YuLiu003/scalable-real-time-analytics-platform.git'
+        ]]
+    ])
+}
+
 pipeline {
     agent none
 
     options {
-        buildDiscarder(logRotator(numToKeepStr: '20'))
+        buildDiscarder(logRotator(daysToKeepStr: '3', numToKeepStr: '20'))
         disableConcurrentBuilds(abortPrevious: true)
         skipDefaultCheckout(true)
         timeout(time: 120, unit: 'MINUTES')
@@ -26,7 +45,9 @@ pipeline {
             steps {
                 deleteDir()
                 retry(3) {
-                    checkout scm
+                    script {
+                        checkoutExpectedRevision()
+                    }
                 }
                 sh 'test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"'
                 retry(3) {
@@ -48,7 +69,9 @@ pipeline {
             steps {
                 deleteDir()
                 retry(3) {
-                    checkout scm
+                    script {
+                        checkoutExpectedRevision()
+                    }
                 }
                 sh 'test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"'
                 sh 'python3 scripts/ci/presubmit.py PS1'
@@ -67,7 +90,9 @@ pipeline {
             steps {
                 deleteDir()
                 retry(3) {
-                    checkout scm
+                    script {
+                        checkoutExpectedRevision()
+                    }
                 }
                 sh 'test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"'
                 sh 'scripts/ci/wait-for-docker.sh'

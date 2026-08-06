@@ -14,6 +14,12 @@ controller:
   jenkinsUrl: http://jenkins.jenkins-system.svc.cluster.local:8080/
   jenkinsAdminEmail: platform@example.invalid
   legacyRemotingSecurityEnabled: false
+  nodeSelector:
+    platform.local/role: jenkins-control
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
   csrf:
     defaultCrumbIssuer:
       enabled: true
@@ -64,6 +70,7 @@ controller:
     - matrix-auth:3.3
     - prometheus:856.vc9e3d6e4b_b_9e
     - timestamper:1.30
+    - artifact-manager-s3:973.v6a_51253e896b_
   installLatestPlugins: false
   installLatestSpecifiedPlugins: false
   initializeOnce: false
@@ -72,6 +79,40 @@ controller:
   sidecars:
     configAutoReload:
       enabled: false
+    additionalSidecarContainers:
+      - name: artifact-store-proxy
+        image: local/jenkins-socat:1.8.0.3
+        imagePullPolicy: Never
+        args:
+          - TCP-LISTEN:13900,bind=127.0.0.1,fork,reuseaddr
+          - TCP:jenkins-artifacts.jenkins-system.svc.cluster.local:3900
+        resources:
+          requests:
+            cpu: 5m
+            memory: 8Mi
+          limits:
+            cpu: 100m
+            memory: 32Mi
+        securityContext:
+          runAsUser: 10000
+          runAsGroup: 10000
+          runAsNonRoot: true
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+  containerEnv:
+    - name: JENKINS_ARTIFACT_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: jenkins-artifact-runtime
+          key: access-key
+    - name: JENKINS_ARTIFACT_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: jenkins-artifact-runtime
+          key: secret-key
   JCasC:
     defaultConfig: true
     overwriteConfiguration: true
@@ -86,19 +127,47 @@ controller:
       system-hardening: |-
         jenkins:
           systemMessage: "Investment Platform Jenkins - configuration managed by Git"
-          remotingSecurity:
-            enabled: true
+      artifact-storage: |-
+        credentials:
+          system:
+            domainCredentials:
+              - credentials:
+                  - aws:
+                      accessKey: "${JENKINS_ARTIFACT_ACCESS_KEY}"
+                      description: "Dedicated Garage key for Jenkins artifacts"
+                      id: "jenkins-artifacts"
+                      scope: SYSTEM
+                      secretKey: "${JENKINS_ARTIFACT_SECRET_KEY}"
+        unclassified:
+          artifactManager:
+            artifactManagerFactories:
+              - jclouds:
+                  provider: s3
+        aws:
+          awsCredentials:
+            credentialsId: "jenkins-artifacts"
+            region: "us-east-1"
+          s3:
+            container: "jenkins-artifacts"
+            prefix: "jenkins/"
+            customEndpoint: "127.0.0.1:13900"
+            customSigningRegion: "us-east-1"
+            usePathStyleUrl: true
+            useHttp: true
+            disableSessionToken: true
       seed-job: |-
         jobs:
         - script: >
             pipelineJob('investment-platform-presubmit') {
               description('Repository-owned PS0, PS1, and PS2 gates. Configuration managed by JCasC.')
               logRotator {
+                daysToKeep(3)
                 numToKeep(20)
               }
               parameters {
                 stringParam('EXPECTED_COMMIT', '', 'Required 40-character PR head commit')
                 stringParam('SOURCE_BRANCH', 'main', 'Required repository branch containing EXPECTED_COMMIT')
+                stringParam('TRUSTED_PIPELINE_BRANCH', 'main', 'Trusted operator-selected branch containing the Pipeline definition')
               }
               definition {
                 cpsScm {
@@ -106,9 +175,9 @@ controller:
                     git {
                       remote {
                         url('https://github.com/YuLiu003/scalable-real-time-analytics-platform.git')
-                        refspec('+refs/heads/' + '$' + '{SOURCE_BRANCH}:refs/remotes/origin/' + '$' + '{SOURCE_BRANCH}')
+                        refspec('+refs/heads/' + '$' + '{TRUSTED_PIPELINE_BRANCH}:refs/remotes/origin/' + '$' + '{TRUSTED_PIPELINE_BRANCH}')
                       }
-                      branch('*/' + '$' + '{SOURCE_BRANCH}')
+                      branch('*/' + '$' + '{TRUSTED_PIPELINE_BRANCH}')
                       extensions {
                         cloneOptions {
                           shallow(true)
@@ -121,7 +190,7 @@ controller:
                     }
                   }
                   scriptPath('Jenkinsfile')
-                  lightweight(true)
+                  lightweight(false)
                 }
               }
             }
@@ -174,6 +243,28 @@ agent:
             containers:
               - name: jnlp
                 securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+              - name: artifact-store-proxy
+                image: local/jenkins-socat:1.8.0.3
+                imagePullPolicy: Never
+                args:
+                  - TCP-LISTEN:13900,bind=127.0.0.1,fork,reuseaddr
+                  - TCP:jenkins-artifacts.jenkins-system.svc.cluster.local:3900
+                resources:
+                  requests:
+                    cpu: 5m
+                    memory: 8Mi
+                  limits:
+                    cpu: 100m
+                    memory: 32Mi
+                securityContext:
+                  runAsUser: 10000
+                  runAsGroup: 10000
+                  runAsNonRoot: true
+                  readOnlyRootFilesystem: true
                   allowPrivilegeEscalation: false
                   capabilities:
                     drop:
@@ -234,11 +325,34 @@ agent:
                   capabilities:
                     drop:
                       - ALL
+              - name: artifact-store-proxy
+                image: local/jenkins-socat:1.8.0.3
+                imagePullPolicy: Never
+                args:
+                  - TCP-LISTEN:13900,bind=127.0.0.1,fork,reuseaddr
+                  - TCP:jenkins-artifacts.jenkins-system.svc.cluster.local:3900
+                resources:
+                  requests:
+                    cpu: 5m
+                    memory: 8Mi
+                  limits:
+                    cpu: 100m
+                    memory: 32Mi
+                securityContext:
+                  runAsUser: 10000
+                  runAsGroup: 10000
+                  runAsNonRoot: true
+                  readOnlyRootFilesystem: true
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
 
 persistence:
   enabled: true
+  existingClaim: jenkins-retained-home
   accessMode: ReadWriteOnce
-  size: 8Gi
+  size: 2Gi
 
 rbac:
   create: true
