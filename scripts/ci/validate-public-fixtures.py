@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when committed portfolio or scale fixtures are not explicitly fictional."""
+"""Validate public data fixtures and the private security-reporting path."""
 
 from __future__ import annotations
 
@@ -10,6 +10,11 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+SECURITY_POLICY = REPO_ROOT / "docs" / "SECURITY.md"
+PRIVATE_REPORT_URL = (
+    "https://github.com/YuLiu003/scalable-real-time-analytics-platform/"
+    "security/advisories/new"
+)
 FIXTURE = REPO_ROOT / "contracts" / "fixtures" / "demo-fund-portfolio.v2.json"
 PRIVATE_ACCEPTANCE_FIXTURE = (
     REPO_ROOT / "contracts" / "fixtures" / "demo-private-portfolio.v2.json"
@@ -49,9 +54,16 @@ LEDGER_FIELDS = {
     "amount",
     "currency",
 }
+EMAIL_ADDRESS = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 
 
 def main() -> None:
+    security_policy = SECURITY_POLICY.read_text(encoding="utf-8")
+    if security_policy.count(PRIVATE_REPORT_URL) != 1:
+        raise SystemExit("security policy must use GitHub private vulnerability reporting")
+    if EMAIL_ADDRESS.search(security_policy):
+        raise SystemExit("security policy must not publish a direct email address")
+
     fixture = json.loads(FIXTURE.read_text(encoding="utf-8"))
     instruments = [
         (position["instrument"], position["display_name"])
@@ -178,7 +190,10 @@ def main() -> None:
         if private_manifest.count(secret_reference) != 1:
             raise SystemExit(f"{private_name} must remain a runtime Secret reference")
 
-    print("Committed portfolio, ledger, scale, and capacity fixtures are explicitly fictional; private feed inputs remain Secret-backed.")
+    print(
+        "Public fixtures remain fictional, private feed inputs remain Secret-backed, "
+        "and vulnerability reporting remains private."
+    )
 
 
 if __name__ == "__main__":
